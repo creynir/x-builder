@@ -2,14 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 import { apiErrorSchema, type ApiError } from "@x-builder/shared";
 import { buildServer } from "../server";
 
-const parseApiError = (payload: string): ApiError => apiErrorSchema.parse(JSON.parse(payload));
+const parseJsonPayload = (payload: string): unknown => JSON.parse(payload);
+const parseApiError = (payload: unknown): ApiError => apiErrorSchema.parse(payload);
 
-const expectNoStackLeak = (value: unknown) => {
-  const serialized = JSON.stringify(value);
+const expectNoSensitiveLeak = (body: string, payload: unknown, leakedMessages: string[] = []) => {
+  const serializedPayload = JSON.stringify(payload);
 
-  expect(serialized).not.toContain('"stack"');
-  expect(serialized).not.toMatch(/\bError:\s/);
-  expect(serialized).not.toMatch(/\bat\s+\S+\s+\(/);
+  for (const serialized of [body, serializedPayload]) {
+    expect(serialized).not.toContain('"stack"');
+    expect(serialized).not.toMatch(/\bError:\s/);
+    expect(serialized).not.toMatch(/\bat\s+\S+\s+\(/);
+
+    for (const leakedMessage of leakedMessages) {
+      expect(serialized).not.toContain(leakedMessage);
+    }
+  }
 };
 
 describe("engine API error normalization", () => {
@@ -25,7 +32,11 @@ describe("engine API error normalization", () => {
         },
       });
 
-      const error = parseApiError(response.body);
+      const payload = parseJsonPayload(response.body);
+
+      expectNoSensitiveLeak(response.body, payload);
+
+      const error = parseApiError(payload);
 
       expect(response.statusCode).toBe(400);
       expect(error).toMatchObject({
@@ -34,7 +45,6 @@ describe("engine API error normalization", () => {
         status: 400,
       });
       expect(error.fieldErrors?.idea).toEqual(expect.arrayContaining([expect.any(String)]));
-      expectNoStackLeak(error);
     } finally {
       await app.close();
     }
@@ -49,7 +59,11 @@ describe("engine API error normalization", () => {
         url: "/missing-route",
       });
 
-      const error = parseApiError(response.body);
+      const payload = parseJsonPayload(response.body);
+
+      expectNoSensitiveLeak(response.body, payload);
+
+      const error = parseApiError(payload);
 
       expect(response.statusCode).toBe(404);
       expect(error).toMatchObject({
@@ -57,7 +71,6 @@ describe("engine API error normalization", () => {
         retryable: false,
         status: 404,
       });
-      expectNoStackLeak(error);
     } finally {
       await app.close();
     }
@@ -78,7 +91,11 @@ describe("engine API error normalization", () => {
         },
       });
 
-      const error = parseApiError(response.body);
+      const payload = parseJsonPayload(response.body);
+
+      expectNoSensitiveLeak(response.body, payload, ["secret prompt internals"]);
+
+      const error = parseApiError(payload);
 
       expect(generateCandidates).toHaveBeenCalledOnce();
       expect(response.statusCode).toBe(500);
@@ -88,8 +105,6 @@ describe("engine API error normalization", () => {
         retryable: true,
         status: 500,
       });
-      expect(JSON.stringify(error)).not.toContain("secret prompt internals");
-      expectNoStackLeak(error);
     } finally {
       await app.close();
     }
@@ -108,7 +123,11 @@ describe("engine API error normalization", () => {
         url: "/__test__/throws",
       });
 
-      const error = parseApiError(response.body);
+      const payload = parseJsonPayload(response.body);
+
+      expectNoSensitiveLeak(response.body, payload, ["sensitive internals"]);
+
+      const error = parseApiError(payload);
 
       expect(response.statusCode).toBe(500);
       expect(error).toMatchObject({
@@ -116,8 +135,6 @@ describe("engine API error normalization", () => {
         retryable: true,
         status: 500,
       });
-      expect(JSON.stringify(error)).not.toContain("sensitive internals");
-      expectNoStackLeak(error);
     } finally {
       await app.close();
     }
