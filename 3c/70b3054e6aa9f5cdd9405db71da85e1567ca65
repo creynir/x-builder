@@ -1,0 +1,105 @@
+docs/features/be-ui-shell/tickets/BEUI-014-e2e-shell-recovery-smoke.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-44
+docs/features/be-ui-shell/tickets/BEUI-001-shared-shell-schemas.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-39
+docs/features/be-ui-shell/spec/writer-route-shell-integration.md
+  s_8def976c536487::t_a0bbfb6f9b266f 1-226
+docs/features/be-ui-shell/tickets/BEUI-004-settings-persistence-boundary.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-40
+docs/features/be-ui-shell/map/01-feature-inventory.md
+  s_675cd6ceda0cba::t_f9c4b63291e8df 1-226
+docs/features/be-ui-shell/spec/app-shell.md
+  s_8def976c536487::t_a0bbfb6f9b266f 1-231
+docs/features/be-ui-shell/architecture/validation-report.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-41
+docs/features/be-ui-shell/architecture/arch-recon-report.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-382
+docs/features/be-ui-shell/tickets/BEUI-005-client-api-contract-boundary.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-43
+docs/features/be-ui-shell/spec/checklist.md
+  s_8def976c536487::t_89a48fc68897c7 1-206
+docs/features/be-ui-shell/spec/post-library-route-placeholder.md
+  s_8def976c536487::t_40377ed907ab96 1-200
+docs/features/be-ui-shell/tickets/BEUI-006-route-registry-shell-preferences.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-39
+docs/features/be-ui-shell/tickets/BEUI-008-app-shell-sidebar-navigation.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-41
+docs/features/be-ui-shell/tickets/BEUI-010-settings-route.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-50
+docs/features/be-ui-shell/spec/settings-route.md
+  s_8def976c536487::t_a0bbfb6f9b266f 1-258
+docs/features/be-ui-shell/tickets/BEUI-007-ui-foundation-page-header.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-36
+docs/features/be-ui-shell/map/03-validation-report.md
+  s_675cd6ceda0cba::t_a15810a06f3326 1-239
+docs/features/be-ui-shell/tickets/BEUI-012-placeholder-routes.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-43
+docs/features/be-ui-shell/map/02-flows/route-navigation.md
+  s_675cd6ceda0cba::t_f61453167fb3bb 1-93
+docs/features/be-ui-shell/tickets/BEUI-002-engine-api-error-normalization.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-36
+docs/features/be-ui-shell/map/02-flows/settings-readiness-repair.md
+  s_675cd6ceda0cba::t_f61453167fb3bb 1-98
+.gitignore
+  s_8def976c536487::t_24c7d3ae657653 12
+docs/features/be-ui-shell/spec/screen-list.md
+  s_8def976c536487::t_a0bbfb6f9b266f 5
+  s_675cd6ceda0cba::t_0c3c88a4131e3c 1-4,6-215
+docs/features/be-ui-shell/tickets/BEUI-003-status-readiness-endpoint.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-40
+docs/features/be-ui-shell/tickets/BEUI-013-integration-coverage.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-39
+docs/features/be-ui-shell/spec/sidebar-nav.md
+  s_8def976c536487::t_a0bbfb6f9b266f 1-207
+docs/features/be-ui-shell/map/02-flows/backend-unavailable-recovery.md
+  s_675cd6ceda0cba::t_f61453167fb3bb 1-94
+docs/features/be-ui-shell/tickets/BEUI-009-status-bar-route-error-recovery.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-43
+docs/features/be-ui-shell/tickets/BEUI-011-writer-shell-integration.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-45
+docs/features/be-ui-shell/tickets/README.md
+  s_8def976c536487::t_6c599d3da6ad2a 1-26
+docs/features/be-ui-shell/spec/route-error-banner.md
+  s_8def976c536487::t_a0bbfb6f9b266f 1-203
+docs/features/be-ui-shell/map/02-flows/app-boot-readiness.md
+  s_675cd6ceda0cba::t_f61453167fb3bb 1-96
+docs/features/be-ui-shell/spec/top-status-bar.md
+  s_8def976c536487::t_a0bbfb6f9b266f 1-200
+docs/features/be-ui-shell/map/02-flow-index.md
+  s_675cd6ceda0cba::t_f61453167fb3bb 1-63
+docs/features/be-ui-shell/spec/voice-route-placeholder.md
+  s_8def976c536487::t_40377ed907ab96 1-199
+docs/features/be-ui-shell/README.md
+  s_675cd6ceda0cba::t_a15810a06f3326 13
+  s_675cd6ceda0cba::t_0c3c88a4131e3c 14
+  s_8def976c536487::t_40377ed907ab96 21-22
+  s_675cd6ceda0cba::t_0f64d63fc45f66 4-7
+  s_8def976c536487::t_a0bbfb6f9b266f 15-20
+  s_675cd6ceda0cba::t_70a624a17eecbd 8-12
+  s_8def976c536487::t_6c599d3da6ad2a 24-26
+  s_8def976c536487::t_89a48fc68897c7 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "3c70b3054e6aa9f5cdd9405db71da85e1567ca65",
+  "prompts": {},
+  "sessions": {
+    "s_675cd6ceda0cba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9881-020c-7e50-999f-2dde422f147e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    },
+    "s_8def976c536487": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e998e-4f57-7c53-b161-ed8073a6dd57",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
