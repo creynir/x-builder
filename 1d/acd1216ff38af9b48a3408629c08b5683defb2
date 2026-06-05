@@ -1,0 +1,19 @@
+engine/src/server/tests/api-errors.test.ts
+  s_c166ef4c30ae70::t_d4f992bf3ff008 5-6,8-9,11-19,35-39,62-66,94-98,126-130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "1dacd1216ff38af9b48a3408629c08b5683defb2",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
