@@ -11,6 +11,8 @@ Add a typed client API boundary that parses every engine response with shared sc
 - `getSettings`.
 - `saveSettings`.
 - `generateIdea`.
+- Success methods resolve with typed data only.
+- Failures throw `ApiClientError` with a classified `apiError` payload.
 - Timeout classification.
 - Network failure classification.
 - HTTP error body parsing through `apiErrorSchema`.
@@ -25,10 +27,22 @@ Add a typed client API boundary that parses every engine response with shared sc
 ## Acceptance Criteria
 
 - Given `GET /status` returns valid status, then the client returns typed `AppStatus`.
-- Given fetch rejects, then the client returns or throws `engine_unreachable`.
-- Given request times out, then the client returns or throws `request_timeout`.
-- Given a response body does not match its schema, then the client returns or throws `invalid_response`.
-- Given an HTTP error includes `apiErrorSchema`, then the client preserves `code`, `scope`, `retryable`, and `fieldErrors`.
+- Given fetch rejects, then the client throws `ApiClientError` with `apiError.code: "engine_unreachable"`.
+- Given request times out, then the client throws `ApiClientError` with `apiError.code: "request_timeout"`.
+- Given a response body does not match its schema, then the client throws `ApiClientError` with `apiError.code: "invalid_response"`.
+- Given an HTTP error includes `apiErrorSchema`, then the thrown `ApiClientError` preserves `code`, `scope`, `retryable`, and `fieldErrors`.
+- Given a component or hook catches `ApiClientError`, then it can read the normalized payload from `error.apiError`.
+
+## Contract Decision
+
+Use throwing failures, not result unions. `EngineApiClient` success methods resolve with typed response data. Any failure throws an `ApiClientError`.
+
+```ts
+class ApiClientError extends Error {
+  apiError: ApiError;
+  cause?: unknown;
+}
+```
 
 ## Test Strategy
 
