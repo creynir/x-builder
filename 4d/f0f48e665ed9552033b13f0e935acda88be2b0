@@ -1,0 +1,23 @@
+docs/features/be-ui-shell/tickets/BEUI-005-client-api-contract-boundary.md
+  s_8def976c536487::t_69e4df3ee92abc 14-15,30-45
+docs/features/be-ui-shell/tickets/BEUI-012-placeholder-routes.md
+  s_8def976c536487::t_69e4df3ee92abc 13,29-30,33-40
+docs/features/be-ui-shell/tickets/BEUI-010-settings-route.md
+  s_8def976c536487::t_69e4df3ee92abc 20,36-38,41-44,48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "4df0f48e665ed9552033b13f0e935acda88be2b0",
+  "prompts": {},
+  "sessions": {
+    "s_8def976c536487": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e998e-4f57-7c53-b161-ed8073a6dd57",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
