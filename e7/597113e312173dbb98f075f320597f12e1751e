@@ -1,0 +1,25 @@
+engine/src/server/settings-repository.ts
+  s_c166ef4c30ae70::t_1fda0eb41960cb 1-7,9,22,25-32,42-62,64-67,69-70,72-80,82,88-96
+  s_c166ef4c30ae70::t_ed44628a92ec21 8,39-41,83-87
+  s_c166ef4c30ae70::t_4bdca5e6bcb14e 10-21,23-24,33-38,63,68,71,81
+engine/src/server/server.ts
+  s_c166ef4c30ae70::t_669235478c8afd 3-4,9-10,14,20-24,56,116-133,165,320-321,358-376
+shared/src/schemas/shell.ts
+  s_c166ef4c30ae70::t_d1b13d0477b408 4,86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "e7597113e312173dbb98f075f320597f12e1751e",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
