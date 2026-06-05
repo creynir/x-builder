@@ -1,0 +1,22 @@
+shared/src/schemas/tests/shell.test.ts
+  s_c166ef4c30ae70::t_5745d95864a6c9 66,72
+  s_c166ef4c30ae70::t_6b146028e9d860 67-71
+  s_c166ef4c30ae70::t_8a8cf77129ff0b 13
+  s_c166ef4c30ae70::t_d4b05e6d198ebe 1-12,14-65,73-155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "6765cfd44f08d606d962a14d04e89a7f21116ae4",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
