@@ -1,0 +1,30 @@
+client/src/shell/settings-route.tsx
+  s_c166ef4c30ae70::t_327ff24e680968 1-453,460-629,631-639,641-740
+  s_c166ef4c30ae70::t_6aa7644cb94bca 454-459
+  s_c166ef4c30ae70::t_6d41412c815b0f 630,640
+client/src/shell/status-bar.tsx
+  s_c166ef4c30ae70::t_6cc0d744384012 44-45,173
+  s_c166ef4c30ae70::t_bb39b4cd123077 24,209-218,225
+client/src/ui/foundation.css
+  s_c166ef4c30ae70::t_7fac788c53b960 635-735
+client/src/shell/app-shell.tsx
+  s_c166ef4c30ae70::t_ebb675d65431ae 9,349,458,498
+  s_c166ef4c30ae70::t_17ff86890d209e 555-558,560,587-597,623,625-626
+  s_c166ef4c30ae70::t_0c37a2094ec61a 17-19,54,332-348,350,355-365,445,447-451,455,457,460,464-474,488,490-491,495,497,505-512,515-526,529
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "a0a20bb337fb85b57d32be9ca6e637767e10aed3",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
