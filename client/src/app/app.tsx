@@ -1,5 +1,13 @@
-import { WriterPage } from "../features/writer/writer-page";
+import { useState } from "react";
+import {
+  AppShell,
+  createBrowserShellHistory,
+  createBrowserShellPreferencesStore,
+} from "../shell/app-shell";
 
 export function App() {
-  return <WriterPage />;
+  const [history] = useState(createBrowserShellHistory);
+  const [preferencesStore] = useState(createBrowserShellPreferencesStore);
+
+  return <AppShell history={history} preferencesStore={preferencesStore} />;
 }
