@@ -1,0 +1,19 @@
+client/src/shell/tests/app-shell.test.tsx
+  s_c166ef4c30ae70::t_bf4d20e7a68605 41,43,78,225-227,229-231,416-512
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "e2c04a2a6e19fcb006f7028b423a5a4598050c37",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
