@@ -1,19 +1,27 @@
 import {
   Component,
   useEffect,
+  useState,
   useSyncExternalStore,
   type MouseEvent,
   type ReactElement,
 } from "react";
-import type { RouteConfig } from "@x-builder/shared";
+import type { ApiError, RouteConfig } from "@x-builder/shared";
 
+import { EngineApiClient } from "../api/engine-api-client";
 import { WriterPage } from "../features/writer/writer-page";
-import { Alert, Button, EmptyState } from "../ui/foundation";
+import { EmptyState } from "../ui/foundation";
 import { appRoutes, resolveRoutePath } from "./route-registry";
+import { RouteErrorBanner } from "./route-error-banner";
 import {
   createShellPreferencesStore,
   type ShellPreferencesStore,
 } from "./shell-preferences";
+import {
+  TopStatusBar,
+  useAppStatus,
+  type EngineStatusClient,
+} from "./status-bar";
 
 export type ShellHistory = {
   location: {
@@ -39,6 +47,7 @@ export type ShellRouteComponents = Partial<
 >;
 
 export type AppShellProps = {
+  apiClient?: EngineStatusClient;
   history: ShellHistory;
   preferencesStore: ShellPreferencesStore;
   routeComponents?: ShellRouteComponents;
@@ -61,6 +70,7 @@ type ShellHistoryState = ShellHistory & {
 };
 
 const browserStorageKey = "x-builder:shell-preferences";
+const defaultEngineBaseUrl = "http://127.0.0.1:4173";
 
 function createHistoryState(initialPath: string): ShellHistoryState {
   const listeners = new Set<() => void>();
@@ -203,6 +213,16 @@ export function navigateShellRoute({
   focusRouteHeading(headingTargetForRoute(resolution.route));
 }
 
+function createRouteRenderError(): ApiError {
+  return {
+    code: "internal_error",
+    message: "This route could not render.",
+    retryable: true,
+    scope: "route",
+    status: 500,
+  };
+}
+
 function useShellPath(history: ShellHistory): string {
   return useSyncExternalStore(
     history.subscribe ?? (() => () => undefined),
@@ -317,30 +337,16 @@ function DefaultRouteBody({ route }: ShellRouteComponentProps): ReactElement {
   );
 }
 
-function RouteRecovery(): ReactElement {
-  return (
-    <Alert
-      recovery={
-        <Button size="sm" variant="secondary">
-          Retry
-        </Button>
-      }
-      title="Route unavailable"
-      variant="danger"
-    >
-      This route could not render.
-    </Alert>
-  );
-}
-
 type RouteErrorBoundaryProps = {
   children: ReactElement;
+  onOpenSettings: () => void;
   routeId: RouteConfig["id"];
 };
 
 type RouteErrorBoundaryState = {
-  hasError: boolean;
+  error: ApiError | null;
   routeId: RouteConfig["id"];
+  retrying: boolean;
 };
 
 class RouteErrorBoundary extends Component<
@@ -348,8 +354,9 @@ class RouteErrorBoundary extends Component<
   RouteErrorBoundaryState
 > {
   state: RouteErrorBoundaryState = {
-    hasError: false,
+    error: null,
     routeId: this.props.routeId,
+    retrying: false,
   };
 
   static getDerivedStateFromProps(
@@ -358,24 +365,40 @@ class RouteErrorBoundary extends Component<
   ): RouteErrorBoundaryState | null {
     if (props.routeId !== state.routeId) {
       return {
-        hasError: false,
+        error: null,
         routeId: props.routeId,
+        retrying: false,
       };
     }
 
     return null;
   }
 
-  componentDidCatch(): void {
+  static getDerivedStateFromError(): Partial<RouteErrorBoundaryState> {
+    return {
+      error: createRouteRenderError(),
+      retrying: false,
+    };
+  }
+
+  handleRetry = async (): Promise<void> => {
     this.setState({
-      hasError: true,
+      error: null,
+      retrying: true,
       routeId: this.props.routeId,
     });
   }
 
   render(): ReactElement {
-    if (this.state.hasError) {
-      return <RouteRecovery />;
+    if (this.state.error !== null) {
+      return (
+        <RouteErrorBanner
+          error={this.state.error}
+          isRetrying={this.state.retrying}
+          onOpenSettings={this.props.onOpenSettings}
+          onRetry={this.handleRetry}
+        />
+      );
     }
 
     return this.props.children;
@@ -392,6 +415,7 @@ function routeComponentFor(
 }
 
 function renderStaticRouteBody(
+  onOpenSettings: () => void,
   route: RouteConfig,
   RouteComponent: (props: ShellRouteComponentProps) => ReactElement,
 ): ReactElement {
@@ -399,25 +423,33 @@ function renderStaticRouteBody(
   try {
     return RouteComponent({ route });
   } catch {
-    return <RouteRecovery />;
+    return (
+      <RouteErrorBanner
+        error={createRouteRenderError()}
+        onOpenSettings={onOpenSettings}
+        onRetry={async () => undefined}
+      />
+    );
   }
 }
 
 function RouteBody({
+  onOpenSettings,
   route,
   routeComponents,
 }: {
+  onOpenSettings: () => void;
   route: RouteConfig;
   routeComponents: ShellRouteComponents | undefined;
 }): ReactElement {
   const RouteComponent = routeComponentFor(route, routeComponents);
 
   if (typeof window === "undefined") {
-    return renderStaticRouteBody(route, RouteComponent);
+    return renderStaticRouteBody(onOpenSettings, route, RouteComponent);
   }
 
   return (
-    <RouteErrorBoundary routeId={route.id}>
+    <RouteErrorBoundary onOpenSettings={onOpenSettings} routeId={route.id}>
       <RouteComponent route={route} />
     </RouteErrorBoundary>
   );
@@ -435,11 +467,18 @@ function RouteHeading({ target }: { target: RouteHeadingFocusTarget }): ReactEle
 }
 
 export function AppShell({
+  apiClient,
   history,
   onRouteHeadingFocus,
   preferencesStore,
   routeComponents,
 }: AppShellProps): ReactElement {
+  const [defaultApiClient] = useState(
+    () => new EngineApiClient({ baseUrl: defaultEngineBaseUrl }),
+  );
+  const status = useAppStatus({
+    apiClient: apiClient ?? defaultApiClient,
+  });
   const pathname = useShellPath(history);
   const preferences = useShellPreferences(preferencesStore);
   const resolution = resolveRoutePath(pathname);
@@ -454,6 +493,17 @@ export function AppShell({
 
   const route = resolution.route;
   const headingTarget = headingTargetForRoute(route);
+  const handleOpenSettings = () => {
+    navigateShellRoute({
+      focusRouteHeading: (target) => {
+        onRouteHeadingFocus?.(target);
+        focusRouteHeading(target);
+      },
+      history,
+      preferencesStore,
+      to: "/settings",
+    });
+  };
 
   return (
     <div
@@ -471,13 +521,18 @@ export function AppShell({
         preferencesStore={preferencesStore}
       />
       <main className="xb-shell__main" id="main-content">
+        <TopStatusBar onOpenSettings={handleOpenSettings} status={status} />
         <header className="xb-page-header xb-shell__route-header">
           <div className="xb-page-header__main">
             <RouteHeading target={headingTarget} />
           </div>
         </header>
         <section aria-labelledby={headingTarget.headingId} className="xb-shell__route-outlet">
-          <RouteBody route={route} routeComponents={routeComponents} />
+          <RouteBody
+            onOpenSettings={handleOpenSettings}
+            route={route}
+            routeComponents={routeComponents}
+          />
         </section>
       </main>
     </div>

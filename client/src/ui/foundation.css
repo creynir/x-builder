@@ -175,6 +175,9 @@ select {
 }
 
 .xb-shell__main {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
   min-width: 0;
   padding: var(--padding-page);
 }
@@ -186,7 +189,66 @@ select {
 .xb-shell__route-outlet {
   display: grid;
   gap: var(--space-3);
-  padding-block-start: var(--space-4);
+}
+
+.xb-status-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border: var(--border-width-thin) solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+}
+
+.xb-status-bar__systems {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.xb-status-bar__item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.xb-status-bar__message {
+  max-width: var(--text-measure-compact);
+  color: var(--text-secondary);
+  font: var(--type-caption);
+}
+
+.xb-status-bar__last-run {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+  font: var(--type-caption);
+}
+
+.xb-status-bar__label {
+  color: var(--text-muted);
+}
+
+.xb-status-bar__value {
+  color: var(--text-primary);
+}
+
+.xb-status-bar__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.xb-status-bar__refreshing {
+  color: var(--text-secondary);
+  font: var(--type-caption);
 }
 
 .xb-writer-page [aria-label="Idea input"] {
@@ -525,7 +587,10 @@ select {
 }
 
 .xb-alert__recovery {
+  display: flex;
   flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .xb-empty-state {
