@@ -1,0 +1,21 @@
+client/src/shell/tests/status-bar.test.tsx
+  s_c166ef4c30ae70::t_fae7321e43215b 1-211
+client/src/shell/tests/route-error-recovery.test.tsx
+  s_c166ef4c30ae70::t_fae7321e43215b 1-245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "b03b5cb503a7be1d15f6f41b55c1a752ea8cf596",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
