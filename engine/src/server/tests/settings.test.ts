@@ -42,11 +42,11 @@ const settingsRepository = (
   overrides: Partial<AppSettingsRepositoryFake> = {},
 ): AppSettingsRepositoryFake => ({
   defaults: vi.fn(() => defaultSettings),
-  load: vi.fn(async (): Promise<AppSettingsResponse> => ({
+  load: vi.fn(async () => ({
     settings: defaultSettings,
     source: "defaults",
   })),
-  save: vi.fn(async (settings: AppSettings): Promise<AppSettingsResponse> => ({
+  save: vi.fn(async (settings: AppSettings) => ({
     settings,
     source: "persisted",
     updatedAt: "2026-06-06T12:00:00.000Z",
