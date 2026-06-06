@@ -10,6 +10,31 @@ export type RouteErrorBannerProps = {
   onRetry: () => Promise<void>;
 };
 
+function shouldShowSettingsAction(error: ApiError): boolean {
+  if (
+    error.scope === "app" ||
+    error.scope === "settings" ||
+    error.scope === "status"
+  ) {
+    return true;
+  }
+
+  if (
+    error.code === "engine_unreachable" ||
+    error.code === "request_timeout" ||
+    error.code === "invalid_response" ||
+    error.code === "settings_load_failed" ||
+    error.code === "settings_persist_failed" ||
+    error.code === "status_unavailable"
+  ) {
+    return true;
+  }
+
+  // AppShell route render failures are blocking; Settings is the shell escape
+  // hatch required by the route recovery contract when retry is not enough.
+  return error.scope === "route" && error.code === "internal_error";
+}
+
 export function RouteErrorBanner({
   error,
   isRetrying = false,
@@ -20,11 +45,12 @@ export function RouteErrorBanner({
     return null;
   }
 
-  return (
-    <Alert
-      aria-live="assertive"
-      recovery={
-        <>
+  const showRetryAction = error.retryable;
+  const showSettingsAction = shouldShowSettingsAction(error);
+  const recovery =
+    showRetryAction || showSettingsAction ? (
+      <>
+        {showRetryAction ? (
           <Button
             loading={isRetrying}
             onClick={() => {
@@ -35,11 +61,19 @@ export function RouteErrorBanner({
           >
             Retry
           </Button>
+        ) : null}
+        {showSettingsAction ? (
           <Button onClick={onOpenSettings} size="sm" variant="ghost">
             Open Settings
           </Button>
-        </>
-      }
+        ) : null}
+      </>
+    ) : null;
+
+  return (
+    <Alert
+      aria-live="assertive"
+      recovery={recovery}
       title="Route unavailable"
       variant="danger"
     >

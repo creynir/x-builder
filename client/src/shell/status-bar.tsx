@@ -36,7 +36,7 @@ export type TopStatusBarProps = {
 
 type StatusItem = {
   label: string;
-  state: SubsystemStatus["state"] | "checking";
+  state: SubsystemStatus["state"] | "checking" | "invalid";
   message?: string;
 };
 
@@ -73,16 +73,38 @@ function normalizeStatusError(error: unknown): ApiError {
   };
 }
 
-function statusItems(status: AppStatus | null): StatusItem[] {
-  if (status === null) {
+function statusItems(snapshot: AppStatusSnapshot): StatusItem[] {
+  if (snapshot.status === null && snapshot.phase === "unavailable") {
+    return [
+      {
+        label: "Engine",
+        message: snapshot.error?.message ?? "The local engine is unavailable.",
+        state: "unavailable",
+      },
+    ];
+  }
+
+  if (snapshot.status === null && snapshot.phase === "invalid") {
+    return [
+      {
+        label: "Status",
+        message:
+          snapshot.error?.message ??
+          "The local engine returned an invalid status response.",
+        state: "invalid",
+      },
+    ];
+  }
+
+  if (snapshot.status === null) {
     return checkingItems;
   }
 
   return [
-    status.engine,
-    status.deterministic,
-    status.codex,
-    status.storage,
+    snapshot.status.engine,
+    snapshot.status.deterministic,
+    snapshot.status.codex,
+    snapshot.status.storage,
   ];
 }
 
@@ -97,7 +119,7 @@ function badgeVariantForState(
     return "info";
   }
 
-  if (state === "failed" || state === "unavailable") {
+  if (state === "failed" || state === "invalid" || state === "unavailable") {
     return "danger";
   }
 
@@ -210,7 +232,7 @@ export function TopStatusBar({
       role="status"
     >
       <div className="xb-status-bar__systems">
-        {statusItems(status.status).map((item) => (
+        {statusItems(status).map((item) => (
           <span className="xb-status-bar__item" key={item.label}>
             <Badge variant={badgeVariantForState(item.state)}>
               {item.label} {labelForState(item.state)}
