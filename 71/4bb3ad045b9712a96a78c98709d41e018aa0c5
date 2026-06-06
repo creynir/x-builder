@@ -1,0 +1,26 @@
+shared/src/schemas/shell.ts
+  s_c166ef4c30ae70::t_1ccb3375aedbae 89-108,126-128
+shared/src/index.ts
+  s_c166ef4c30ae70::t_1ccb3375aedbae 6-8,18-20
+client/src/api/engine-api-client.ts
+  s_c166ef4c30ae70::t_1ccb3375aedbae 1-12,14-69,71-73,75-77,87-90,100-102,110-111,114-184
+  s_c166ef4c30ae70::t_a846333c151ee3 13,70,74,78-86,91-99,103-109,112-113
+engine/src/server/server.ts
+  s_c166ef4c30ae70::t_1ccb3375aedbae 12-13,18,377
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "714bb3ad045b9712a96a78c98709d41e018aa0c5",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
