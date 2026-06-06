@@ -1,0 +1,37 @@
+client/src/shell/tests/settings-route.test.tsx
+  s_c166ef4c30ae70::t_d5724288343042 52,58,255-332,442-471
+client/src/shell/settings-route.tsx
+  s_c166ef4c30ae70::t_f147915191bdc3 591,609-635,692,722,753-755,772
+  s_c166ef4c30ae70::t_f9b2b415f7e756 834-858,881,908,922-923
+  s_c166ef4c30ae70::t_e3a8acb1288279 362,368,373,379,384-401,410-419,447
+  s_c166ef4c30ae70::t_3cf7d9f90499d2 225,249,402-409,662-669,703-708
+  s_c166ef4c30ae70::t_e716471a207733 61,67,71-72,77,104,126-129
+engine/src/server/server.ts
+  s_c166ef4c30ae70::t_f0739ec2c79971 45,53-57,165-170,322-346,349-350,426-446
+engine/src/server/runtime.ts
+  s_c166ef4c30ae70::t_c1365421f3ffbf 1-6
+engine/src/server/tests/engine-shared-integration.test.ts
+  s_c166ef4c30ae70::t_907a566df148eb 15-19,70-118
+engine/package.json
+  s_c166ef4c30ae70::t_00b9735df0dfad 10
+client/src/features/writer/writer-page.tsx
+  s_c166ef4c30ae70::t_c424be143c8886 9,84-94,98-101,104,106-117,260-271,297,299,302,308-309,370,372,375,381
+client/src/features/writer/tests/writer-page.test.tsx
+  s_c166ef4c30ae70::t_7151785c47e7e2 163-216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "bf8873368a937f2b7dbfc1eb63fcd8ba0232cbd5",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
