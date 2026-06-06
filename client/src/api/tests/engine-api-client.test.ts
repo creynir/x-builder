@@ -10,6 +10,22 @@ import { ApiClientError, EngineApiClient } from "../engine-api-client";
 
 const baseUrl = "http://127.0.0.1:4173";
 
+type GenerateIdeaRequestContract = {
+  idea: string;
+  voiceProfileId?: string;
+  useKnownPostIds?: string[];
+};
+
+type GenerateIdeaCandidateContract = {
+  id: string;
+  format: "one-liner" | "mini-framework" | "debate-question";
+  text: string;
+};
+
+type GenerateIdeaResponseContract = {
+  candidates: GenerateIdeaCandidateContract[];
+};
+
 const statusResponse: AppStatus = {
   overall: "partial",
   version: "0.0.0",
@@ -272,12 +288,27 @@ describe("EngineApiClient", () => {
   });
 
   it("generates ideas with POST /ideas/generate and a JSON idea body", async () => {
-    const generationResponse = {
+    const generationRequest: GenerateIdeaRequestContract = {
+      idea: "Local-first tools need boring edges.",
+      useKnownPostIds: ["post-one", "post-two"],
+      voiceProfileId: "voice-default",
+    };
+    const generationResponse: GenerateIdeaResponseContract = {
       candidates: [
         {
           id: "one-liner",
           format: "one-liner",
           text: "Local-first tools need boring edges.",
+        },
+        {
+          id: "mini-framework",
+          format: "mini-framework",
+          text: "Name the edge, show the tradeoff, make the local-first decision.",
+        },
+        {
+          id: "debate-question",
+          format: "debate-question",
+          text: "What local-first compromise would make the product easier to trust?",
         },
       ],
     };
@@ -285,17 +316,46 @@ describe("EngineApiClient", () => {
     vi.stubGlobal("fetch", fetchMock);
     const client = new EngineApiClient({ baseUrl });
 
-    const result = await client.generateIdea({ idea: "Local-first tools need boring edges." });
+    const result: GenerateIdeaResponseContract = await client.generateIdea(generationRequest);
 
     expect(result).toEqual(generationResponse);
     expect(fetchMock).toHaveBeenCalledWith(`${baseUrl}/ideas/generate`, expect.objectContaining({
-      body: JSON.stringify({
-        idea: "Local-first tools need boring edges.",
-      }),
+      body: JSON.stringify(generationRequest),
       headers: expect.objectContaining({
         "content-type": "application/json",
       }),
       method: "POST",
     }));
+  });
+
+  it("classifies invalid idea generation response bodies as invalid_response", async () => {
+    const fetchMock = createFetch(jsonResponse({
+      candidates: [
+        {
+          id: "one-liner",
+          format: "one-liner",
+          text: "Local-first tools need boring edges.",
+        },
+        {
+          id: "mini-framework",
+          format: "mini-framework",
+        },
+        {
+          id: "debate-question",
+          format: "debate-question",
+          text: "What local-first compromise would make the product easier to trust?",
+        },
+      ],
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new EngineApiClient({ baseUrl });
+
+    await expectApiClientError(client.generateIdea({
+      idea: "Local-first tools need boring edges.",
+    }), {
+      code: "invalid_response",
+      scope: "app",
+      retryable: true,
+    });
   });
 });
