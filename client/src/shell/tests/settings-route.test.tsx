@@ -18,50 +18,19 @@ const settingsRouteModulePath = "../settings-route";
 const appShellModulePath = "../app-shell";
 
 type SettingsFieldName = keyof AppSettings;
-
-type SettingsRouteSnapshot = {
-  backActionLabel: string | null;
-  dirty: boolean;
-  fieldErrors: Partial<Record<SettingsFieldName, string>>;
-  fields: AppSettings;
-  readinessHelpText: string | null;
-  saveAvailable: boolean;
-  saveError: ApiError | null;
-  source: AppSettingsResponse["source"] | null;
-  status: AppStatus | null;
-  testReadinessDisabled: boolean;
-};
+type TextSettingsFieldName = Extract<
+  SettingsFieldName,
+  "codexCommandLabel" | "engineBaseUrl" | "storagePath"
+>;
+type SwitchSettingsFieldName = Extract<
+  SettingsFieldName,
+  "runCodexJudgeAfterGeneration" | "showDeterministicDetails"
+>;
 
 type SettingsApiClient = {
   getSettings: () => Promise<AppSettingsResponse>;
   getStatus: () => Promise<AppStatus>;
   saveSettings: (settings: AppSettings) => Promise<AppSettingsResponse>;
-};
-
-type SettingsRouteControllerOptions = {
-  apiClient: SettingsApiClient;
-  openedFrom?: RouteConfig["id"];
-  onNavigateToWriter?: () => void;
-  onStatusRefresh?: (status: AppStatus) => void;
-};
-
-type SettingsRouteController = {
-  backToWriter: () => void;
-  getSnapshot: () => SettingsRouteSnapshot;
-  load: () => Promise<SettingsRouteSnapshot>;
-  save: () => Promise<SettingsRouteSnapshot>;
-  testReadiness: () => Promise<SettingsRouteSnapshot>;
-  updateField: (
-    field: Extract<SettingsFieldName, "codexCommandLabel" | "engineBaseUrl" | "storagePath">,
-    value: string,
-  ) => SettingsRouteSnapshot;
-  updateSwitch: (
-    field: Extract<
-      SettingsFieldName,
-      "runCodexJudgeAfterGeneration" | "showDeterministicDetails"
-    >,
-    value: boolean,
-  ) => SettingsRouteSnapshot;
 };
 
 type SettingsRouteProps = {
@@ -71,11 +40,27 @@ type SettingsRouteProps = {
   onStatusRefresh?: (status: AppStatus) => void;
 };
 
+type SettingsRoutePublicDriverOptions = SettingsRouteProps & {
+  renderRoute?: (props: SettingsRouteProps) => ReactElement;
+};
+
+type SettingsRoutePublicDriver = {
+  backToWriter: () => string;
+  discardUnsavedNavigation: () => string;
+  load: () => Promise<string>;
+  save: () => Promise<string>;
+  stayOnSettings: () => string;
+  testReadiness: () => Promise<string>;
+  updateField: (field: TextSettingsFieldName, value: string) => string;
+  updateSwitch: (field: SwitchSettingsFieldName, value: boolean) => string;
+  warnBeforeNavigateAway: (to: RouteConfig["path"]) => string;
+};
+
 type SettingsRouteModule = {
   SettingsRoute: (props: SettingsRouteProps) => ReactElement;
-  createSettingsRouteController: (
-    options: SettingsRouteControllerOptions,
-  ) => SettingsRouteController;
+  createSettingsRoutePublicDriver: (
+    options: SettingsRoutePublicDriverOptions,
+  ) => SettingsRoutePublicDriver;
 };
 
 type ShellHistory = {
@@ -105,6 +90,22 @@ async function loadAppShell() {
 
 function textContent(html: string) {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function expectInputValue(html: string, label: string, value: string) {
+  expect(textContent(html)).toContain(label);
+  expect(html).toContain(`value="${value.replaceAll('"', "&quot;")}"`);
+}
+
+function expectChecked(html: string, label: string, checked: boolean) {
+  expect(textContent(html)).toContain(label);
+
+  if (checked) {
+    expect(html).toMatch(new RegExp(`${label}[\\s\\S]*checked=""`));
+    return;
+  }
+
+  expect(html).not.toMatch(new RegExp(`${label}[\\s\\S]*checked=""`));
 }
 
 function createDefaultSettings(): AppSettings {
@@ -206,85 +207,104 @@ function createPreferencesStore() {
   });
 }
 
-describe("SettingsRoute controller", () => {
-  it("loads default settings and exposes clean field values", async () => {
-    const { createSettingsRouteController } = await loadSettingsRoute();
+function createDriver(
+  createSettingsRoutePublicDriver: SettingsRouteModule["createSettingsRoutePublicDriver"],
+  options: SettingsRoutePublicDriverOptions,
+) {
+  return createSettingsRoutePublicDriver(options);
+}
+
+describe("SettingsRoute public behavior", () => {
+  it("loads default settings and renders clean field values", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
     const defaultSettings = createDefaultSettings();
     const apiClient = createApiClient({
       getSettings: vi.fn(async () => settingsResponse(defaultSettings, "defaults")),
     });
 
-    const controller = createSettingsRouteController({ apiClient });
-    const snapshot = await controller.load();
+    const html = await createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    }).load();
+    const text = textContent(html);
 
     expect(apiClient.getSettings).toHaveBeenCalledOnce();
-    expect(snapshot.fields).toEqual(defaultSettings);
-    expect(snapshot.source).toBe("defaults");
-    expect(snapshot.dirty).toBe(false);
-    expect(snapshot.saveAvailable).toBe(false);
-    expect(snapshot.testReadinessDisabled).toBe(false);
+    expect(text).toContain("Settings");
+    expect(text).toContain("Using defaults");
+    expect(text).not.toContain("Unsaved changes");
+    expect(html).toMatch(/<button\b[^>]*disabled=""[^>]*>Save settings/);
+    expectInputValue(html, "Engine URL", defaultSettings.engineBaseUrl);
+    expectInputValue(html, "Storage path", defaultSettings.storagePath);
+    expectInputValue(html, "Codex command label", defaultSettings.codexCommandLabel);
+    expectChecked(
+      html,
+      "Run Codex judge after generation",
+      defaultSettings.runCodexJudgeAfterGeneration,
+    );
+    expectChecked(
+      html,
+      "Show deterministic details",
+      defaultSettings.showDeterministicDetails,
+    );
   });
 
-  it("marks valid edits dirty and saves through the backend settings boundary", async () => {
-    const { createSettingsRouteController } = await loadSettingsRoute();
+  it("renders dirty valid edits and saves them through the backend settings boundary", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
     const savedSettings = createSavedSettings();
-    const apiClient = createApiClient({
-      getSettings: vi.fn(async () =>
-        settingsResponse(createDefaultSettings(), "defaults"),
-      ),
+    const apiClient = createApiClient();
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
     });
-    const controller = createSettingsRouteController({ apiClient });
 
-    await controller.load();
-    let snapshot = controller.updateField("engineBaseUrl", savedSettings.engineBaseUrl);
-    snapshot = controller.updateField("storagePath", savedSettings.storagePath);
-    snapshot = controller.updateField(
-      "codexCommandLabel",
-      savedSettings.codexCommandLabel,
-    );
-    snapshot = controller.updateSwitch(
+    await driver.load();
+    driver.updateField("engineBaseUrl", savedSettings.engineBaseUrl);
+    driver.updateField("storagePath", savedSettings.storagePath);
+    driver.updateField("codexCommandLabel", savedSettings.codexCommandLabel);
+    driver.updateSwitch(
       "runCodexJudgeAfterGeneration",
       savedSettings.runCodexJudgeAfterGeneration,
     );
-    snapshot = controller.updateSwitch(
+    const dirtyHtml = driver.updateSwitch(
       "showDeterministicDetails",
       savedSettings.showDeterministicDetails,
     );
 
-    expect(snapshot.dirty).toBe(true);
-    expect(snapshot.saveAvailable).toBe(true);
-    expect(snapshot.fieldErrors).toEqual({});
+    expect(textContent(dirtyHtml)).toContain("Unsaved changes");
+    expect(dirtyHtml).toMatch(/<button\b(?![^>]*disabled)[^>]*>Save settings/);
 
-    const savedSnapshot = await controller.save();
+    const savedHtml = await driver.save();
 
     expect(apiClient.saveSettings).toHaveBeenCalledWith(savedSettings);
-    expect(savedSnapshot.fields).toEqual(savedSettings);
-    expect(savedSnapshot.dirty).toBe(false);
-    expect(savedSnapshot.source).toBe("persisted");
+    expect(textContent(savedHtml)).toContain("Settings saved");
+    expect(textContent(savedHtml)).not.toContain("Unsaved changes");
+    expect(savedHtml).toMatch(/<button\b[^>]*disabled=""[^>]*>Save settings/);
   });
 
   it("shows inline Engine URL validation and does not submit invalid settings", async () => {
-    const { createSettingsRouteController } = await loadSettingsRoute();
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
     const apiClient = createApiClient();
-    const controller = createSettingsRouteController({ apiClient });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    });
 
-    await controller.load();
-    const dirtySnapshot = controller.updateField(
-      "engineBaseUrl",
-      "https://engine.example.com",
-    );
-    const submittedSnapshot = await controller.save();
+    await driver.load();
+    driver.updateField("engineBaseUrl", "https://engine.example.com");
+    const html = await driver.save();
+    const text = textContent(html);
 
-    expect(dirtySnapshot.dirty).toBe(true);
-    expect(submittedSnapshot.fieldErrors.engineBaseUrl).toBe(
-      "Enter a valid local engine URL.",
-    );
-    expect(submittedSnapshot.saveAvailable).toBe(false);
+    expect(text).toContain("Enter a valid local engine URL.");
+    expect(text).toContain("Unsaved changes");
     expect(apiClient.saveSettings).not.toHaveBeenCalled();
   });
 
   it("keeps edited values visible and shows recovery when save fails", async () => {
-    const { createSettingsRouteController } = await loadSettingsRoute();
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
     const saveError = createApiError();
     const apiClient = createApiClient({
       saveSettings: vi.fn(async () => {
@@ -293,20 +313,26 @@ describe("SettingsRoute controller", () => {
         });
       }),
     });
-    const controller = createSettingsRouteController({ apiClient });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    });
 
-    await controller.load();
-    controller.updateField("storagePath", "/tmp/x-builder-unsaved-storage");
-    const snapshot = await controller.save();
+    await driver.load();
+    driver.updateField("storagePath", "/tmp/x-builder-unsaved-storage");
+    const html = await driver.save();
+    const text = textContent(html);
 
-    expect(snapshot.fields.storagePath).toBe("/tmp/x-builder-unsaved-storage");
-    expect(snapshot.dirty).toBe(true);
-    expect(snapshot.saveAvailable).toBe(true);
-    expect(snapshot.saveError).toEqual(saveError);
+    expectInputValue(html, "Storage path", "/tmp/x-builder-unsaved-storage");
+    expect(text).toContain("Unsaved changes");
+    expect(text).toContain("Settings could not be saved. Your edits are still here.");
+    expect(text).toContain("Retry save");
+    expect(html).toMatch(/<button\b(?![^>]*disabled)[^>]*>Save settings/);
   });
 
   it("tests readiness only for a clean saved form and publishes the refreshed status", async () => {
-    const { createSettingsRouteController } = await loadSettingsRoute();
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
     const readyStatus = createReadyStatus();
     const onStatusRefresh = vi.fn();
     const apiClient = createApiClient({
@@ -315,62 +341,106 @@ describe("SettingsRoute controller", () => {
       ),
       getStatus: vi.fn(async () => readyStatus),
     });
-    const controller = createSettingsRouteController({
+    const driver = createDriver(createSettingsRoutePublicDriver, {
       apiClient,
       onStatusRefresh,
+      renderRoute: SettingsRoute,
     });
 
-    await controller.load();
-    const snapshot = await controller.testReadiness();
+    await driver.load();
+    const html = await driver.testReadiness();
+    const text = textContent(html);
 
     expect(apiClient.getStatus).toHaveBeenCalledOnce();
     expect(onStatusRefresh).toHaveBeenCalledWith(readyStatus);
-    expect(snapshot.status).toEqual(readyStatus);
-    expect(snapshot.testReadinessDisabled).toBe(false);
+    expect(text).toContain("Engine ready");
+    expect(text).toContain("Storage ready");
+    expect(text).toContain("Codex judge ready");
   });
 
   it("disables readiness testing for dirty settings with the required helper copy", async () => {
-    const { createSettingsRouteController } = await loadSettingsRoute();
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
     const apiClient = createApiClient();
-    const controller = createSettingsRouteController({ apiClient });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    });
 
-    await controller.load();
-    controller.updateField("storagePath", "/tmp/x-builder-dirty-storage");
-    const snapshot = await controller.testReadiness();
+    await driver.load();
+    const html = driver.updateField("storagePath", "/tmp/x-builder-dirty-storage");
 
-    expect(snapshot.testReadinessDisabled).toBe(true);
-    expect(snapshot.readinessHelpText).toBe(
-      "Save settings before testing readiness.",
-    );
+    expect(textContent(html)).toContain("Save settings before testing readiness.");
+    expect(html).toMatch(/<button\b[^>]*disabled=""[^>]*>Test readiness/);
+
+    await driver.testReadiness();
+
     expect(apiClient.getStatus).not.toHaveBeenCalled();
   });
 
   it("refreshes status after a successful save without auto-returning to Writer", async () => {
-    const { createSettingsRouteController } = await loadSettingsRoute();
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
     const readyStatus = createReadyStatus();
     const onNavigateToWriter = vi.fn();
     const onStatusRefresh = vi.fn();
     const apiClient = createApiClient({
       getStatus: vi.fn(async () => readyStatus),
     });
-    const controller = createSettingsRouteController({
+    const driver = createDriver(createSettingsRoutePublicDriver, {
       apiClient,
       onNavigateToWriter,
       onStatusRefresh,
       openedFrom: "writer",
+      renderRoute: SettingsRoute,
     });
 
-    await controller.load();
-    controller.updateField("storagePath", "/tmp/x-builder-saved-after-repair");
-    const snapshot = await controller.save();
+    await driver.load();
+    driver.updateField("storagePath", "/tmp/x-builder-saved-after-repair");
+    const savedHtml = await driver.save();
 
     expect(apiClient.getStatus).toHaveBeenCalledOnce();
     expect(onStatusRefresh).toHaveBeenCalledWith(readyStatus);
-    expect(snapshot.dirty).toBe(false);
-    expect(snapshot.backActionLabel).toBe("Back to Writer");
+    expect(textContent(savedHtml)).toContain("Back to Writer");
     expect(onNavigateToWriter).not.toHaveBeenCalled();
 
-    controller.backToWriter();
+    driver.backToWriter();
+
+    expect(onNavigateToWriter).toHaveBeenCalledOnce();
+  });
+
+  it("warns before discarding dirty settings during route navigation", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const onNavigateToWriter = vi.fn();
+    const apiClient = createApiClient();
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      onNavigateToWriter,
+      openedFrom: "writer",
+      renderRoute: SettingsRoute,
+    });
+
+    await driver.load();
+    driver.updateField("storagePath", "/tmp/x-builder-unsaved-route-change");
+    const warningHtml = driver.warnBeforeNavigateAway("/writer");
+    const warningText = textContent(warningHtml);
+
+    expect(warningText).toContain("You have unsaved settings changes.");
+    expect(warningText).toContain("Save or discard them before leaving.");
+    expect(warningText).toContain("Stay on Settings");
+    expect(warningText).toContain("Discard changes");
+    expect(onNavigateToWriter).not.toHaveBeenCalled();
+
+    const stayedHtml = driver.stayOnSettings();
+
+    expect(textContent(stayedHtml)).toContain("Unsaved changes");
+    expect(onNavigateToWriter).not.toHaveBeenCalled();
+
+    const discardedHtml = driver.warnBeforeNavigateAway("/writer");
+    expect(textContent(discardedHtml)).toContain("Discard changes");
+
+    driver.discardUnsavedNavigation();
 
     expect(onNavigateToWriter).toHaveBeenCalledOnce();
   });
