@@ -1,0 +1,19 @@
+engine/src/server/tests/settings.test.ts
+  s_c166ef4c30ae70::t_c2234799ec88c4 45,49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "aff2722266f00a2fc8983004997dc96fcfab67b3",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
