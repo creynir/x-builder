@@ -1,7 +1,13 @@
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { RouteConfig } from "@x-builder/shared";
+import type {
+  ApiError,
+  AppStatus,
+  GenerateIdeaRequest,
+  GenerateIdeaResponse,
+  RouteConfig,
+} from "@x-builder/shared";
 
 import {
   createShellPreferencesStore,
@@ -30,7 +36,13 @@ type ShellRouteComponents = Partial<
   Record<RouteConfig["id"], (props: ShellRouteComponentProps) => ReactElement>
 >;
 
+type ShellApiClient = {
+  generateIdea: (input: GenerateIdeaRequest) => Promise<GenerateIdeaResponse>;
+  getStatus: () => Promise<AppStatus>;
+};
+
 type AppShellProps = {
+  apiClient?: ShellApiClient;
   history: ShellHistory;
   preferencesStore: ShellPreferencesStore;
   routeComponents?: ShellRouteComponents;
@@ -56,8 +68,21 @@ type GuardSettingsNavigationOptions = {
   to: RouteConfig["path"];
 };
 
+type AppShellPublicDriverOptions = AppShellProps & {
+  renderShell?: (props: AppShellProps) => ReactElement;
+};
+
+type AppShellPublicDriver = {
+  generateWriterIdea: () => Promise<string>;
+  openWriterErrorSettings: () => string;
+  updateWriterIdea: (idea: string) => string;
+};
+
 type AppShellModule = {
   AppShell: (props: AppShellProps) => ReactElement;
+  createAppShellPublicDriver: (
+    options: AppShellPublicDriverOptions,
+  ) => AppShellPublicDriver;
   createMemoryShellHistory: (
     options: CreateMemoryShellHistoryOptions,
   ) => ShellHistory;
@@ -106,12 +131,97 @@ function textContent(html: string) {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 function countOpeningTags(html: string, tagName: string) {
   return [...html.matchAll(new RegExp(`<${tagName}(\\s|>)`, "g"))].length;
 }
 
 function renderShell(AppShell: AppShellModule["AppShell"], props: AppShellProps) {
   return renderToStaticMarkup(<AppShell {...props} />);
+}
+
+function subsystem(
+  label: string,
+  state: AppStatus["engine"]["state"],
+): AppStatus["engine"] {
+  return {
+    checkedAt: "2026-06-06T12:10:00.000Z",
+    details: {},
+    label,
+    retryable: state !== "ready",
+    state,
+  };
+}
+
+function createReadyStatus(): AppStatus {
+  return {
+    codex: subsystem("Codex judge", "ready"),
+    deterministic: subsystem("Deterministic scorer", "ready"),
+    engine: subsystem("Engine", "ready"),
+    generatedAt: "2026-06-06T12:10:00.000Z",
+    lastRun: {
+      state: "none",
+    },
+    overall: "ready",
+    storage: subsystem("Storage", "ready"),
+    version: "0.0.0-test",
+  };
+}
+
+function createApiError(overrides: Partial<ApiError> = {}): ApiError {
+  return {
+    code: "engine_unreachable",
+    message: "Could not reach the local engine. Your idea is still here.",
+    retryable: true,
+    scope: "writer",
+    status: 503,
+    ...overrides,
+  };
+}
+
+function createValidIdeaResponse(): GenerateIdeaResponse {
+  return {
+    candidates: [
+      {
+        format: "one-liner",
+        id: "candidate-one-liner",
+        text: "Local-first writing tools need boring edges.",
+      },
+      {
+        format: "mini-framework",
+        id: "candidate-mini-framework",
+        text: "Name the constraint, show the tradeoff, then make the local-first call.",
+      },
+      {
+        format: "debate-question",
+        id: "candidate-debate-question",
+        text: "What local-first compromise would make builders trust the tool more?",
+      },
+    ],
+  };
+}
+
+function throwApiError(apiError: ApiError): never {
+  throw Object.assign(new Error(apiError.message), {
+    apiError,
+  });
+}
+
+function createShellApiClient(
+  overrides: Partial<ShellApiClient> = {},
+): ShellApiClient {
+  return {
+    generateIdea: vi.fn(async () => createValidIdeaResponse()),
+    getStatus: vi.fn(async () => createReadyStatus()),
+    ...overrides,
+  };
 }
 
 describe("AppShell route frame", () => {
@@ -252,5 +362,46 @@ describe("AppShell route frame", () => {
 
     expect(cleanResult).toBe("navigated");
     expect(onNavigate).toHaveBeenCalledWith("/writer");
+  });
+
+  it("wires the default Writer route to shell API generation and Settings recovery", async () => {
+    const {
+      AppShell,
+      createAppShellPublicDriver,
+      createMemoryShellHistory,
+    } = await loadAppShell();
+    const history = createMemoryShellHistory({ initialPath: "/writer" });
+    const preferencesStore = createPreferencesStore();
+    const engineError = createApiError();
+    const generateIdea = vi.fn(async () => throwApiError(engineError));
+    const apiClient = createShellApiClient({
+      generateIdea,
+    });
+    const idea = "The Writer route should use the shell-provided API client.";
+    const driver = createAppShellPublicDriver({
+      apiClient,
+      history,
+      preferencesStore,
+      renderShell: AppShell,
+    });
+
+    driver.updateWriterIdea(idea);
+    const html = await driver.generateWriterIdea();
+    const text = textContent(html);
+
+    expect(generateIdea).toHaveBeenCalledOnce();
+    expect(generateIdea).toHaveBeenCalledWith({
+      idea,
+    });
+    expect(html).toContain(escapeHtml(idea));
+    expect(text).toContain("Could not reach the local engine. Your idea is still here.");
+    expect(text).toContain("Retry");
+    expect(text).toContain("Open Settings");
+    expect(history.location.pathname).toBe("/writer");
+
+    driver.openWriterErrorSettings();
+
+    expect(history.location.pathname).toBe("/settings");
+    expect(preferencesStore.get().lastRoutePath).toBe("/settings");
   });
 });
