@@ -38,7 +38,9 @@ type ShellRouteComponents = Partial<
 
 type ShellApiClient = {
   generateIdea: (input: GenerateIdeaRequest) => Promise<GenerateIdeaResponse>;
+  getSettings?: () => Promise<unknown>;
   getStatus: () => Promise<AppStatus>;
+  saveSettings?: (input: unknown) => Promise<unknown>;
 };
 
 type AppShellProps = {
@@ -73,6 +75,7 @@ type AppShellPublicDriverOptions = AppShellProps & {
 };
 
 type AppShellPublicDriver = {
+  activatePlaceholderPrimaryAction: () => string;
   generateWriterIdea: () => Promise<string>;
   openWriterErrorSettings: () => string;
   updateWriterIdea: (idea: string) => string;
@@ -219,7 +222,13 @@ function createShellApiClient(
 ): ShellApiClient {
   return {
     generateIdea: vi.fn(async () => createValidIdeaResponse()),
+    getSettings: vi.fn(async () => {
+      throw new Error("Placeholders must not load settings.");
+    }),
     getStatus: vi.fn(async () => createReadyStatus()),
+    saveSettings: vi.fn(async () => {
+      throw new Error("Placeholders must not save settings.");
+    }),
     ...overrides,
   };
 }
@@ -403,5 +412,103 @@ describe("AppShell route frame", () => {
 
     expect(history.location.pathname).toBe("/settings");
     expect(preferencesStore.get().lastRoutePath).toBe("/settings");
+  });
+
+  it("renders the Voice placeholder as normal shell content with active navigation", async () => {
+    const { AppShell, createMemoryShellHistory } = await loadAppShell();
+    const history = createMemoryShellHistory({ initialPath: "/voice" });
+    const preferencesStore = createPreferencesStore();
+    const apiClient = createShellApiClient({
+      getStatus: vi.fn(async () => {
+        throw new Error("Status unavailable while opening Voice.");
+      }),
+    });
+
+    const html = renderShell(AppShell, { apiClient, history, preferencesStore });
+    const text = textContent(html);
+
+    expect(history.location.pathname).toBe("/voice");
+    expect(html).toContain(">Voice</h1>");
+    expect(html).toMatch(/<a\b[^>]*href="\/voice"[^>]*aria-current="page"/);
+    expect(text).toContain("Voice profile setup is not part of this shell pass.");
+    expect(text).toContain("Back to Writer");
+    expect(html).not.toContain('role="alert"');
+    expect(text).not.toContain("Route unavailable");
+    expect(text).not.toContain("This route could not render.");
+    expect(apiClient.generateIdea).not.toHaveBeenCalled();
+    expect(apiClient.getSettings).not.toHaveBeenCalled();
+    expect(apiClient.saveSettings).not.toHaveBeenCalled();
+  });
+
+  it("renders the Post Library placeholder as normal shell content with active navigation", async () => {
+    const { AppShell, createMemoryShellHistory } = await loadAppShell();
+    const history = createMemoryShellHistory({ initialPath: "/library" });
+    const preferencesStore = createPreferencesStore();
+    const apiClient = createShellApiClient({
+      getStatus: vi.fn(async () => {
+        throw new Error("Status unavailable while opening Post Library.");
+      }),
+    });
+
+    const html = renderShell(AppShell, { apiClient, history, preferencesStore });
+    const text = textContent(html);
+
+    expect(history.location.pathname).toBe("/library");
+    expect(html).toContain(">Post Library</h1>");
+    expect(html).toMatch(/<a\b[^>]*href="\/library"[^>]*aria-current="page"/);
+    expect(text).toContain("Post memory is reserved for the library feature pass.");
+    expect(text).toContain("Back to Writer");
+    expect(html).not.toContain('role="alert"');
+    expect(text).not.toContain("Route unavailable");
+    expect(text).not.toContain("This route could not render.");
+    expect(apiClient.generateIdea).not.toHaveBeenCalled();
+    expect(apiClient.getSettings).not.toHaveBeenCalled();
+    expect(apiClient.saveSettings).not.toHaveBeenCalled();
+  });
+
+  it("navigates from the Voice placeholder primary action back to Writer", async () => {
+    const {
+      AppShell,
+      createAppShellPublicDriver,
+      createMemoryShellHistory,
+    } = await loadAppShell();
+    const history = createMemoryShellHistory({ initialPath: "/voice" });
+    const preferencesStore = createPreferencesStore();
+    const driver = createAppShellPublicDriver({
+      apiClient: createShellApiClient(),
+      history,
+      preferencesStore,
+      renderShell: AppShell,
+    });
+
+    const html = driver.activatePlaceholderPrimaryAction();
+
+    expect(history.location.pathname).toBe("/writer");
+    expect(preferencesStore.get().lastRoutePath).toBe("/writer");
+    expect(html).toContain(">Writer</h1>");
+    expect(html).toMatch(/<a\b[^>]*href="\/writer"[^>]*aria-current="page"/);
+  });
+
+  it("navigates from the Post Library placeholder primary action back to Writer", async () => {
+    const {
+      AppShell,
+      createAppShellPublicDriver,
+      createMemoryShellHistory,
+    } = await loadAppShell();
+    const history = createMemoryShellHistory({ initialPath: "/library" });
+    const preferencesStore = createPreferencesStore();
+    const driver = createAppShellPublicDriver({
+      apiClient: createShellApiClient(),
+      history,
+      preferencesStore,
+      renderShell: AppShell,
+    });
+
+    const html = driver.activatePlaceholderPrimaryAction();
+
+    expect(history.location.pathname).toBe("/writer");
+    expect(preferencesStore.get().lastRoutePath).toBe("/writer");
+    expect(html).toContain(">Writer</h1>");
+    expect(html).toMatch(/<a\b[^>]*href="\/writer"[^>]*aria-current="page"/);
   });
 });
