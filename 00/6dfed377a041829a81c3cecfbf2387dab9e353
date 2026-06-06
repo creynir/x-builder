@@ -1,0 +1,19 @@
+client/src/shell/tests/settings-route.test.tsx
+  s_c166ef4c30ae70::t_9b376350326af6 21-28,36,43-44,47-56,61-63,95-110,210-220,226-230,233-249,252-254,256-259,261-266,270,275-276,278,281-283,287-288,290-293,295-298,300-301,306-307,316-319,321-324,326-330,334-335,344,347,350-352,356-358,362-363,365-368,370-376,382-383,390,395,398-400,404,407-443
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "006dfed377a041829a81c3cecfbf2387dab9e353",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
