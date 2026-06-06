@@ -1,0 +1,21 @@
+client/src/shell/status-bar.tsx
+  s_c166ef4c30ae70::t_8c6771bcdb3599 39,76-99,104-107,122,235
+client/src/shell/route-error-banner.tsx
+  s_c166ef4c30ae70::t_930c4e20ccf68a 13-37,48-53,64-65,69-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "d25fe7dfb3d573da2d53a7a97f777d65369801f6",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
