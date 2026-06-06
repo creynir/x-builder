@@ -1,0 +1,22 @@
+client/src/shell/route-registry.ts
+  s_c166ef4c30ae70::t_207e4ae0423807 52-62
+  s_c166ef4c30ae70::t_dd4cc1ba8c152b 1-51,63-84
+client/src/shell/shell-preferences.ts
+  s_c166ef4c30ae70::t_dd4cc1ba8c152b 1-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "6eb97be6f30563c72afcfe214d90eb6773468683",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
