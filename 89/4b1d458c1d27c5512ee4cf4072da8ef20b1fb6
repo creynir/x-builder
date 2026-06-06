@@ -1,0 +1,19 @@
+client/src/api/tests/engine-api-client.test.ts
+  s_c166ef4c30ae70::t_d3f176d84f1eef 13-28,291-296,303-312,319,323,330-359
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "894b1d458c1d27c5512ee4cf4072da8ef20b1fb6",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
