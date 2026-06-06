@@ -49,11 +49,13 @@ type SettingsRoutePublicDriver = {
   backToWriter: () => string;
   discardUnsavedNavigation: () => string;
   load: () => Promise<string>;
+  retryLoad: () => Promise<string>;
   save: () => Promise<string>;
   stayOnSettings: () => string;
   testReadiness: () => Promise<string>;
   updateField: (field: TextSettingsFieldName, value: string) => string;
   updateSwitch: (field: SwitchSettingsFieldName, value: boolean) => string;
+  useDefaults: () => string;
   warnBeforeNavigateAway: (to: RouteConfig["path"]) => string;
 };
 
@@ -250,6 +252,84 @@ describe("SettingsRoute public behavior", () => {
     );
   });
 
+  it("retries settings load failures without saving defaults", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const loadError = createApiError({
+      code: "settings_load_failed",
+      message: "Settings could not be loaded. Try again.",
+      retryable: true,
+      scope: "settings",
+      status: 500,
+    });
+    const savedSettings = createSavedSettings();
+    const apiClient = createApiClient({
+      getSettings: vi
+        .fn<SettingsApiClient["getSettings"]>()
+        .mockImplementationOnce(async () => {
+          throw Object.assign(new Error(loadError.message), {
+            apiError: loadError,
+          });
+        })
+        .mockImplementationOnce(async () =>
+          settingsResponse(savedSettings, "persisted"),
+        ),
+    });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    });
+
+    const failedHtml = await driver.load();
+    const failedText = textContent(failedHtml);
+
+    expect(failedText).toContain("Settings could not be loaded. Try again.");
+    expect(failedText).toContain("Retry");
+    expect(failedText).toContain("Use defaults");
+    expect(failedText).not.toContain("Retry save");
+
+    const retriedHtml = await driver.retryLoad();
+
+    expect(apiClient.getSettings).toHaveBeenCalledTimes(2);
+    expect(apiClient.saveSettings).not.toHaveBeenCalled();
+    expectInputValue(retriedHtml, "Engine URL", savedSettings.engineBaseUrl);
+    expectInputValue(retriedHtml, "Storage path", savedSettings.storagePath);
+    expect(textContent(retriedHtml)).toContain("Persisted settings");
+  });
+
+  it("lets a failed settings load continue with defaults without calling save", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const loadError = createApiError({
+      code: "settings_load_failed",
+      message: "Settings could not be loaded. Try again.",
+      retryable: true,
+      scope: "settings",
+      status: 500,
+    });
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () => {
+        throw Object.assign(new Error(loadError.message), {
+          apiError: loadError,
+        });
+      }),
+    });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    });
+
+    await driver.load();
+    const defaultsHtml = driver.useDefaults();
+    const defaultsText = textContent(defaultsHtml);
+
+    expect(apiClient.saveSettings).not.toHaveBeenCalled();
+    expect(defaultsText).toContain("Using defaults");
+    expect(defaultsText).not.toContain("Settings could not be loaded");
+    expect(defaultsText).not.toContain("Unsaved changes");
+    expectInputValue(defaultsHtml, "Engine URL", createDefaultSettings().engineBaseUrl);
+  });
+
   it("renders dirty valid edits and saves them through the backend settings boundary", async () => {
     const { SettingsRoute, createSettingsRoutePublicDriver } =
       await loadSettingsRoute();
@@ -357,6 +437,38 @@ describe("SettingsRoute public behavior", () => {
     expect(text).toContain("Engine ready");
     expect(text).toContain("Storage ready");
     expect(text).toContain("Codex judge ready");
+  });
+
+  it("retries readiness failures through the readiness action, not save", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const readinessError = createApiError({
+      code: "status_unavailable",
+      message: "Readiness could not be checked. Try again.",
+      retryable: true,
+      scope: "status",
+      status: 503,
+    });
+    const apiClient = createApiClient({
+      getStatus: vi.fn(async () => {
+        throw Object.assign(new Error(readinessError.message), {
+          apiError: readinessError,
+        });
+      }),
+    });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    });
+
+    await driver.load();
+    const html = await driver.testReadiness();
+    const text = textContent(html);
+
+    expect(text).toContain("Readiness could not be checked. Try again.");
+    expect(text).toContain("Retry readiness");
+    expect(text).not.toContain("Retry save");
+    expect(apiClient.saveSettings).not.toHaveBeenCalled();
   });
 
   it("disables readiness testing for dirty settings with the required helper copy", async () => {

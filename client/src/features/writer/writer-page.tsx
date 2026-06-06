@@ -6,6 +6,7 @@ import {
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   apiErrorSchema,
+  generateIdeaRequestSchema,
   type ApiError,
   type GenerateIdeaRequest,
   type GenerateIdeaResponse,
@@ -80,15 +81,40 @@ function normalizeWriterError(error: unknown): ApiError {
   };
 }
 
-function payloadFromIdea(idea: string): GenerateIdeaRequest | null {
+type PayloadResult =
+  | {
+      payload: GenerateIdeaRequest;
+      type: "valid";
+    }
+  | {
+      fieldError: string;
+      type: "field-error";
+    };
+
+function payloadFromIdea(idea: string): PayloadResult {
   const trimmedIdea = idea.trim();
 
   if (trimmedIdea.length === 0) {
-    return null;
+    return {
+      fieldError: emptyIdeaError,
+      type: "field-error",
+    };
+  }
+
+  const parsed = generateIdeaRequestSchema.safeParse({
+    idea: trimmedIdea,
+  });
+
+  if (!parsed.success) {
+    return {
+      fieldError: parsed.error.flatten().fieldErrors.idea?.[0] ?? "Idea is invalid.",
+      type: "field-error",
+    };
   }
 
   return {
-    idea: trimmedIdea,
+    payload: parsed.data,
+    type: "valid",
   };
 }
 
@@ -231,6 +257,18 @@ function applyGenerationResult(
     };
   }
 
+  const ideaFieldError = result.error.fieldErrors?.idea?.[0];
+
+  if (result.error.scope === "field" && ideaFieldError !== undefined) {
+    return {
+      ...model,
+      fieldError: ideaFieldError,
+      isGenerating: false,
+      lastPayload: payload,
+      routeError: null,
+    };
+  }
+
   return {
     ...model,
     fieldError: null,
@@ -256,16 +294,18 @@ export function WriterPage({
 
   const generate = () => {
     void (async () => {
-      const payload = payloadFromIdea(model.idea);
+      const payloadResult = payloadFromIdea(model.idea);
 
-      if (payload === null) {
+      if (payloadResult.type === "field-error") {
         setModel((current) => ({
           ...current,
-          fieldError: emptyIdeaError,
+          fieldError: payloadResult.fieldError,
           routeError: null,
         }));
         return;
       }
+
+      const { payload } = payloadResult;
 
       setModel((current) => ({
         ...current,
@@ -327,16 +367,18 @@ export function createWriterPagePublicDriver(
   const render = () => renderDriverPage(options.onOpenSettings, model);
 
   const generate = async () => {
-    const payload = payloadFromIdea(model.idea);
+    const payloadResult = payloadFromIdea(model.idea);
 
-    if (payload === null) {
+    if (payloadResult.type === "field-error") {
       model = {
         ...model,
-        fieldError: emptyIdeaError,
+        fieldError: payloadResult.fieldError,
         routeError: null,
       };
       return render();
     }
+
+    const { payload } = payloadResult;
 
     model = {
       ...model,

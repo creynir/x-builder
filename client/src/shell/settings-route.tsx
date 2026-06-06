@@ -58,18 +58,23 @@ export type SettingsRoutePublicDriver = {
   backToWriter: () => string;
   discardUnsavedNavigation: () => string;
   load: () => Promise<string>;
+  retryLoad: () => Promise<string>;
   save: () => Promise<string>;
   stayOnSettings: () => string;
   testReadiness: () => Promise<string>;
   updateField: (field: TextSettingsFieldName, value: string) => string;
   updateSwitch: (field: SwitchSettingsFieldName, value: boolean) => string;
+  useDefaults: () => string;
   warnBeforeNavigateAway: (to: RouteConfig["path"]) => string;
 };
+
+type SettingsErrorKind = "load" | "save" | "status";
 
 type SettingsRouteModel = {
   draft: AppSettings;
   engineUrlError: string | null;
   error: ApiError | null;
+  errorKind: SettingsErrorKind | null;
   isLoading: boolean;
   isSaving: boolean;
   isTesting: boolean;
@@ -96,6 +101,7 @@ function createInitialModel(): SettingsRouteModel {
     draft: defaultSettings,
     engineUrlError: null,
     error: null,
+    errorKind: null,
     isLoading: true,
     isSaving: false,
     isTesting: false,
@@ -114,6 +120,13 @@ function modelFromResponse(response: AppSettingsResponse): SettingsRouteModel {
     isLoading: false,
     saved: response.settings,
     source: response.source,
+  };
+}
+
+function modelFromDefaults(): SettingsRouteModel {
+  return {
+    ...createInitialModel(),
+    isLoading: false,
   };
 }
 
@@ -209,6 +222,7 @@ function updateTextField(
       [field]: value,
     },
     error: null,
+    errorKind: null,
     pendingNavigationPath: null,
     successMessage: null,
   };
@@ -232,6 +246,7 @@ function updateSwitchField(
       [field]: value,
     },
     error: null,
+    errorKind: null,
     pendingNavigationPath: null,
     successMessage: null,
   };
@@ -344,24 +359,64 @@ function SettingsRouteView({
   model,
   onBackToWriter,
   onDiscardNavigation,
+  onRetryLoad,
   onSave,
   onStayOnSettings,
   onTestReadiness,
   onUpdateField,
   onUpdateSwitch,
+  onUseDefaults,
 }: {
   model: SettingsRouteModel;
   onBackToWriter: () => void;
   onDiscardNavigation: () => void;
+  onRetryLoad: () => void;
   onSave: () => void;
   onStayOnSettings: () => void;
   onTestReadiness: () => void;
   onUpdateField: (field: TextSettingsFieldName, value: string) => void;
   onUpdateSwitch: (field: SwitchSettingsFieldName, value: boolean) => void;
+  onUseDefaults: () => void;
 }): ReactElement {
   const dirty = isDirty(model);
   const canSave = dirty && model.engineUrlError === null && !model.isSaving;
   const canTestReadiness = !dirty && !model.isTesting && !model.isLoading;
+  const errorRecovery = model.error?.retryable ? (
+    model.errorKind === "load" ? (
+      <>
+        <button
+          className={buttonClassName("secondary")}
+          onClick={onRetryLoad}
+          type="button"
+        >
+          Retry
+        </button>
+        <button
+          className={buttonClassName("ghost")}
+          onClick={onUseDefaults}
+          type="button"
+        >
+          Use defaults
+        </button>
+      </>
+    ) : model.errorKind === "status" ? (
+      <button
+        className={buttonClassName("secondary")}
+        onClick={onTestReadiness}
+        type="button"
+      >
+        Retry readiness
+      </button>
+    ) : (
+      <button
+        className={buttonClassName("secondary")}
+        onClick={onSave}
+        type="button"
+      >
+        Retry save
+      </button>
+    )
+  ) : null;
 
   return (
     <section className="xb-settings-route">
@@ -389,17 +444,7 @@ function SettingsRouteView({
 
       {model.error ? (
         <Alert
-          recovery={
-            model.error.retryable ? (
-              <button
-                className={buttonClassName("secondary")}
-                onClick={onSave}
-                type="button"
-              >
-                Retry save
-              </button>
-            ) : null
-          }
+          recovery={errorRecovery}
           title="Settings unavailable"
           variant="danger"
         >
@@ -543,6 +588,7 @@ export function SettingsRoute({
           setModel({
             ...createInitialModel(),
             error: normalizeSettingsError(error, settingsLoadError()),
+            errorKind: "load",
             isLoading: false,
           });
         }
@@ -559,6 +605,33 @@ export function SettingsRoute({
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
+
+  const handleLoadSettings = async () => {
+    setModel((current) => ({
+      ...current,
+      error: null,
+      errorKind: null,
+      isLoading: true,
+      successMessage: null,
+    }));
+
+    try {
+      const response = await apiClient.getSettings();
+
+      setModel(modelFromResponse(response));
+    } catch (error) {
+      setModel({
+        ...createInitialModel(),
+        error: normalizeSettingsError(error, settingsLoadError()),
+        errorKind: "load",
+        isLoading: false,
+      });
+    }
+  };
+
+  const handleUseDefaults = () => {
+    setModel(modelFromDefaults());
+  };
 
   const navigateTo = (to: RouteConfig["path"]) => {
     onNavigate?.(to);
@@ -586,7 +659,14 @@ export function SettingsRoute({
   };
 
   const handleSave = async () => {
-    setModel((current) => withValidatedEngineUrl({ ...current, isSaving: true }));
+    setModel((current) =>
+      withValidatedEngineUrl({
+        ...current,
+        error: null,
+        errorKind: null,
+        isSaving: true,
+      }),
+    );
 
     if (!isLocalEngineUrl(model.draft.engineBaseUrl)) {
       setModel((current) => ({
@@ -609,6 +689,7 @@ export function SettingsRoute({
       setModel((current) => ({
         ...current,
         error: normalizeSettingsError(error, settingsPersistError()),
+        errorKind: "save",
         isSaving: false,
       }));
     }
@@ -619,7 +700,12 @@ export function SettingsRoute({
       return;
     }
 
-    setModel((current) => ({ ...current, error: null, isTesting: true }));
+    setModel((current) => ({
+      ...current,
+      error: null,
+      errorKind: null,
+      isTesting: true,
+    }));
 
     try {
       const status = await apiClient.getStatus();
@@ -633,6 +719,7 @@ export function SettingsRoute({
       setModel((current) => ({
         ...current,
         error: normalizeSettingsError(error, statusError()),
+        errorKind: "status",
         isTesting: false,
       }));
     }
@@ -663,6 +750,9 @@ export function SettingsRoute({
         }));
         navigateTo(visiblePendingNavigationPath);
       }}
+      onRetryLoad={() => {
+        void handleLoadSettings();
+      }}
       onSave={() => {
         void handleSave();
       }}
@@ -679,6 +769,7 @@ export function SettingsRoute({
       onUpdateSwitch={(field, value) => {
         setModel((current) => updateSwitchField(current, field, value));
       }}
+      onUseDefaults={handleUseDefaults}
     />
   );
 }
@@ -740,8 +831,31 @@ export function createSettingsRoutePublicDriver(
       return render();
     },
     load: async () => {
-      const response = await options.apiClient.getSettings();
-      model = modelFromResponse(response);
+      try {
+        const response = await options.apiClient.getSettings();
+        model = modelFromResponse(response);
+      } catch (error) {
+        model = {
+          ...createInitialModel(),
+          error: normalizeSettingsError(error, settingsLoadError()),
+          errorKind: "load",
+          isLoading: false,
+        };
+      }
+      return render();
+    },
+    retryLoad: async () => {
+      try {
+        const response = await options.apiClient.getSettings();
+        model = modelFromResponse(response);
+      } catch (error) {
+        model = {
+          ...createInitialModel(),
+          error: normalizeSettingsError(error, settingsLoadError()),
+          errorKind: "load",
+          isLoading: false,
+        };
+      }
       return render();
     },
     save: async () => {
@@ -764,6 +878,7 @@ export function createSettingsRoutePublicDriver(
         model = {
           ...model,
           error: normalizeSettingsError(error, settingsPersistError()),
+          errorKind: "save",
         };
       }
 
@@ -790,6 +905,7 @@ export function createSettingsRoutePublicDriver(
         model = {
           ...model,
           error: normalizeSettingsError(error, statusError()),
+          errorKind: "status",
         };
       }
 
@@ -801,6 +917,10 @@ export function createSettingsRoutePublicDriver(
     },
     updateSwitch: (field, value) => {
       model = updateSwitchField(model, field, value);
+      return render();
+    },
+    useDefaults: () => {
+      model = modelFromDefaults();
       return render();
     },
     warnBeforeNavigateAway: (to) => {

@@ -12,7 +12,11 @@ import {
 } from "@x-builder/shared";
 import { describe, expect, it, vi } from "vitest";
 
-import { buildServer } from "../server";
+import {
+  buildServer,
+  createEngineRuntimeConfig,
+  defaultCorsAllowedOrigins,
+} from "../server";
 import { JsonFileAppSettingsRepository } from "../settings-repository";
 
 const parseJsonPayload = (payload: string): unknown => JSON.parse(payload);
@@ -63,6 +67,55 @@ const patchedSettings: AppSettings = {
 };
 
 describe("engine and shared schema integration", () => {
+  it("uses the local engine bind address and port for the runtime entrypoint", () => {
+    const config = createEngineRuntimeConfig({});
+
+    expect(config).toEqual({
+      host: "127.0.0.1",
+      port: 4173,
+    });
+  });
+
+  it("allows only known local Vite origins through CORS", async () => {
+    const app = buildServer();
+
+    try {
+      const allowedOrigin = defaultCorsAllowedOrigins[0];
+      const allowedPreflight = await app.inject({
+        method: "OPTIONS",
+        url: "/status",
+        headers: {
+          Origin: allowedOrigin,
+        },
+      });
+      const allowedStatus = await app.inject({
+        method: "GET",
+        url: "/status",
+        headers: {
+          Origin: allowedOrigin,
+        },
+      });
+      const unknownOrigin = await app.inject({
+        method: "OPTIONS",
+        url: "/status",
+        headers: {
+          Origin: "https://example.com",
+        },
+      });
+
+      expect(allowedPreflight.statusCode).toBe(204);
+      expect(allowedPreflight.headers["access-control-allow-origin"]).toBe(allowedOrigin);
+      expect(allowedPreflight.headers["access-control-allow-methods"]).toBe("GET,PATCH,POST,OPTIONS");
+      expect(allowedPreflight.headers["access-control-allow-headers"]).toBe("Content-Type");
+      expect(allowedPreflight.headers).not.toHaveProperty("access-control-allow-credentials");
+      expect(allowedStatus.headers["access-control-allow-origin"]).toBe(allowedOrigin);
+      expect(unknownOrigin.headers).not.toHaveProperty("access-control-allow-origin");
+      expect(unknownOrigin.headers).not.toHaveProperty("access-control-allow-credentials");
+    } finally {
+      await app.close();
+    }
+  });
+
   it("returns status payloads accepted by the shared app status schema", async () => {
     const dependencies = readinessDependencies();
     const app = buildServer({ readinessDependencies: dependencies });

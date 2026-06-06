@@ -160,6 +160,60 @@ describe("WriterPage generation behavior", () => {
     expect(text).toContain("debate-question");
   });
 
+  it("keeps overlong ideas local and shows the shared field validation message", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const apiClient = createApiClient();
+    const idea = "x".repeat(4_001);
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea(idea);
+    const html = await driver.generate();
+    const text = textContent(html);
+
+    expect(apiClient.generateIdea).not.toHaveBeenCalled();
+    expectIdeaPreserved(html, idea);
+    expect(text).toContain("Idea must be 4,000 characters or fewer.");
+    expect(text).not.toContain("Route unavailable");
+    expect(text).not.toContain("Retry");
+  });
+
+  it("maps backend idea field validation to the local Idea error", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const validationError = createApiError({
+      code: "validation_failed",
+      fieldErrors: {
+        idea: ["Idea must be 4,000 characters or fewer."],
+      },
+      message: "The request is invalid.",
+      retryable: false,
+      scope: "field",
+      status: 400,
+    });
+    const apiClient = createApiClient(
+      vi.fn(async () => throwApiError(validationError)),
+    );
+    const idea = "This idea passes local validation but fails at the backend boundary.";
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea(idea);
+    const html = await driver.generate();
+    const text = textContent(html);
+
+    expect(apiClient.generateIdea).toHaveBeenCalledOnce();
+    expectIdeaPreserved(html, idea);
+    expect(text).toContain("Idea must be 4,000 characters or fewer.");
+    expect(text).not.toContain("Route unavailable");
+    expect(text).not.toContain("Retry");
+  });
+
   it("preserves the idea and offers retry plus Settings when the backend is unavailable", async () => {
     const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
     const engineError = createApiError();

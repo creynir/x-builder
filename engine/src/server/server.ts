@@ -42,12 +42,18 @@ export type ReadinessService = {
 };
 
 export interface BuildServerOptions {
+  allowedCorsOrigins?: readonly string[];
   generateCandidates?: GenerateCandidates;
   readinessDependencies?: ReadinessDependencies;
   readinessService?: ReadinessService;
   readinessTimeoutMs?: number;
   settingsRepository?: AppSettingsRepository;
 }
+
+export type EngineRuntimeConfig = {
+  host: string;
+  port: number;
+};
 
 class NormalizedApiError extends Error {
   constructor(public readonly apiError: ApiError) {
@@ -156,6 +162,12 @@ const defaultGenerateCandidates: GenerateCandidates = ({ idea }) => ({
 const readinessTimeoutMsDefault = 750;
 const packageVersion = "0.0.0";
 const defaultSettingsRoot = join(homedir(), ".x-builder", "engine-settings");
+const defaultEngineHost = "127.0.0.1";
+const defaultEnginePort = 4173;
+export const defaultCorsAllowedOrigins = [
+  "http://127.0.0.1:5173",
+  "http://localhost:5173",
+] as const;
 
 const nowIso = (): string => new Date().toISOString();
 
@@ -307,8 +319,35 @@ class DefaultReadinessService implements ReadinessService {
   }
 }
 
+const configureCors = (
+  app: FastifyInstance,
+  allowedOrigins: readonly string[],
+) => {
+  const allowedOriginSet = new Set(allowedOrigins);
+
+  app.addHook("onRequest", (request, reply, done) => {
+    const origin = request.headers.origin;
+
+    if (typeof origin === "string" && allowedOriginSet.has(origin)) {
+      reply.header("Access-Control-Allow-Origin", origin);
+      reply.header("Access-Control-Allow-Methods", "GET,PATCH,POST,OPTIONS");
+      reply.header("Access-Control-Allow-Headers", "Content-Type");
+      reply.header("Access-Control-Max-Age", "600");
+    }
+
+    if (request.method === "OPTIONS") {
+      reply.code(204).send();
+      return;
+    }
+
+    done();
+  });
+};
+
 export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false });
+  configureCors(app, options.allowedCorsOrigins ?? defaultCorsAllowedOrigins);
+
   const generateCandidates = options.generateCandidates ?? defaultGenerateCandidates;
   const settingsRepository =
     options.settingsRepository ?? new JsonFileAppSettingsRepository({ root: defaultSettingsRoot });
@@ -380,6 +419,31 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     } catch {
       throw new NormalizedApiError(generationError());
     }
+  });
+
+  return app;
+}
+
+export function createEngineRuntimeConfig(
+  env: Record<string, string | undefined> = process.env,
+): EngineRuntimeConfig {
+  const rawPort = env.X_BUILDER_ENGINE_PORT;
+  const port = rawPort === undefined ? defaultEnginePort : Number.parseInt(rawPort, 10);
+
+  return {
+    host: env.X_BUILDER_ENGINE_HOST ?? defaultEngineHost,
+    port: Number.isInteger(port) && port > 0 ? port : defaultEnginePort,
+  };
+}
+
+export async function startEngineServer(
+  config: EngineRuntimeConfig = createEngineRuntimeConfig(),
+): Promise<FastifyInstance> {
+  const app = buildServer();
+
+  await app.listen({
+    host: config.host,
+    port: config.port,
   });
 
   return app;
