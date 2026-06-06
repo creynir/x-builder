@@ -1,0 +1,24 @@
+client/src/app/main.tsx
+  s_c166ef4c30ae70::t_52d23031eba8cd 2
+client/src/ui/foundation.tsx
+  s_c166ef4c30ae70::t_52d23031eba8cd 1-97,99-111,113-272
+  s_c166ef4c30ae70::t_5070911d7c31d2 98,112
+client/src/ui/foundation.css
+  s_c166ef4c30ae70::t_52d23031eba8cd 1-371
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "5cea614b707bad8a70b164b071a2328f2331097b",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
