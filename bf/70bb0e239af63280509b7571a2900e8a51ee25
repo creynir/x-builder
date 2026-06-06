@@ -1,0 +1,19 @@
+e2e-tests/tests/shell-recovery-smoke.spec.ts
+  s_c166ef4c30ae70::t_864979b7159427 107,163-165,171,178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "bf70bb0e239af63280509b7571a2900e8a51ee25",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
