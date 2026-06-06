@@ -17,7 +17,7 @@ import {
   createWriterPagePublicDriver,
   type WriterApiClient,
 } from "../features/writer/writer-page";
-import { EmptyState } from "../ui/foundation";
+import { Button, EmptyState } from "../ui/foundation";
 import { appRoutes, resolveRoutePath } from "./route-registry";
 import { RouteErrorBanner } from "./route-error-banner";
 import {
@@ -72,6 +72,7 @@ export type AppShellPublicDriverOptions = AppShellProps & {
 };
 
 export type AppShellPublicDriver = {
+  activatePlaceholderPrimaryAction: () => string;
   generateWriterIdea: () => Promise<string>;
   openWriterErrorSettings: () => string;
   updateWriterIdea: (idea: string) => string;
@@ -427,9 +428,38 @@ function DefaultRouteBody({
     );
   }
 
+  return <PlaceholderRoute route={route} onNavigateToWriter={onNavigateToWriter} />;
+}
+
+function placeholderCopyForRoute(route: RouteConfig): string {
+  if (route.id === "voice") {
+    return "Voice profile setup is not part of this shell pass.";
+  }
+
+  if (route.id === "library") {
+    return "Post memory is reserved for the library feature pass.";
+  }
+
+  return `${route.label} is reserved for a later feature pass.`;
+}
+
+function PlaceholderRoute({
+  onNavigateToWriter,
+  route,
+}: {
+  onNavigateToWriter: () => void;
+  route: RouteConfig;
+}): ReactElement {
   return (
-    <EmptyState title={`${route.title} workspace`}>
-      The {route.label} route is ready in the shell.
+    <EmptyState
+      action={
+        <Button onClick={onNavigateToWriter} variant="primary">
+          Back to Writer
+        </Button>
+      }
+      title={`${route.title} workspace`}
+    >
+      {placeholderCopyForRoute(route)}
     </EmptyState>
   );
 }
@@ -854,6 +884,20 @@ export function createAppShellPublicDriver(
     );
 
   return {
+    activatePlaceholderPrimaryAction: () => {
+      const route = resolveRoutePath(options.history.location.pathname).route;
+
+      if (route.id === "voice" || route.id === "library") {
+        navigateShellRoute({
+          focusRouteHeading: options.onRouteHeadingFocus ?? (() => undefined),
+          history: options.history,
+          preferencesStore: options.preferencesStore,
+          to: "/writer",
+        });
+      }
+
+      return renderCurrentShell();
+    },
     generateWriterIdea: async () => {
       const writerHtml = await writerDriver.generate();
       return `${renderCurrentShell()}${writerHtml}`;
