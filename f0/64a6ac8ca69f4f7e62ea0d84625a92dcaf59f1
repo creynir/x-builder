@@ -1,0 +1,19 @@
+client/src/ui/tests/foundation.test.tsx
+  s_c166ef4c30ae70::t_0dca48643bd4ca 1-216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "f064a6ac8ca69f4f7e62ea0d84625a92dcaf59f1",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
