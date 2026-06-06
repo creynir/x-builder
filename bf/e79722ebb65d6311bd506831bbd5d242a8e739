@@ -1,0 +1,28 @@
+client/src/ui/foundation.css
+  s_c166ef4c30ae70::t_5a2e18f39f600f 417-422
+client/src/shell/app-shell.tsx
+  s_c166ef4c30ae70::t_6ab32aa22e6de7 3,5,74-81,230-251,290,295,313,365-366,368-369,371,375-376,378-379,381,391-392,394-395,398,493-494,497-498,500,510-511,513-514,516,536-537,540-541,543,548-549,552-553,555,564-565,568-569,571,581-582,584-585,587,622-624,637-643,647-653,655-685,693-733,735,738,751,765-766,769-770,772
+  s_c166ef4c30ae70::t_3b2f524993e8ea 644-646,654
+client/src/shell/tests/settings-route.test.tsx
+  s_c166ef4c30ae70::t_8ca03999683a30 39,448-496
+client/src/shell/tests/app-shell.test.tsx
+  s_c166ef4c30ae70::t_8cf1aa9f484406 3,51-58,64-66,227-254
+client/src/shell/settings-route.tsx
+  s_c166ef4c30ae70::t_60016dfa56f799 38,40-42,44-45,513-515,517-518,520,523-525,559-587,643-646,648,651-664,670,697,719-724,729-734
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "bfe79722ebb65d6311bd506831bbd5d242a8e739",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
