@@ -1,0 +1,41 @@
+docs/features/deterministic-engine/tickets/05-fnd-deterministic-display-primitives.md
+  s_acd12e8d782639::t_d7432a03d54ee6 1-40
+docs/features/deterministic-engine/tickets/README.md
+  s_acd12e8d782639::t_d7432a03d54ee6 1-56
+docs/features/deterministic-engine/tickets/01-fnd-shared-deterministic-analyze-schemas.md
+  s_acd12e8d782639::t_d7432a03d54ee6 1-50
+docs/features/deterministic-engine/tickets/02-fnd-deterministic-analysis-service-wrapper.md
+  s_acd12e8d782639::t_d7432a03d54ee6 1-33
+docs/features/deterministic-engine/tickets/03-be-posts-analyze-fastify-route.md
+  s_acd12e8d782639::t_d7432a03d54ee6 1-31
+docs/features/deterministic-engine/tickets/06-fe-writer-two-phase-generation-scoring-state.md
+  s_acd12e8d782639::t_d7432a03d54ee6 1-32
+docs/features/deterministic-engine/tickets/07-fe-manual-follower-context-and-prediction-recompute.md
+  s_acd12e8d782639::t_d7432a03d54ee6 1-28
+docs/features/deterministic-engine/tickets/08-fe-slot-format-vs-detected-format-rendering.md
+  s_acd12e8d782639::t_d7432a03d54ee6 1-24
+docs/features/deterministic-engine/tickets/09-fe-deterministic-detail-inspector.md
+  s_acd12e8d782639::t_d7432a03d54ee6 1-28
+docs/features/deterministic-engine/tickets/11-int-score-retry-preserves-generated-candidates.md
+  s_acd12e8d782639::t_d7432a03d54ee6 1-27
+docs/features/deterministic-engine/tickets/10-int-writer-deterministic-happy-path.md
+  s_acd12e8d782639::t_d7432a03d54ee6 1-29
+docs/features/deterministic-engine/tickets/04-fe-engine-api-client-analyze-posts.md
+  s_acd12e8d782639::t_d7432a03d54ee6 1-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "a7c1ee3ddb63c47900f709d6ed085d98e6b0e7db",
+  "prompts": {},
+  "sessions": {
+    "s_acd12e8d782639": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1a5-4153-7ed1-8c0e-3c580b6dc00f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
