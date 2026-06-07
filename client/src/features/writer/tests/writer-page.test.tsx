@@ -1,14 +1,28 @@
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type {
+  AnalyzedPostItem,
+  AnalyzePostsRequest,
+  AnalyzePostsResponse,
   ApiError,
   GenerateIdeaRequest,
   GenerateIdeaResponse,
+  GeneratedIdeaCandidate,
+  PostCoachViewModel,
 } from "@x-builder/shared";
 
 const writerPageModulePath = "../writer-page";
+const learningCaveat = "Static rule check. Imported performance data is not connected yet.";
+
+type ScoredAnalyzedPostItem = Extract<AnalyzedPostItem, { status: "scored" }>;
+type ScoreFailedAnalyzedPostItem = Extract<
+  AnalyzedPostItem,
+  { status: "score_failed" }
+>;
+type ReadyPostCoachViewModel = Extract<PostCoachViewModel, { state: "ready" }>;
 
 type WriterApiClient = {
+  analyzePosts: (input: AnalyzePostsRequest) => Promise<AnalyzePostsResponse>;
   generateIdea: (input: GenerateIdeaRequest) => Promise<GenerateIdeaResponse>;
 };
 
@@ -26,6 +40,7 @@ type WriterPagePublicDriver = {
   openSettings: () => void;
   render: () => string;
   retry: () => Promise<string>;
+  retryScore: (itemId: string) => Promise<string>;
   updateIdea: (idea: string) => string;
 };
 
@@ -56,6 +71,25 @@ function expectIdeaPreserved(html: string, idea: string) {
   expect(html).toContain(escapeHtml(idea));
 }
 
+function flushAsyncTasks(): Promise<void> {
+  return Promise.resolve().then(() => Promise.resolve()).then(() => undefined);
+}
+
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (reason?: unknown) => void = () => undefined;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return {
+    promise,
+    reject,
+    resolve,
+  };
+}
+
 function createValidIdeaResponse(): GenerateIdeaResponse {
   return {
     candidates: [
@@ -76,6 +110,183 @@ function createValidIdeaResponse(): GenerateIdeaResponse {
       },
     ],
   };
+}
+
+function readyPostCoach(
+  overrides: Partial<ReadyPostCoachViewModel> = {},
+): ReadyPostCoachViewModel {
+  const failedCheck = {
+    id: "specificity",
+    label: "Needs one concrete proof",
+    status: "fail" as const,
+  };
+  const warnedCheck = {
+    id: "ending_question",
+    label: "Question could be sharper",
+    status: "warn" as const,
+  };
+  const passedCheck = {
+    id: "plain_language",
+    label: "Plain language",
+    status: "pass" as const,
+  };
+
+  return {
+    state: "ready",
+    title: "Post Coach",
+    value: 74,
+    badge: {
+      label: "Ship it",
+      tone: "ship",
+      tooltip: "Solid post. Ship it; higher scores are a bonus.",
+    },
+    target: 60,
+    engageability: {
+      engageable: true,
+      reason: "Ends with a concrete question.",
+    },
+    failed: [failedCheck],
+    warned: [warnedCheck],
+    passed: [passedCheck],
+    counts: {
+      flagged: 1,
+      nudges: 1,
+      onPoint: 1,
+    },
+    expanded: false,
+    previewMode: true,
+    sections: [
+      {
+        title: "Worth a look",
+        items: [failedCheck],
+      },
+      {
+        title: "Nudges",
+        items: [warnedCheck],
+      },
+      {
+        title: "On point",
+        items: [passedCheck],
+      },
+    ],
+    learnings: [
+      {
+        text: "Static rule evidence: concrete examples make posts easier to evaluate.",
+        relevance: "general",
+      },
+    ],
+    learningCaveat,
+    hiddenChecks: 0,
+    helperText: "Signals, not verdicts.",
+    footerText: "Static heuristic checks only.",
+    ...overrides,
+  };
+}
+
+function scoredAnalysisItem(
+  candidate: GeneratedIdeaCandidate,
+  overrides: Partial<ScoredAnalyzedPostItem> = {},
+): ScoredAnalyzedPostItem {
+  return {
+    status: "scored",
+    id: candidate.id,
+    text: candidate.text,
+    sourceFormat: candidate.format,
+    detectedFormat: "insight_share",
+    score: {
+      value: 74,
+      checks: [
+        {
+          id: "plain_language",
+          label: "Plain language",
+          status: "pass",
+        },
+      ],
+      learnings: [
+        {
+          text: "Static rule evidence: concrete examples make posts easier to evaluate.",
+          relevance: "general",
+        },
+      ],
+      engageability: {
+        engageable: true,
+        reason: "Ends with a concrete question.",
+      },
+    },
+    postCoach: readyPostCoach(),
+    prediction: {
+      status: "disabled",
+      reason: "missing_followers",
+      message: "Prediction needs follower count.",
+    },
+    heuristicLabel: "Heuristic rank, not prediction.",
+    analyzedAt: "2026-06-07T12:00:00.000Z",
+    analyzerVersion: "deterministic-v1",
+    ...overrides,
+  };
+}
+
+function scoreFailedAnalysisItem(
+  candidate: GeneratedIdeaCandidate,
+  overrides: Partial<ScoreFailedAnalyzedPostItem> = {},
+): ScoreFailedAnalyzedPostItem {
+  return {
+    status: "score_failed",
+    id: candidate.id,
+    text: candidate.text,
+    sourceFormat: candidate.format,
+    reason: "analyzer_exception",
+    message: "Deterministic analysis failed for this candidate.",
+    retryable: true,
+    ...overrides,
+  };
+}
+
+function createAnalyzePostsResponse(
+  response: GenerateIdeaResponse = createValidIdeaResponse(),
+): AnalyzePostsResponse {
+  return {
+    items: response.candidates.map((candidate) => scoredAnalysisItem(candidate)),
+  };
+}
+
+function expectedAnalyzePostsRequest(
+  candidates: GeneratedIdeaCandidate[],
+): AnalyzePostsRequest {
+  return {
+    items: candidates.map((candidate) => ({
+      id: candidate.id,
+      text: candidate.text,
+      sourceFormat: candidate.format,
+    })),
+    presentation: {
+      postCoachMode: "preview",
+    },
+    scoringContext: {},
+  };
+}
+
+function expectedAnalyzePostsRequestFor(
+  candidate: GeneratedIdeaCandidate,
+): AnalyzePostsRequest {
+  return expectedAnalyzePostsRequest([candidate]);
+}
+
+function candidateTextSegment(
+  text: string,
+  currentCandidateText: string,
+  nextCandidateText?: string,
+) {
+  const start = text.indexOf(currentCandidateText);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const end =
+    nextCandidateText === undefined
+      ? text.length
+      : text.indexOf(nextCandidateText, start + currentCandidateText.length);
+
+  expect(end).toBeGreaterThan(start);
+
+  return text.slice(start, end);
 }
 
 function createApiError(overrides: Partial<ApiError> = {}): ApiError {
@@ -99,8 +310,12 @@ function createApiClient(
   generateIdea: WriterApiClient["generateIdea"] = vi.fn(async () =>
     createValidIdeaResponse(),
   ),
+  analyzePosts: WriterApiClient["analyzePosts"] = vi.fn(async () =>
+    createAnalyzePostsResponse(),
+  ),
 ): WriterApiClient {
   return {
+    analyzePosts,
     generateIdea,
   };
 }
@@ -158,6 +373,237 @@ describe("WriterPage generation behavior", () => {
     expect(text).toContain("one-liner");
     expect(text).toContain("mini-framework");
     expect(text).toContain("debate-question");
+  });
+
+  it("renders generated candidate text while scoring is still loading", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const analysis = createDeferred<AnalyzePostsResponse>();
+    const analyzePosts = vi.fn<WriterApiClient["analyzePosts"]>(
+      () => analysis.promise,
+    );
+    const apiClient = createApiClient(vi.fn(async () => response), analyzePosts);
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Make scoring visibly separate from generation.");
+    const generate = driver.generate();
+    await flushAsyncTasks();
+    const pendingHtml = driver.render();
+    const pendingText = textContent(pendingHtml);
+
+    expect(analyzePosts).toHaveBeenCalledOnce();
+    expect(analyzePosts).toHaveBeenCalledWith(
+      expectedAnalyzePostsRequest(response.candidates),
+    );
+    expect(pendingText).toContain("Local-first writing tools need boring edges.");
+    expect(pendingText).toContain(
+      "Name the constraint, show the tradeoff, then make the local-first call.",
+    );
+    expect(pendingText).toContain(
+      "What local-first compromise would make builders trust the tool more?",
+    );
+    expect(pendingText).toContain("Scoring candidate");
+
+    analysis.resolve(createAnalyzePostsResponse(response));
+    await generate;
+  });
+
+  it("attaches successful scoring results to their generated candidates by candidate id", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const [oneLiner, miniFramework, debateQuestion] = response.candidates;
+    if (
+      oneLiner === undefined ||
+      miniFramework === undefined ||
+      debateQuestion === undefined
+    ) {
+      throw new Error("Expected the writer fixture to include three candidates.");
+    }
+    const analysisResponse: AnalyzePostsResponse = {
+      items: [
+        scoredAnalysisItem(debateQuestion, {
+          score: {
+            ...scoredAnalysisItem(debateQuestion).score,
+            value: 61,
+          },
+          postCoach: readyPostCoach({
+            value: 61,
+            badge: {
+              label: "Ship it",
+              tone: "ship",
+              tooltip: "The debate question is ready to test.",
+            },
+          }),
+        }),
+        scoredAnalysisItem(oneLiner, {
+          score: {
+            ...scoredAnalysisItem(oneLiner).score,
+            value: 84,
+          },
+          postCoach: readyPostCoach({
+            value: 84,
+            badge: {
+              label: "Top tier",
+              tone: "top",
+              tooltip: "The one-liner is unusually clear.",
+            },
+          }),
+        }),
+        scoredAnalysisItem(miniFramework, {
+          score: {
+            ...scoredAnalysisItem(miniFramework).score,
+            value: 39,
+          },
+          postCoach: readyPostCoach({
+            value: 39,
+            badge: {
+              label: "Rework",
+              tone: "rework",
+              tooltip: "The framework needs sharper contrast.",
+            },
+          }),
+        }),
+      ],
+    };
+    const analyzePosts = vi.fn<WriterApiClient["analyzePosts"]>(
+      async () => analysisResponse,
+    );
+    const apiClient = createApiClient(vi.fn(async () => response), analyzePosts);
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Map deterministic scores to the generated cards by id.");
+    await driver.generate();
+    await flushAsyncTasks();
+    const text = textContent(driver.render());
+
+    expect(analyzePosts).toHaveBeenCalledOnce();
+    expect(analyzePosts).toHaveBeenCalledWith(
+      expectedAnalyzePostsRequest(response.candidates),
+    );
+    expect(candidateTextSegment(text, oneLiner.text, miniFramework.text)).toContain(
+      "84",
+    );
+    expect(candidateTextSegment(text, oneLiner.text, miniFramework.text)).toContain(
+      "Top tier",
+    );
+    expect(
+      candidateTextSegment(text, miniFramework.text, debateQuestion.text),
+    ).toContain("39");
+    expect(
+      candidateTextSegment(text, miniFramework.text, debateQuestion.text),
+    ).toContain("Rework");
+    expect(candidateTextSegment(text, debateQuestion.text)).toContain("61");
+    expect(candidateTextSegment(text, debateQuestion.text)).toContain("Post Coach");
+    expect(text).toContain("Prediction needs follower count.");
+    expect(text).toContain("missing_followers");
+  });
+
+  it("keeps failed scored candidate text visible with a score retry action", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const [oneLiner, miniFramework, debateQuestion] = response.candidates;
+    if (
+      oneLiner === undefined ||
+      miniFramework === undefined ||
+      debateQuestion === undefined
+    ) {
+      throw new Error("Expected the writer fixture to include three candidates.");
+    }
+    const analyzePosts = vi.fn<WriterApiClient["analyzePosts"]>(async () => ({
+      items: [
+        scoredAnalysisItem(oneLiner),
+        scoreFailedAnalysisItem(miniFramework),
+        scoredAnalysisItem(debateQuestion),
+      ],
+    }));
+    const apiClient = createApiClient(vi.fn(async () => response), analyzePosts);
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("A scoring failure should not erase generated text.");
+    await driver.generate();
+    await flushAsyncTasks();
+    const text = textContent(driver.render());
+
+    expect(text).toContain(miniFramework.text);
+    expect(text).toContain("Deterministic analysis failed for this candidate.");
+    expect(text).toContain("Retry score");
+    expect(text).toContain(oneLiner.text);
+    expect(text).toContain(debateQuestion.text);
+  });
+
+  it("retries scoring for an existing candidate without regenerating text", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const [oneLiner, miniFramework, debateQuestion] = response.candidates;
+    if (
+      oneLiner === undefined ||
+      miniFramework === undefined ||
+      debateQuestion === undefined
+    ) {
+      throw new Error("Expected the writer fixture to include three candidates.");
+    }
+    const generateIdea = vi.fn<WriterApiClient["generateIdea"]>(async () => response);
+    const analyzePosts = vi
+      .fn<WriterApiClient["analyzePosts"]>()
+      .mockImplementationOnce(async () => ({
+        items: [
+          scoredAnalysisItem(oneLiner),
+          scoreFailedAnalysisItem(miniFramework),
+          scoredAnalysisItem(debateQuestion),
+        ],
+      }))
+      .mockImplementationOnce(async () => ({
+        items: [
+          scoredAnalysisItem(miniFramework, {
+            score: {
+              ...scoredAnalysisItem(miniFramework).score,
+              value: 91,
+            },
+            postCoach: readyPostCoach({
+              value: 91,
+              badge: {
+                label: "Top tier",
+                tone: "top",
+                tooltip: "The retried framework is now strong.",
+              },
+            }),
+          }),
+        ],
+      }));
+    const apiClient = createApiClient(generateIdea, analyzePosts);
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Retry score should reuse the generated candidate.");
+    await driver.generate();
+    await flushAsyncTasks();
+    const retryHtml = await driver.retryScore(miniFramework.id);
+    const retryText = textContent(retryHtml);
+
+    expect(generateIdea).toHaveBeenCalledOnce();
+    expect(analyzePosts).toHaveBeenCalledTimes(2);
+    expect(analyzePosts).toHaveBeenNthCalledWith(
+      2,
+      expectedAnalyzePostsRequestFor(miniFramework),
+    );
+    expect(retryText).toContain(miniFramework.text);
+    expect(retryText).toContain("91");
+    expect(retryText).toContain("Top tier");
   });
 
   it("keeps overlong ideas local and shows the shared field validation message", async () => {
@@ -260,7 +706,14 @@ describe("WriterPage generation behavior", () => {
     });
 
     driver.updateIdea(idea);
-    await driver.generate();
+    const failedHtml = await driver.generate();
+
+    expect(generateIdea).toHaveBeenCalledOnce();
+    expect(apiClient.analyzePosts).not.toHaveBeenCalled();
+    expect(textContent(failedHtml)).toContain(
+      "Could not reach the local engine. Your idea is still here.",
+    );
+
     const retryHtml = await driver.retry();
 
     expect(generateIdea).toHaveBeenCalledTimes(2);
