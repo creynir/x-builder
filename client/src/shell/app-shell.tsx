@@ -381,7 +381,10 @@ function hasSettingsApiClient(
 function hasWriterApiClient(
   apiClient: EngineStatusClient & Partial<WriterApiClient>,
 ): apiClient is EngineStatusClient & WriterApiClient {
-  return typeof apiClient.generateIdea === "function";
+  return (
+    typeof apiClient.analyzePosts === "function" &&
+    typeof apiClient.generateIdea === "function"
+  );
 }
 
 function DefaultRouteBody({

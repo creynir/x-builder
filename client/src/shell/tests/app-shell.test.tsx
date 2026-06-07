@@ -2,6 +2,8 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type {
+  AnalyzePostsRequest,
+  AnalyzePostsResponse,
   ApiError,
   AppStatus,
   GenerateIdeaRequest,
@@ -37,6 +39,7 @@ type ShellRouteComponents = Partial<
 >;
 
 type ShellApiClient = {
+  analyzePosts: (input: AnalyzePostsRequest) => Promise<AnalyzePostsResponse>;
   generateIdea: (input: GenerateIdeaRequest) => Promise<GenerateIdeaResponse>;
   getSettings?: () => Promise<unknown>;
   getStatus: () => Promise<AppStatus>;
@@ -211,6 +214,22 @@ function createValidIdeaResponse(): GenerateIdeaResponse {
   };
 }
 
+function createAnalyzePostsResponse(
+  request: AnalyzePostsRequest,
+): AnalyzePostsResponse {
+  return {
+    items: request.items.map((item) => ({
+      status: "score_failed",
+      id: item.id,
+      text: item.text,
+      sourceFormat: item.sourceFormat,
+      reason: "shell_fixture",
+      message: "Shell fixture does not score generated candidates.",
+      retryable: true,
+    })),
+  };
+}
+
 function throwApiError(apiError: ApiError): never {
   throw Object.assign(new Error(apiError.message), {
     apiError,
@@ -221,6 +240,7 @@ function createShellApiClient(
   overrides: Partial<ShellApiClient> = {},
 ): ShellApiClient {
   return {
+    analyzePosts: vi.fn(async (input) => createAnalyzePostsResponse(input)),
     generateIdea: vi.fn(async () => createValidIdeaResponse()),
     getSettings: vi.fn(async () => {
       throw new Error("Placeholders must not load settings.");
