@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  AnalyzePostsRequest,
+  AnalyzePostsResponse,
   ApiError,
   AppSettings,
   AppSettingsResponse,
@@ -83,6 +85,141 @@ const validationError: ApiError = {
   },
 };
 
+const analysisRequest: AnalyzePostsRequest = {
+  items: [
+    {
+      id: "candidate-1",
+      text: "genuine question: why do agent handoffs fail when context is hidden from the next step?",
+      sourceFormat: "debate-question",
+    },
+    {
+      id: "candidate-2",
+      text: "hot take: scoring retries should not regenerate already-rendered candidate text.",
+      sourceFormat: "one-liner",
+    },
+  ],
+  scoringContext: {
+    followers: 2400,
+  },
+  presentation: {
+    postCoachMode: "preview",
+  },
+};
+
+const mixedAnalysisResponse: AnalyzePostsResponse = {
+  items: [
+    {
+      status: "scored",
+      id: "candidate-1",
+      text: analysisRequest.items[0]?.text ?? "",
+      sourceFormat: "debate-question",
+      detectedFormat: "genuine_question",
+      score: {
+        value: 74,
+        checks: [
+          {
+            id: "specificity",
+            label: "Specific proof",
+            status: "pass",
+          },
+        ],
+        learnings: [
+          {
+            text: "Static rule evidence: specific details make posts easier to evaluate.",
+            relevance: "general",
+          },
+        ],
+        engageability: {
+          engageable: true,
+          reason: "Ends with a concrete question.",
+        },
+      },
+      postCoach: {
+        state: "ready",
+        title: "Post Coach",
+        value: 74,
+        badge: {
+          label: "Ship it",
+          tone: "ship",
+          tooltip: "Solid post. Ship it; higher scores are a bonus.",
+        },
+        target: 60,
+        engageability: {
+          engageable: true,
+          reason: "Ends with a concrete question.",
+        },
+        failed: [],
+        warned: [],
+        passed: [
+          {
+            id: "specificity",
+            label: "Specific proof",
+            status: "pass",
+          },
+        ],
+        counts: {
+          flagged: 0,
+          nudges: 0,
+          onPoint: 1,
+        },
+        expanded: false,
+        previewMode: true,
+        sections: [
+          {
+            title: "On point",
+            items: [
+              {
+                id: "specificity",
+                label: "Specific proof",
+                status: "pass",
+              },
+            ],
+          },
+        ],
+        learnings: [],
+        learningCaveat: "Static rule check. Imported performance data is not connected yet.",
+        hiddenChecks: 0,
+        helperText: "Signals, not verdicts.",
+        footerText: "Static heuristic checks only.",
+      },
+      prediction: {
+        status: "available",
+        rangeLow: 120,
+        rangeHigh: 260,
+        midpoint: 190,
+        confidence: "medium",
+        signals: [
+          {
+            signal_key: "quality_voice",
+            label: "Voice score 74",
+            multiplier: 0.8,
+          },
+        ],
+      },
+      heuristicLabel: "Heuristic rank, not prediction.",
+      analyzedAt: "2026-06-07T12:00:00.000Z",
+      analyzerVersion: "deterministic-v1",
+    },
+    {
+      status: "score_failed",
+      id: "candidate-2",
+      text: analysisRequest.items[1]?.text ?? "",
+      sourceFormat: "one-liner",
+      reason: "analyzer_exception",
+      message: "Deterministic analysis failed for this candidate.",
+      retryable: true,
+    },
+  ],
+};
+
+const analysisRouteFailure: ApiError = {
+  code: "deterministic_analysis_failed",
+  message: "Deterministic analysis failed.",
+  scope: "deterministic",
+  retryable: true,
+  status: 500,
+};
+
 const jsonResponse = (body: unknown, init: ResponseInit = {}) =>
   new Response(JSON.stringify(body), {
     status: 200,
@@ -101,15 +238,20 @@ const invalidJsonResponse = () =>
   });
 
 const createFetch = (...responses: Array<Response | Promise<Response>>) =>
-  vi.fn(async (): Promise<Response> => {
-    const response = responses.shift();
+  vi.fn(
+    async (
+      _input: Parameters<typeof fetch>[0],
+      _init?: Parameters<typeof fetch>[1],
+    ): Promise<Response> => {
+      const response = responses.shift();
 
-    if (!response) {
-      throw new Error("No mocked response was queued for fetch.");
-    }
+      if (!response) {
+        throw new Error("No mocked response was queued for fetch.");
+      }
 
-    return response;
-  });
+      return response;
+    },
+  );
 
 const expectApiClientError = async (
   operation: Promise<unknown>,
@@ -362,5 +504,101 @@ describe("EngineApiClient", () => {
       scope: "app",
       retryable: true,
     });
+  });
+
+  it("analyzes posts with POST /posts/analyze and a JSON analysis body", async () => {
+    const fetchMock = createFetch(jsonResponse(mixedAnalysisResponse));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new EngineApiClient({ baseUrl });
+
+    const result: AnalyzePostsResponse = await client.analyzePosts(analysisRequest);
+
+    expect(result).toEqual(mixedAnalysisResponse);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(`${baseUrl}/posts/analyze`, expect.objectContaining({
+      body: JSON.stringify(analysisRequest),
+      headers: expect.objectContaining({
+        "content-type": "application/json",
+      }),
+      method: "POST",
+    }));
+  });
+
+  it("preserves mixed scored and score-failed analysis results for UI recovery", async () => {
+    const fetchMock = createFetch(jsonResponse(mixedAnalysisResponse));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new EngineApiClient({ baseUrl });
+
+    const result: AnalyzePostsResponse = await client.analyzePosts(analysisRequest);
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        status: "scored",
+        id: "candidate-1",
+        postCoach: expect.objectContaining({
+          state: "ready",
+          title: "Post Coach",
+        }),
+      }),
+      expect.objectContaining({
+        status: "score_failed",
+        id: "candidate-2",
+        text: analysisRequest.items[1]?.text,
+        sourceFormat: "one-liner",
+        reason: "analyzer_exception",
+        retryable: true,
+      }),
+    ]);
+  });
+
+  it("classifies scored analysis responses missing Post Coach as invalid_response", async () => {
+    const scoredItem = mixedAnalysisResponse.items[0];
+
+    if (scoredItem?.status !== "scored") {
+      throw new Error("Expected scored analysis fixture item.");
+    }
+
+    const { postCoach: _postCoach, ...withoutPostCoach } = scoredItem;
+    const fetchMock = createFetch(jsonResponse({
+      items: [withoutPostCoach],
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new EngineApiClient({ baseUrl });
+
+    await expectApiClientError(client.analyzePosts(analysisRequest), {
+      code: "invalid_response",
+      scope: "app",
+      retryable: true,
+    });
+  });
+
+  it("preserves API errors from full analysis route failures", async () => {
+    const fetchMock = createFetch(jsonResponse(analysisRouteFailure, { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new EngineApiClient({ baseUrl });
+
+    try {
+      await client.analyzePosts(analysisRequest);
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiClientError);
+      expect((error as ApiClientError).apiError).toEqual(analysisRouteFailure);
+
+      return;
+    }
+
+    throw new Error("Expected analyzePosts to throw ApiClientError.");
+  });
+
+  it("keeps analysis separate from idea generation calls", async () => {
+    const fetchMock = createFetch(jsonResponse(mixedAnalysisResponse));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new EngineApiClient({ baseUrl });
+
+    await client.analyzePosts(analysisRequest);
+
+    const fetchUrls = fetchMock.mock.calls.map(([url]) => String(url));
+
+    expect(fetchUrls).toEqual([`${baseUrl}/posts/analyze`]);
+    expect(fetchUrls).not.toContain(`${baseUrl}/ideas/generate`);
   });
 });
