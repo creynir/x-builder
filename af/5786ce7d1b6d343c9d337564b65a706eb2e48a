@@ -1,0 +1,21 @@
+client/src/ui/tests/foundation.test.tsx
+  s_9b10549703c0eb::t_f530ee930bb970 61-98,103,106-107,109,150-153,163-320
+client/src/features/writer/tests/deterministic-components.test.tsx
+  s_9b10549703c0eb::t_213101dbac76e1 1-464
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "af5786ce7d1b6d343c9d337564b65a706eb2e48a",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
