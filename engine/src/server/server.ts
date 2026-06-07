@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 import Fastify, { type FastifyInstance } from "fastify";
 import {
+  analyzePostsRequestSchema,
+  analyzePostsResponseSchema,
   apiErrorSchema,
   appSettingsResponseSchema,
   appSettingsSchema,
@@ -15,15 +17,20 @@ import {
   type ApiError,
   type AppSettings,
   type AppStatus,
+  type AnalyzePostsRequest,
+  type AnalyzePostsResponse,
   type GenerateIdeaRequest,
   type SubsystemStatus,
 } from "@x-builder/shared";
 import { z } from "zod";
 
+import { DeterministicAnalysisService } from "../deterministic/deterministic-analysis-service.js";
 import {
   JsonFileAppSettingsRepository,
   type AppSettingsRepository,
 } from "./settings-repository.js";
+
+export type AnalyzePosts = (request: AnalyzePostsRequest) => Promise<AnalyzePostsResponse> | AnalyzePostsResponse;
 
 export type GenerateCandidates = (input: GenerateIdeaRequest) => Promise<unknown> | unknown;
 
@@ -43,6 +50,7 @@ export type ReadinessService = {
 
 export interface BuildServerOptions {
   allowedCorsOrigins?: readonly string[];
+  analyzePosts?: AnalyzePosts;
   generateCandidates?: GenerateCandidates;
   readinessDependencies?: ReadinessDependencies;
   readinessService?: ReadinessService;
@@ -99,6 +107,15 @@ const generationError = (): ApiError =>
     code: "generation_failed",
     message: "Idea generation failed. Try again.",
     scope: "writer",
+    retryable: true,
+    status: 500,
+  });
+
+const deterministicAnalysisError = (): ApiError =>
+  normalize({
+    code: "deterministic_analysis_failed",
+    message: "Deterministic analysis failed. Try again.",
+    scope: "deterministic",
     retryable: true,
     status: 500,
   });
@@ -348,6 +365,9 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false });
   configureCors(app, options.allowedCorsOrigins ?? defaultCorsAllowedOrigins);
 
+  const deterministicAnalysisService = new DeterministicAnalysisService();
+  const defaultAnalyzePosts: AnalyzePosts = (request) => deterministicAnalysisService.analyzePosts(request);
+  const analyzePosts = options.analyzePosts ?? defaultAnalyzePosts;
   const generateCandidates = options.generateCandidates ?? defaultGenerateCandidates;
   const settingsRepository =
     options.settingsRepository ?? new JsonFileAppSettingsRepository({ root: defaultSettingsRoot });
@@ -418,6 +438,18 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       return reply.send(result);
     } catch {
       throw new NormalizedApiError(generationError());
+    }
+  });
+
+  app.post("/posts/analyze", async (request, reply) => {
+    const input = analyzePostsRequestSchema.parse(request.body);
+
+    try {
+      const result = analyzePostsResponseSchema.parse(await analyzePosts(input));
+
+      return reply.send(result);
+    } catch {
+      throw new NormalizedApiError(deterministicAnalysisError());
     }
   });
 
