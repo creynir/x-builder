@@ -1,0 +1,19 @@
+engine/src/deterministic/tests/deterministic-analysis-service.test.ts
+  s_9b10549703c0eb::t_ff9053722df0b6 3-8,16,25,32-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "1d9a70b4b55338f7d69f3f64bb4f452c156d2941",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
