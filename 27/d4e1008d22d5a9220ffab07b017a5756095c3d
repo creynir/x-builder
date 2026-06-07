@@ -1,0 +1,29 @@
+engine/src/deterministic/learning-copy.ts
+  s_9b10549703c0eb::t_d0d603a52aa0bb 1-39
+engine/src/deterministic/post-coach-view-model.ts
+  s_9b10549703c0eb::t_d0d603a52aa0bb 1-38
+engine/src/deterministic/prediction-view-model.ts
+  s_9b10549703c0eb::t_d0d603a52aa0bb 1-35
+engine/src/index.ts
+  s_9b10549703c0eb::t_d0d603a52aa0bb 2
+engine/src/deterministic/deterministic-analysis-constants.ts
+  s_9b10549703c0eb::t_d0d603a52aa0bb 1-6
+engine/src/deterministic/deterministic-analysis-service.ts
+  s_9b10549703c0eb::t_d0d603a52aa0bb 1-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "27d4e1008d22d5a9220ffab07b017a5756095c3d",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
