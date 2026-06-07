@@ -1,0 +1,19 @@
+shared/src/schemas/tests/deterministic-analyze.test.ts
+  s_9b10549703c0eb::t_eb8d607f0c7d4a 20,76,232,252-274
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "f5bb52ba9663480c89bf660386ee3241bdc3bbee",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
