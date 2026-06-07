@@ -1,0 +1,53 @@
+docs/features/deterministic-engine/map/02-flows/score-or-revise-draft-with-manual-context.md
+  s_acd12e8d782639::t_bedec25e54a2ea 1-87
+docs/features/deterministic-engine/map/02-flows/generate-candidates-with-deterministic-scores.md
+  s_acd12e8d782639::t_bedec25e54a2ea 1-105
+docs/features/deterministic-engine/spec/mockups/writer-route-deterministic-workbench.html
+  s_acd12e8d782639::t_6201647ea2ffd1 1-435
+docs/features/deterministic-engine/map/03-validation-report.md
+  s_acd12e8d782639::t_bedec25e54a2ea 1-149
+docs/features/deterministic-engine/map/02-flows/inspect-deterministic-details.md
+  s_acd12e8d782639::t_bedec25e54a2ea 1-81
+docs/features/deterministic-engine/map/02-flows/repair-missing-context-or-deterministic-failure.md
+  s_acd12e8d782639::t_bedec25e54a2ea 1-90
+docs/features/deterministic-engine/spec/candidate-deterministic-summary.md
+  s_acd12e8d782639::t_30cdc6aa214947 1-212
+docs/features/deterministic-engine/spec/writer-route-deterministic-workbench.md
+  s_acd12e8d782639::t_30cdc6aa214947 1-251
+docs/features/deterministic-engine/spec/checklist.md
+  s_acd12e8d782639::t_441800f340fb71 1-138
+docs/features/deterministic-engine/spec/screen-list.md
+  s_acd12e8d782639::t_30cdc6aa214947 1-149
+.gitignore
+  s_acd12e8d782639::t_0863941541bc1d 13
+docs/features/deterministic-engine/spec/deterministic-detail-inspector.md
+  s_acd12e8d782639::t_30cdc6aa214947 1-236
+docs/features/deterministic-engine/map/01-feature-inventory.md
+  s_acd12e8d782639::t_bedec25e54a2ea 1-218
+docs/features/deterministic-engine/spec/mockups/manual-scoring-context-panel.html
+  s_acd12e8d782639::t_6201647ea2ffd1 1-163
+docs/features/deterministic-engine/spec/manual-scoring-context-panel.md
+  s_acd12e8d782639::t_30cdc6aa214947 1-208
+docs/features/deterministic-engine/spec/mockups/deterministic-detail-inspector.html
+  s_acd12e8d782639::t_6201647ea2ffd1 1-221
+docs/features/deterministic-engine/spec/mockups/candidate-deterministic-summary.html
+  s_acd12e8d782639::t_6201647ea2ffd1 1-155
+docs/features/deterministic-engine/map/02-flow-index.md
+  s_acd12e8d782639::t_bedec25e54a2ea 1-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "56109a582ba2bba7c576d308279669f8d3b7ae39",
+  "prompts": {},
+  "sessions": {
+    "s_acd12e8d782639": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1a5-4153-7ed1-8c0e-3c580b6dc00f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
