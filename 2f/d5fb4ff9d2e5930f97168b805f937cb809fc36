@@ -1,0 +1,19 @@
+client/src/features/writer/tests/writer-page.test.tsx
+  s_9b10549703c0eb::t_f81d2eebba4778 4-6,10-11,15-22,25,43,74-92,115-291,313-315,318,378-608,709-716
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "2fd5fb4ff9d2e5930f97168b805f937cb809fc36",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
