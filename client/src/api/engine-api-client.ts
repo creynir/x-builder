@@ -1,8 +1,11 @@
 import {
+  analyzePostsResponseSchema,
   apiErrorSchema,
   appSettingsResponseSchema,
   appStatusSchema,
   generateIdeaResponseSchema,
+  type AnalyzePostsRequest,
+  type AnalyzePostsResponse,
   type ApiError,
   type AppSettings,
   type AppSettingsResponse,
@@ -96,6 +99,19 @@ export class EngineApiClient {
           method: "POST",
         },
         generateIdeaResponseSchema,
+      ),
+    );
+  }
+
+  analyzePosts(input: AnalyzePostsRequest): Promise<AnalyzePostsResponse> {
+    return this.observe(
+      this.request(
+        "/posts/analyze",
+        {
+          body: input,
+          method: "POST",
+        },
+        analyzePostsResponseSchema,
       ),
     );
   }
