@@ -1,0 +1,35 @@
+engine/src/deterministic/post-analyzer.ts
+  s_c166ef4c30ae70::t_ef4455fb2aeac1 597
+  s_c166ef4c30ae70::t_b1f2e979060152 1-21,33-49,93-118,126-220,234-263,341-596,598-611
+  s_c166ef4c30ae70::t_06e598fb7d4d9f 50-92,119-125,1130-1266
+  s_c166ef4c30ae70::t_75d3b716981539 22-32,221-233,264-340
+  s_c166ef4c30ae70::t_4ced459654b95e 612-1129,1267-1290
+docs/features/deterministic-engine/assets/README.md
+  s_c166ef4c30ae70::t_800edeee069ecc 1-10
+engine/src/deterministic/tests/post-analyzer.test.ts
+  s_c166ef4c30ae70::t_b43f0934b6e372 5,10,12-13,96-103,106,108-111,113-140
+  s_c166ef4c30ae70::t_db860f43972f1a 159
+  s_c166ef4c30ae70::t_47348f22e69007 104-105,107,112
+  s_c166ef4c30ae70::t_20f68f50f1a64b 6,8,141-158,160-253
+  s_c166ef4c30ae70::t_e966f037ebd938 1-4,7,9,11,14-95,254-255
+docs/features/deterministic-engine/README.md
+  s_c166ef4c30ae70::t_800edeee069ecc 4-21
+engine/src/index.ts
+  s_c166ef4c30ae70::t_e966f037ebd938 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "41c3d355a82b3538f87a3f76d048332e22f98f9e",
+  "prompts": {},
+  "sessions": {
+    "s_c166ef4c30ae70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e99b2-7b75-7662-a4fe-7779f14dd391",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
