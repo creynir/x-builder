@@ -1,0 +1,19 @@
+.gitignore
+  s_acd12e8d782639::t_3ebd84839128cc 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "7814b83b45e1414dc7ee2608fc73e3e8127830e5",
+  "prompts": {},
+  "sessions": {
+    "s_acd12e8d782639": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1a5-4153-7ed1-8c0e-3c580b6dc00f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
