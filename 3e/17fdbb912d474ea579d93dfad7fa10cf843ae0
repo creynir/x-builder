@@ -1,0 +1,19 @@
+docs/features/deterministic-engine/tickets/01-fnd-shared-deterministic-analyze-schemas.md
+  s_acd12e8d782639::t_1dcc82571b5545 42-43,50-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "3e17fdbb912d474ea579d93dfad7fa10cf843ae0",
+  "prompts": {},
+  "sessions": {
+    "s_acd12e8d782639": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1a5-4153-7ed1-8c0e-3c580b6dc00f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
