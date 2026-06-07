@@ -7,6 +7,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   apiErrorSchema,
   generateIdeaRequestSchema,
+  type AnalyzedPostItem,
+  type AnalyzePostsRequest,
+  type AnalyzePostsResponse,
   type ApiError,
   type GenerateIdeaRequest,
   type GenerateIdeaResponse,
@@ -15,10 +18,32 @@ import {
 
 import { RouteErrorBanner } from "../../shell/route-error-banner";
 import { Badge, Button, Skeleton } from "../../ui/foundation";
+import { CandidateDeterministicSummary } from "./deterministic/components";
 
 export type WriterApiClient = {
+  analyzePosts: (input: AnalyzePostsRequest) => Promise<AnalyzePostsResponse>;
   generateIdea: (input: GenerateIdeaRequest) => Promise<GenerateIdeaResponse>;
 };
+
+type CandidateAnalysisState =
+  | {
+      status: "idle";
+    }
+  | {
+      status: "loading";
+    }
+  | {
+      item: AnalyzedPostItem;
+      status: "ready";
+    }
+  | {
+      item: AnalyzedPostItem;
+      status: "failed";
+    }
+  | {
+      item: AnalyzedPostItem;
+      status: "stale";
+    };
 
 export type WriterPageProps = {
   apiClient: WriterApiClient;
@@ -26,6 +51,7 @@ export type WriterPageProps = {
 };
 
 type WriterPageModel = {
+  analysisByCandidateId: Record<string, CandidateAnalysisState>;
   candidates: GeneratedIdeaCandidate[];
   fieldError: string | null;
   idea: string;
@@ -43,6 +69,7 @@ export type WriterPagePublicDriver = {
   openSettings: () => void;
   render: () => string;
   retry: () => Promise<string>;
+  retryScore: (itemId: string) => Promise<string>;
   updateIdea: (idea: string) => string;
 };
 
@@ -50,6 +77,7 @@ const emptyIdeaError = "Enter an idea before generating.";
 
 function createInitialModel(): WriterPageModel {
   return {
+    analysisByCandidateId: {},
     candidates: [],
     fieldError: null,
     idea: "",
@@ -78,6 +106,20 @@ function normalizeWriterError(error: unknown): ApiError {
     retryable: true,
     scope: "writer",
     status: 500,
+  };
+}
+
+function normalizeAnalysisError(error: unknown): ApiError {
+  const normalizedError = normalizeWriterError(error);
+
+  if (normalizedError.code !== "generation_failed") {
+    return normalizedError;
+  }
+
+  return {
+    ...normalizedError,
+    code: "deterministic_analysis_failed",
+    message: "Scoring failed for this candidate.",
   };
 }
 
@@ -122,14 +164,136 @@ function candidateLabel(format: GeneratedIdeaCandidate["format"]): string {
   return format;
 }
 
+function candidateAnalysisRequest(
+  candidates: GeneratedIdeaCandidate[],
+): AnalyzePostsRequest {
+  return {
+    items: candidates.map((candidate) => ({
+      id: candidate.id,
+      text: candidate.text,
+      sourceFormat: candidate.format,
+    })),
+    presentation: {
+      postCoachMode: "preview",
+    },
+    scoringContext: {},
+  };
+}
+
+function createLoadingAnalysis(
+  candidates: GeneratedIdeaCandidate[],
+): Record<string, CandidateAnalysisState> {
+  return Object.fromEntries(
+    candidates.map((candidate) => [
+      candidate.id,
+      {
+        status: "loading" as const,
+      },
+    ]),
+  );
+}
+
+function createScoreFailedItem(
+  candidate: GeneratedIdeaCandidate,
+  error: ApiError,
+): AnalyzedPostItem {
+  return {
+    status: "score_failed",
+    id: candidate.id,
+    text: candidate.text,
+    sourceFormat: candidate.format,
+    reason: error.code,
+    message: error.message,
+    retryable: error.retryable,
+  };
+}
+
+function analysisStateFromItem(item: AnalyzedPostItem): CandidateAnalysisState {
+  if (item.status === "score_failed") {
+    return {
+      item,
+      status: "failed",
+    };
+  }
+
+  return {
+    item,
+    status: "ready",
+  };
+}
+
+function candidatesStillPresent(
+  currentCandidates: GeneratedIdeaCandidate[],
+  requestedCandidates: GeneratedIdeaCandidate[],
+): boolean {
+  return requestedCandidates.every(
+    (candidate) =>
+      currentCandidates.some(
+        (currentCandidate) =>
+          currentCandidate.id === candidate.id &&
+          currentCandidate.text === candidate.text,
+      ),
+  );
+}
+
 type WriterPageViewProps = WriterPageModel & {
   onGenerate: () => void;
   onIdeaChange: (idea: string) => void;
   onOpenSettings: () => void;
   onRetry: () => Promise<void>;
+  onRetryScore: (itemId: string) => Promise<void>;
 };
 
+function CandidateAnalysis({
+  candidate,
+  onRetryScore,
+  state,
+}: {
+  candidate: GeneratedIdeaCandidate;
+  onRetryScore: (itemId: string) => void;
+  state: CandidateAnalysisState;
+}): ReactElement {
+  if (state.status === "ready" || state.status === "failed") {
+    return (
+      <CandidateDeterministicSummary
+        item={state.item}
+        onRetryScore={onRetryScore}
+      />
+    );
+  }
+
+  if (state.status === "stale") {
+    return (
+      <div className="xb-writer-candidate__analysis">
+        <p>{candidate.text}</p>
+        <CandidateDeterministicSummary
+          item={state.item}
+          onRetryScore={onRetryScore}
+        />
+        <p>Score needs refresh.</p>
+      </div>
+    );
+  }
+
+  if (state.status === "loading") {
+    return (
+      <div
+        aria-busy="true"
+        className="xb-writer-candidate__analysis"
+        role="status"
+      >
+        <p>{candidate.text}</p>
+        <p>Scoring candidate</p>
+        <Skeleton height={72} label="Scoring candidate" width={480} />
+      </div>
+    );
+  }
+
+  return <p>{candidate.text}</p>;
+}
+
 function WriterPageView({
+  analysisByCandidateId,
   candidates,
   fieldError,
   idea,
@@ -138,6 +302,7 @@ function WriterPageView({
   onIdeaChange,
   onOpenSettings,
   onRetry,
+  onRetryScore,
   routeError,
 }: WriterPageViewProps): ReactElement {
   const ideaErrorId = fieldError === null ? undefined : "writer-idea-error";
@@ -202,7 +367,11 @@ function WriterPageView({
             {candidates.map((candidate) => (
               <article className="xb-writer-candidate" key={candidate.id}>
                 <Badge variant="info">{candidateLabel(candidate.format)}</Badge>
-                <p>{candidate.text}</p>
+                <CandidateAnalysis
+                  candidate={candidate}
+                  onRetryScore={onRetryScore}
+                  state={analysisByCandidateId[candidate.id] ?? { status: "idle" }}
+                />
               </article>
             ))}
           </div>
@@ -215,6 +384,16 @@ function WriterPageView({
 type GenerationResult =
   | {
       candidates: GeneratedIdeaCandidate[];
+      type: "success";
+    }
+  | {
+      error: ApiError;
+      type: "error";
+    };
+
+type AnalysisResult =
+  | {
+      items: AnalyzedPostItem[];
       type: "success";
     }
   | {
@@ -241,6 +420,25 @@ async function requestGeneration(
   }
 }
 
+async function requestAnalysis(
+  apiClient: WriterApiClient,
+  candidates: GeneratedIdeaCandidate[],
+): Promise<AnalysisResult> {
+  try {
+    const response = await apiClient.analyzePosts(candidateAnalysisRequest(candidates));
+
+    return {
+      items: response.items,
+      type: "success",
+    };
+  } catch (error) {
+    return {
+      error: normalizeAnalysisError(error),
+      type: "error",
+    };
+  }
+}
+
 function applyGenerationResult(
   model: WriterPageModel,
   payload: GenerateIdeaRequest,
@@ -249,6 +447,7 @@ function applyGenerationResult(
   if (result.type === "success") {
     return {
       ...model,
+      analysisByCandidateId: createLoadingAnalysis(result.candidates),
       candidates: result.candidates,
       fieldError: null,
       isGenerating: false,
@@ -278,15 +477,105 @@ function applyGenerationResult(
   };
 }
 
+function applyAnalysisResult(
+  model: WriterPageModel,
+  requestedCandidates: GeneratedIdeaCandidate[],
+  result: AnalysisResult,
+): WriterPageModel {
+  if (!candidatesStillPresent(model.candidates, requestedCandidates)) {
+    return model;
+  }
+
+  if (result.type === "error") {
+    return {
+      ...model,
+      analysisByCandidateId: {
+        ...model.analysisByCandidateId,
+        ...Object.fromEntries(
+          requestedCandidates.map((candidate) => [
+            candidate.id,
+            {
+              item: createScoreFailedItem(candidate, result.error),
+              status: "failed" as const,
+            },
+          ]),
+        ),
+      },
+    };
+  }
+
+  const itemsById = new Map(result.items.map((item) => [item.id, item]));
+
+  return {
+    ...model,
+    analysisByCandidateId: {
+      ...model.analysisByCandidateId,
+      ...Object.fromEntries(
+        requestedCandidates.flatMap((candidate) => {
+          const item = itemsById.get(candidate.id);
+
+          return item === undefined
+            ? []
+            : [[candidate.id, analysisStateFromItem(item)]];
+        }),
+      ),
+    },
+  };
+}
+
+function applyAnalysisLoading(
+  model: WriterPageModel,
+  candidates: GeneratedIdeaCandidate[],
+): WriterPageModel {
+  return {
+    ...model,
+    analysisByCandidateId: {
+      ...model.analysisByCandidateId,
+      ...createLoadingAnalysis(candidates),
+    },
+  };
+}
+
+function markAnalysisStale(
+  analysisByCandidateId: Record<string, CandidateAnalysisState>,
+): Record<string, CandidateAnalysisState> {
+  return Object.fromEntries(
+    Object.entries(analysisByCandidateId).map(([candidateId, state]) => {
+      if (state.status === "ready" || state.status === "failed") {
+        return [
+          candidateId,
+          {
+            item: state.item,
+            status: "stale" as const,
+          },
+        ];
+      }
+
+      return [candidateId, state];
+    }),
+  );
+}
+
 export function WriterPage({
   apiClient,
   onOpenSettings,
 }: WriterPageProps): ReactElement {
   const [model, setModel] = useState(createInitialModel);
 
+  const scoreCandidates = async (candidates: GeneratedIdeaCandidate[]) => {
+    if (candidates.length === 0) {
+      return;
+    }
+
+    const result = await requestAnalysis(apiClient, candidates);
+
+    setModel((current) => applyAnalysisResult(current, candidates, result));
+  };
+
   const updateIdea = (idea: string) => {
     setModel((current) => ({
       ...current,
+      analysisByCandidateId: markAnalysisStale(current.analysisByCandidateId),
       fieldError: null,
       idea,
     }));
@@ -315,6 +604,10 @@ export function WriterPage({
       }));
       const result = await requestGeneration(apiClient, payload);
       setModel((current) => applyGenerationResult(current, payload, result));
+
+      if (result.type === "success") {
+        await scoreCandidates(result.candidates);
+      }
     })();
   };
 
@@ -331,6 +624,22 @@ export function WriterPage({
     }));
     const result = await requestGeneration(apiClient, payload);
     setModel((current) => applyGenerationResult(current, payload, result));
+
+    if (result.type === "success") {
+      await scoreCandidates(result.candidates);
+    }
+  };
+
+  const retryScore = async (itemId: string) => {
+    const candidate = model.candidates.find((item) => item.id === itemId);
+
+    if (candidate === undefined) {
+      return;
+    }
+
+    setModel((current) => applyAnalysisLoading(current, [candidate]));
+    const result = await requestAnalysis(apiClient, [candidate]);
+    setModel((current) => applyAnalysisResult(current, [candidate], result));
   };
 
   return (
@@ -340,6 +649,7 @@ export function WriterPage({
       onIdeaChange={updateIdea}
       onOpenSettings={onOpenSettings}
       onRetry={retry}
+      onRetryScore={retryScore}
     />
   );
 }
@@ -355,6 +665,7 @@ function renderDriverPage(
       onIdeaChange={() => undefined}
       onOpenSettings={onOpenSettings}
       onRetry={async () => undefined}
+      onRetryScore={async () => undefined}
     />,
   );
 }
@@ -386,11 +697,18 @@ export function createWriterPagePublicDriver(
       isGenerating: true,
       lastPayload: payload,
     };
-    model = applyGenerationResult(
-      model,
-      payload,
-      await requestGeneration(options.apiClient, payload),
-    );
+    const result = await requestGeneration(options.apiClient, payload);
+    model = applyGenerationResult(model, payload, result);
+
+    if (result.type === "success") {
+      const { candidates } = result;
+      model = applyAnalysisResult(
+        model,
+        candidates,
+        await requestAnalysis(options.apiClient, candidates),
+      );
+    }
+
     return render();
   };
 
@@ -411,16 +729,40 @@ export function createWriterPagePublicDriver(
         ...model,
         isGenerating: true,
       };
-      model = applyGenerationResult(
+      const result = await requestGeneration(options.apiClient, payload);
+      model = applyGenerationResult(model, payload, result);
+
+      if (result.type === "success") {
+        const { candidates } = result;
+        model = applyAnalysisResult(
+          model,
+          candidates,
+          await requestAnalysis(options.apiClient, candidates),
+        );
+      }
+
+      return render();
+    },
+    retryScore: async (itemId: string) => {
+      const candidate = model.candidates.find((item) => item.id === itemId);
+
+      if (candidate === undefined) {
+        return render();
+      }
+
+      model = applyAnalysisLoading(model, [candidate]);
+      model = applyAnalysisResult(
         model,
-        payload,
-        await requestGeneration(options.apiClient, payload),
+        [candidate],
+        await requestAnalysis(options.apiClient, [candidate]),
       );
+
       return render();
     },
     updateIdea: (idea: string) => {
       model = {
         ...model,
+        analysisByCandidateId: markAnalysisStale(model.analysisByCandidateId),
         fieldError: null,
         idea,
       };
