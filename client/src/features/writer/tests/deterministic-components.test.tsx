@@ -312,24 +312,68 @@ describe("PostCoachCard", () => {
   it("renders badge, provided counts, sections, and learning caveat from the view model", async () => {
     const { PostCoachCard } = await loadDeterministicComponents();
     const postCoach = readyPostCoach({
+      value: 18,
+      badge: {
+        label: "Top tier",
+        tone: "top",
+        tooltip: "Server-selected badge copy that does not match the raw score.",
+      },
       counts: {
         flagged: 9,
         nudges: 7,
         onPoint: 5,
       },
-      failed: [],
+      failed: [
+        {
+          id: "derived-fail",
+          label: "Derived failed check should not render",
+          status: "fail",
+        },
+      ],
       warned: [
         {
-          id: "only-warning",
-          label: "One warning check",
+          id: "derived-warning",
+          label: "Derived warning check should not render",
           status: "warn",
         },
       ],
       passed: [
         {
-          id: "only-pass",
-          label: "One passing check",
+          id: "derived-pass",
+          label: "Derived passing check should not render",
           status: "pass",
+        },
+      ],
+      sections: [
+        {
+          title: "Worth a look",
+          items: [
+            {
+              id: "api-section-worth",
+              label: "API section says the hook is specific",
+              status: "pass",
+            },
+          ],
+        },
+        {
+          title: "Nudges",
+          items: [
+            {
+              id: "api-section-nudge",
+              label: "API section asks for a tighter final question",
+              status: "warn",
+            },
+          ],
+        },
+        {
+          title: "On point",
+          items: [
+            {
+              id: "api-section-on-point",
+              label: "API section praises the plain-language framing",
+              status: "fail",
+            },
+          ],
         },
       ],
     });
@@ -338,13 +382,22 @@ describe("PostCoachCard", () => {
     const text = textContent(html);
 
     expect(text).toContain("Post Coach");
-    expect(text).toContain("Ship it");
+    expect(text).toContain("Top tier");
+    expect(text).toContain("Server-selected badge copy that does not match the raw score.");
+    expect(text).not.toContain("Rework");
+    expect(text).not.toContain("Ship it");
     expect(text).toContain("9");
     expect(text).toContain("7");
     expect(text).toContain("5");
     expect(text).toContain("Worth a look");
+    expect(text).toContain("API section says the hook is specific");
     expect(text).toContain("Nudges");
+    expect(text).toContain("API section asks for a tighter final question");
     expect(text).toContain("On point");
+    expect(text).toContain("API section praises the plain-language framing");
+    expect(text).not.toContain("Derived failed check should not render");
+    expect(text).not.toContain("Derived warning check should not render");
+    expect(text).not.toContain("Derived passing check should not render");
     expect(text).toContain(learningCaveat);
     expect(text).not.toContain("real user performance");
   });
