@@ -58,13 +58,55 @@ type SkeletonProps = {
   height: number;
 };
 
+type ScoreBarProps = {
+  label: string;
+  value: number;
+  max?: number;
+  bandLabel?: string;
+  helpText?: string;
+  loading?: boolean;
+  disabled?: boolean;
+};
+
+type InputProps = {
+  id: string;
+  label: string;
+  helperText?: string;
+  error?: string;
+  loading?: boolean;
+  disabled?: boolean;
+  value?: string | number;
+};
+
+type DrawerProps = {
+  open: boolean;
+  title: string;
+  closeLabel: string;
+  onClose: () => void;
+  children: ReactNode;
+};
+
+type KeyValueListProps = {
+  items: Array<{
+    label: string;
+    value: ReactNode;
+  }>;
+  emptyMessage?: string;
+  loading?: boolean;
+  disabled?: boolean;
+};
+
 type FoundationComponents = {
   Alert: (props: AlertProps) => ReactElement;
   Badge: (props: BadgeProps) => ReactElement;
   Button: (props: ButtonProps) => ReactElement;
+  Drawer: (props: DrawerProps) => ReactElement | null;
   EmptyState: (props: EmptyStateProps) => ReactElement;
   IconButton: (props: IconButtonProps) => ReactElement;
+  Input: (props: InputProps) => ReactElement;
+  KeyValueList: (props: KeyValueListProps) => ReactElement;
   PageHeader: (props: PageHeaderProps) => ReactElement;
+  ScoreBar: (props: ScoreBarProps) => ReactElement;
   Skeleton: (props: SkeletonProps) => ReactElement;
   ToastRegion: () => ReactElement;
   Tooltip: (props: { label: string; children: ReactNode }) => ReactElement;
@@ -105,12 +147,177 @@ describe("UI foundation public surface", () => {
     expect(foundation.Button).toBeTypeOf("function");
     expect(foundation.IconButton).toBeTypeOf("function");
     expect(foundation.Badge).toBeTypeOf("function");
+    expect(foundation.ScoreBar).toBeTypeOf("function");
+    expect(foundation.Input).toBeTypeOf("function");
+    expect(foundation.Drawer).toBeTypeOf("function");
+    expect(foundation.KeyValueList).toBeTypeOf("function");
     expect(foundation.Tooltip).toBeTypeOf("function");
     expect(foundation.Alert).toBeTypeOf("function");
     expect(foundation.EmptyState).toBeTypeOf("function");
     expect(foundation.Skeleton).toBeTypeOf("function");
     expect(foundation.ToastRegion).toBeTypeOf("function");
     expect(foundation.PageHeader).toBeTypeOf("function");
+  });
+});
+
+describe("ScoreBar", () => {
+  it("renders caller-provided label, value, band, and help text without deterministic copy", async () => {
+    const { ScoreBar } = await loadFoundation();
+
+    const html = renderToStaticMarkup(
+      <ScoreBar
+        label="Readiness"
+        value={72}
+        max={100}
+        bandLabel="Ready"
+        helpText="Based on the selected checks."
+      />,
+    );
+    const text = textContent(html);
+
+    expect(html).toContain("xb-score-bar");
+    expect(html).toContain('aria-valuenow="72"');
+    expect(html).toContain('aria-valuemax="100"');
+    expect(text).toContain("Readiness");
+    expect(text).toContain("72");
+    expect(text).toContain("Ready");
+    expect(text).toContain("Based on the selected checks.");
+    expect(text).not.toContain("Heuristic rank, not prediction.");
+  });
+
+  it("exposes loading and disabled states without losing the caller label", async () => {
+    const { ScoreBar } = await loadFoundation();
+
+    const html = renderToStaticMarkup(
+      <ScoreBar label="Queue fit" value={0} loading disabled />,
+    );
+    const text = textContent(html);
+
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('aria-disabled="true"');
+    expect(html).toContain('role="status"');
+    expect(text).toContain("Queue fit");
+  });
+});
+
+describe("Input", () => {
+  it("renders label, helper, value, and disabled state with described-by wiring", async () => {
+    const { Input } = await loadFoundation();
+
+    const html = renderToStaticMarkup(
+      <Input
+        id="followers"
+        label="Followers"
+        helperText="Used only for local prediction ranges."
+        value={2400}
+        disabled
+      />,
+    );
+
+    expect(html).toContain('for="followers"');
+    expect(html).toContain('id="followers"');
+    expect(html).toContain('value="2400"');
+    expect(html).toContain("disabled");
+    expect(html).toContain("aria-describedby");
+    expect(textContent(html)).toContain("Followers");
+    expect(textContent(html)).toContain("Used only for local prediction ranges.");
+  });
+
+  it("renders invalid and loading accessible states with the error associated to the field", async () => {
+    const { Input } = await loadFoundation();
+
+    const html = renderToStaticMarkup(
+      <Input
+        id="followers"
+        label="Followers"
+        error="Enter a positive follower count."
+        loading
+      />,
+    );
+
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain("aria-describedby");
+    expect(textContent(html)).toContain("Enter a positive follower count.");
+  });
+});
+
+describe("Drawer", () => {
+  it("renders an open dialog shell with title, close action, and body content", async () => {
+    const { Drawer } = await loadFoundation();
+
+    const html = renderToStaticMarkup(
+      <Drawer open title="Details" closeLabel="Close details" onClose={() => {}}>
+        <p>Evidence and scoring context.</p>
+      </Drawer>,
+    );
+
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+    expect(textContent(html)).toContain("Details");
+    expect(firstButton(html)).toContain('aria-label="Close details"');
+    expect(textContent(html)).toContain("Evidence and scoring context.");
+  });
+
+  it("does not render body content when closed", async () => {
+    const { Drawer } = await loadFoundation();
+
+    const html = renderToStaticMarkup(
+      <Drawer
+        open={false}
+        title="Details"
+        closeLabel="Close details"
+        onClose={() => {}}
+      >
+        <p>Evidence and scoring context.</p>
+      </Drawer>,
+    );
+
+    expect(textContent(html)).not.toContain("Evidence and scoring context.");
+    expect(html).not.toContain('role="dialog"');
+  });
+});
+
+describe("KeyValueList", () => {
+  it("renders label and value rows from caller-provided items", async () => {
+    const { KeyValueList } = await loadFoundation();
+
+    const html = renderToStaticMarkup(
+      <KeyValueList
+        items={[
+          { label: "Source format", value: "one-liner" },
+          { label: "Detected format", value: "genuine_question" },
+        ]}
+      />,
+    );
+    const text = textContent(html);
+
+    expect(html).toContain("xb-key-value-list");
+    expect(text).toContain("Source format");
+    expect(text).toContain("one-liner");
+    expect(text).toContain("Detected format");
+    expect(text).toContain("genuine_question");
+  });
+
+  it("renders empty, loading, and disabled states when callers provide them", async () => {
+    const { KeyValueList } = await loadFoundation();
+
+    const emptyHtml = renderToStaticMarkup(
+      <KeyValueList items={[]} emptyMessage="No scoring metadata yet." />,
+    );
+    const loadingHtml = renderToStaticMarkup(<KeyValueList items={[]} loading />);
+    const disabledHtml = renderToStaticMarkup(
+      <KeyValueList
+        items={[{ label: "Prediction", value: "Needs followers" }]}
+        disabled
+      />,
+    );
+
+    expect(textContent(emptyHtml)).toContain("No scoring metadata yet.");
+    expect(loadingHtml).toContain('role="status"');
+    expect(loadingHtml).toContain('aria-busy="true"');
+    expect(disabledHtml).toContain('aria-disabled="true"');
+    expect(textContent(disabledHtml)).toContain("Needs followers");
   });
 });
 
