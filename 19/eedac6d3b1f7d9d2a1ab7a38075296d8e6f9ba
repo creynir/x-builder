@@ -1,0 +1,20 @@
+engine/src/server/tests/posts-analyze.test.ts
+  s_9b10549703c0eb::t_302b356fa6fb35 5,24-37,241,256-258,281,292
+  s_9b10549703c0eb::t_338185c9b382eb 1-4,6-23,38-240,242-255,259-280,282-291,293-432
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "19eedac6d3b1f7d9d2a1ab7a38075296d8e6f9ba",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
