@@ -1,0 +1,21 @@
+client/src/shell/app-shell.tsx
+  s_9b10549703c0eb::t_d7775471f0b6c8 384-387
+client/src/shell/tests/app-shell.test.tsx
+  s_9b10549703c0eb::t_eafb1a8fabae9a 5-6,42,217-232,243
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "5667ac955beff4e24c349920fd4b86803ffb3c71",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
