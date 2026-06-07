@@ -1,0 +1,27 @@
+client/src/features/writer/deterministic/components.tsx
+  s_9b10549703c0eb::t_b8f3f3a4d00b8a 1,36,308,310-315,324-325
+  s_9b10549703c0eb::t_52cf32bf21bddf 2-35,37-307,309,316-323,326-393
+client/src/ui/foundation.tsx
+  s_9b10549703c0eb::t_7cbb8591856a13 5,79-114,274-457
+client/src/ui/foundation.css
+  s_9b10549703c0eb::t_4a7c1afe3a4cb4 787,859
+  s_9b10549703c0eb::t_956f700ca277de 673-786,788-858,860-880
+client/src/features/writer/deterministic/components.css
+  s_9b10549703c0eb::t_bb9644aaf53a24 1-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "4192591572beb549f9b1c62a8b7d092878bdd911",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
