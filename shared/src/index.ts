@@ -1,4 +1,13 @@
 export {
+  analyzedPostItemSchema,
+  analyzePostsRequestSchema,
+  analyzePostsResponseSchema,
+  detectedPostFormatSchema,
+  deterministicSourceFormatSchema,
+  engagementPredictionSchema,
+  postCoachViewModelSchema,
+} from "./schemas/deterministic-analysis.js";
+export {
   apiErrorSchema,
   appSettingsResponseSchema,
   appSettingsSchema,
@@ -10,6 +19,15 @@ export {
   routeConfigSchema,
   subsystemStatusSchema,
 } from "./schemas/shell.js";
+export type {
+  AnalyzedPostItem,
+  AnalyzePostsRequest,
+  AnalyzePostsResponse,
+  DetectedPostFormat,
+  DeterministicSourceFormat,
+  EngagementPrediction,
+  PostCoachViewModel,
+} from "./schemas/deterministic-analysis.js";
 export type {
   ApiError,
   AppSettings,
