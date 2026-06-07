@@ -1,0 +1,28 @@
+client/src/features/writer/writer-page.tsx
+  s_9b10549703c0eb::t_b7fb19628ad763 394-403,423-431,450,480-484,486-535
+  s_9b10549703c0eb::t_3e6fa92972ed10 565-574,607-610,627-642,652,668
+  s_9b10549703c0eb::t_fd3cb9f81af1f6 539-558,578,765
+  s_9b10549703c0eb::t_c0eb128245c9c5 225,230-235,485
+  s_9b10549703c0eb::t_1c5acc309dfb79 700-701,703-704,732-733,735-736
+  s_9b10549703c0eb::t_b57311a1d13144 702,705-711,734,737-754,756-757,759
+  s_9b10549703c0eb::t_66ada5ae0d465a 121
+  s_9b10549703c0eb::t_422be029913964 10-12,21,24,28-47,54,72,80
+  s_9b10549703c0eb::t_4ea54185e1ea1c 112-120,122-125,436
+  s_9b10549703c0eb::t_4a686ebc975187 167-224,226-229,236-238,244,247-294,296,305,370-374
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "259c7ac126a49f31bfae794eca2c8c44cd9fefae",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
