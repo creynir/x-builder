@@ -1,0 +1,28 @@
+client/src/features/writer/deterministic/components.css
+  s_9b10549703c0eb::t_0c7148cc69b924 28
+client/src/features/writer/deterministic/components.tsx
+  s_9b10549703c0eb::t_f1b7752de5cdb6 35,37-40,42,312,315-318,320,325,334,339,341,343-350
+  s_9b10549703c0eb::t_bc864c7cf6ac42 331
+client/src/features/writer/writer-page.tsx
+  s_9b10549703c0eb::t_4e4e62b8413c97 21-24,58,61-62,74,80,85,90,93-94,181,192-227,503,506-508
+  s_9b10549703c0eb::t_be1fb390fd6d49 639-673
+  s_9b10549703c0eb::t_7c06430fe30ece 680-689,691-702,704-705,720,731-735,737,739-740,744,749-756,768-774,777-778,785-792,804,811-812
+  s_9b10549703c0eb::t_4992656966225e 829-830,847-872,875,886-890,894,907,915,928-934,936,947,964,969-970
+  s_9b10549703c0eb::t_65636c0af2f5ff 288-289,299,304,325-328,352,355-356,359-360,413-428,448
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "52c876efebd556f8e8356107b209eb3f904b3a1c",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
