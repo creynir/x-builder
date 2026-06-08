@@ -58,6 +58,8 @@ const requestTimeoutError = () =>
 const invalidResponseError = () =>
   clientError("invalid_response", "The local engine returned an invalid response. Try again.");
 
+const defaultFetch = (): typeof fetch => globalThis.fetch.bind(globalThis);
+
 export class EngineApiClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -65,7 +67,7 @@ export class EngineApiClient {
 
   constructor(options: EngineApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl ?? defaultFetch();
     this.timeoutMs = options.timeoutMs ?? 5_000;
   }
 
@@ -95,7 +97,10 @@ export class EngineApiClient {
       this.request(
         "/ideas/generate",
         {
-          body: input,
+          body: {
+            ...input,
+            useKnownPostIds: input.useKnownPostIds ?? [],
+          },
           method: "POST",
         },
         generateIdeaResponseSchema,

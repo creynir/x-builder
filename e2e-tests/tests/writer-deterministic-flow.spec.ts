@@ -167,11 +167,13 @@ function postCoach(mode: "preview" | "expanded", index: number) {
 }
 
 function prediction(index: number) {
+  const offset = index - 1;
+
   return {
     status: "available",
-    rangeLow: 340 + index,
-    rangeHigh: 620 + index,
-    midpoint: 480 + index,
+    rangeLow: 340 + offset,
+    rangeHigh: 620 + offset,
+    midpoint: 480 + offset,
     confidence: "high",
     signals: [
       {
@@ -250,11 +252,11 @@ function requestJson(route: Route): unknown {
 }
 
 async function stubEngine(page: Page, captured: CapturedRequests) {
-  await page.route("**/status", async (route) => {
+  await page.route(`${engineBaseUrl}/status`, async (route) => {
     await fulfillJson(route, 200, readyStatus());
   });
 
-  await page.route("**/settings", async (route) => {
+  await page.route(`${engineBaseUrl}/settings`, async (route) => {
     if (route.request().method() === "OPTIONS") {
       await fulfillPreflight(route);
       return;
@@ -263,7 +265,7 @@ async function stubEngine(page: Page, captured: CapturedRequests) {
     await fulfillJson(route, 200, settingsResponse());
   });
 
-  await page.route("**/ideas/generate", async (route) => {
+  await page.route(`${engineBaseUrl}/ideas/generate`, async (route) => {
     if (route.request().method() === "OPTIONS") {
       await fulfillPreflight(route);
       return;
@@ -273,7 +275,7 @@ async function stubEngine(page: Page, captured: CapturedRequests) {
     await fulfillJson(route, 200, { candidates });
   });
 
-  await page.route("**/posts/analyze", async (route) => {
+  await page.route(`${engineBaseUrl}/posts/analyze`, async (route) => {
     if (route.request().method() === "OPTIONS") {
       await fulfillPreflight(route);
       return;
@@ -307,12 +309,14 @@ test("writer generates and scores candidates with deterministic Post Coach detai
 
   await stubEngine(page, captured);
   await page.goto("/writer");
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", { level: 1, name: "Writer" })).toBeVisible();
 
   const ideaInput = page.getByRole("textbox", { name: "Idea" });
   const followersInput = page.getByRole("spinbutton", { name: "Followers" });
 
-  await ideaInput.fill(idea);
-  await followersInput.fill("4200");
+  await ideaInput.pressSequentially(idea);
+  await followersInput.pressSequentially("4200");
   await expect(ideaInput).toHaveValue(idea);
   await expect(followersInput).toHaveValue("4200");
   await page.getByRole("button", { name: "Generate" }).click();
