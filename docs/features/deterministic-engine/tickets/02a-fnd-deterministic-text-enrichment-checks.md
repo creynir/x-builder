@@ -139,4 +139,3 @@ Acceptance for this ticket:
 - Primary test surface: `engine/src/deterministic/tests/post-analyzer.test.ts`.
 - Add service-level regression coverage only if prediction output changes.
 - Expect score drift because quality checks are normalized over the number of quality checks. Update affected snapshots deliberately.
-
