@@ -1,0 +1,37 @@
+client/src/features/writer/writer-workflow.ts
+  s_9b10549703c0eb::t_5a4e07790ab56c 621-635,717-721,729-730,732-737,760,763,769,782-784,789-804,817,932-936
+client/src/features/writer/tests/writer-page.test.tsx
+  s_9b10549703c0eb::t_fca5144e9902ac 667-695
+  s_9b10549703c0eb::t_c0391ab2bd8fbf 912-952
+  s_9b10549703c0eb::t_e2387924dfb973 1071-1151
+  s_9b10549703c0eb::t_afe8fcc87cc380 1278-1282
+  s_9b10549703c0eb::t_0b93e49f4d2bbe 51-54
+client/src/features/writer/writer-page.tsx
+  s_9b10549703c0eb::t_cbc9cea144353f 55-58,457-463
+  s_9b10549703c0eb::t_d48a68b741d110 90,96,104,116
+  s_9b10549703c0eb::t_f58bed1987f878 23,28,76,156,224,257,291,311-314,332-339,389,411,474-481
+e2e-tests/tests/writer-deterministic-flow.spec.ts
+  s_9b10549703c0eb::t_6e0a1844765f57 596-611,640-657
+  s_9b10549703c0eb::t_71b21925b2fe2a 446-492
+client/src/features/writer/deterministic/components.tsx
+  s_9b10549703c0eb::t_1dfc2f904b762a 30,43,124,127,130-134,138-148,273,337-340,350,376
+client/src/features/writer/tests/deterministic-components.test.tsx
+  s_9b10549703c0eb::t_010decc6d56491 465-479,494,501
+  s_9b10549703c0eb::t_ca221dd7808e6e 30,41,72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "d411077a422a872637cd36442a1291b5d0b27004",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
