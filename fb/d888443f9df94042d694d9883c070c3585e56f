@@ -1,0 +1,23 @@
+client/src/features/writer/writer-workflow.ts
+  s_9b10549703c0eb::t_4c6ffd933665fb 1-644
+client/src/features/writer/writer-page.tsx
+  s_9b10549703c0eb::t_1510e1143ead06 294-295,298,300-302,304-306,308,314,318,326
+  s_9b10549703c0eb::t_7b44fe5862d0ea 235,243,247,251,255
+  s_9b10549703c0eb::t_e35e6800ec86e1 7,15-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "fbd888443f9df94042d694d9883c070c3585e56f",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
