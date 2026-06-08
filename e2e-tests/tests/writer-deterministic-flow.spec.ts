@@ -342,18 +342,26 @@ test("writer generates and scores candidates with deterministic Post Coach detai
   });
 
   const results = page.getByRole("region", { name: "Generated candidates" });
-  for (const candidate of candidates) {
-    await expect(results.getByText(candidate.text)).toBeVisible();
-  }
+  for (const [index, candidate] of candidates.entries()) {
+    const candidateNumber = index + 1;
+    const candidateArticle = results.locator("article", {
+      hasText: candidate.text,
+    });
 
-  await expect(page.getByText("Post Coach").first()).toBeVisible();
-  await expect(page.getByText("Preview API learning 1: keep the reader payoff explicit.")).toBeVisible();
-  await expect(page.getByText(learningCaveat).first()).toBeVisible();
-  await expect(page.getByText(heuristicLabel).first()).toBeVisible();
-  await expect(page.getByText("340 - 620")).toBeVisible();
-  await expect(page.getByText("480")).toBeVisible();
-  await expect(page.getByText("high").first()).toBeVisible();
-  await expect(page.getByText("Manual follower context").first()).toBeVisible();
+    await expect(candidateArticle.getByText(candidate.text)).toBeVisible();
+    await expect(candidateArticle.getByRole("progressbar", { name: "Deterministic score" })).toHaveAttribute(
+      "aria-valuenow",
+      String(76 + candidateNumber),
+    );
+    await expect(candidateArticle.getByRole("heading", { name: "Post Coach" })).toBeVisible();
+    await expect(candidateArticle.getByText(`Preview API learning ${candidateNumber}: keep the reader payoff explicit.`)).toBeVisible();
+    await expect(candidateArticle.getByText(learningCaveat)).toBeVisible();
+    await expect(candidateArticle.getByText(heuristicLabel)).toBeVisible();
+    await expect(candidateArticle.getByText(`${340 + index} - ${620 + index}`)).toBeVisible();
+    await expect(candidateArticle.getByText(String(480 + index))).toBeVisible();
+    await expect(candidateArticle.getByText("high")).toBeVisible();
+    await expect(candidateArticle.getByText("Manual follower context")).toBeVisible();
+  }
 
   const firstCandidate = page.locator("article", { hasText: candidates[0].text });
   await firstCandidate.getByRole("button", { name: "Details" }).click();
