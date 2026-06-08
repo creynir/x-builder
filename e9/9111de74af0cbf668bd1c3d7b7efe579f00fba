@@ -1,0 +1,19 @@
+engine/src/deterministic/tests/post-analyzer.test.ts
+  s_9b10549703c0eb::t_443bdf492c8add 114,239-241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "e99111de74af0cbf668bd1c3d7b7efe579f00fba",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
