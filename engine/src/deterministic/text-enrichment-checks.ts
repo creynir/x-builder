@@ -1,32 +1,51 @@
 import type { VoiceCheck } from "./voice-check.js";
 
-function hasConcreteAnchor(text: string): boolean {
-  const properNouns = text.match(/\b[A-Z][a-z]{2,}\b/g) ?? [];
-  const hasMeaningfulProperNoun = properNouns.some(
-    (word) =>
-      ![
-        "This",
-        "That",
-        "Nobody",
-        "Everyone",
-        "Everybody",
-        "What",
-        "Why",
-        "How",
-        "Should",
-        "Who",
-        "When",
-        "Where",
-        "Which",
-        "Also",
-        "Plus",
-        "Thanks",
-      ].includes(word),
-  );
+const sentenceStarterProperNouns = new Set([
+  "This",
+  "That",
+  "Nobody",
+  "Everyone",
+  "Everybody",
+  "What",
+  "Why",
+  "How",
+  "Should",
+  "Who",
+  "When",
+  "Where",
+  "Which",
+  "Also",
+  "Plus",
+  "Thanks",
+  "Activation",
+  "Onboarding",
+  "Signup",
+  "Pricing",
+  "Docs",
+  "Support",
+  "Trial",
+  "Invite",
+  "Workspace",
+  "Email",
+  "Emails",
+  "Launch",
+  "Feature",
+  "Flow",
+  "Screen",
+  "Teardown",
+  "Checklist",
+]);
 
+function hasNamedExample(text: string): boolean {
+  return (text.match(/\b[A-Z][a-z]{2,}\b/g) ?? []).some(
+    (word) => !sentenceStarterProperNouns.has(word),
+  );
+}
+
+function hasConcreteAnchor(text: string): boolean {
   return (
     /\d/.test(text) ||
-    hasMeaningfulProperNoun ||
+    hasNamedExample(text) ||
     /\b(onboarding|activation|signup|pricing|docs|support|trial|invite|workspace|email|emails|b2b|api|oauth|saas|mrr|arr|launch|shipped|shipping|feature|flow|screen|teardown|checklist|users?|customers?|teams?|founders?|builders?|creators?|makers?|operators?|marketers?)\b/i.test(text)
   );
 }
@@ -34,6 +53,7 @@ function hasConcreteAnchor(text: string): boolean {
 function hasEvidenceMarker(text: string): boolean {
   return (
     /\d/.test(text) ||
+    hasNamedExample(text) ||
     /\b(in|after|over|during|from)\s+\d+\b/i.test(text) ||
     /\b(today|yesterday|this week|this month|last week|last month|last year|last quarter)\b/i.test(text) ||
     /\b(i|we)\s+(saw|learned|noticed|tested|shipped|analyzed|measured|found|wrote|built|ran|removed|changed)\b/i.test(text) ||
@@ -155,10 +175,14 @@ function createClaimEvidenceCheck(trimmed: string): VoiceCheck {
 }
 
 function createProfileClickReasonCheck(trimmed: string): VoiceCheck {
+  const namedExampleWithAction =
+    hasNamedExample(trimmed) &&
+    /\b(shipped|tested|analyzed|teardown|case study|lesson learned|learned|result|improved|built|launched|changed|removed|showed|shows)\b/i.test(trimmed);
   const authorSpecific =
     /\b(i|we|my|our)\s+(shipped|built|wrote|tested|analyzed|learned|noticed|found|ran|removed|changed|launched|studied)\b/i.test(trimmed) ||
     /\b(my|our)\s+(project|launch|teardown|test|experiment|flow|product|team|users?|customers?)\b/i.test(trimmed) ||
-    /\b(shipped|tested|analyzed|teardown|case study|lesson learned|learned|result|improved|activation|onboarding)\b/i.test(trimmed);
+    /\b(teardown|case study|lesson learned)\b/i.test(trimmed) ||
+    namedExampleWithAction;
   const genericAdvice =
     /^(you should|write better|provide more value|post every day|start|stop|do this)\b/i.test(trimmed) ||
     /\byou should\b/i.test(trimmed);

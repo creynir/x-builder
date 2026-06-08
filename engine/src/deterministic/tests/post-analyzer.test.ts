@@ -27,7 +27,7 @@ const enrichedTextCheckIds = [
 ] as const;
 
 const bannedClaimPattern =
-  /\b(ranking|rank|algorithm|profile health|live trend|Trending topic|your data|last 30 days|imported metrics|reply_score|profile_click_score|dwell_score)\b/i;
+  /\b(ranking|rank|algorithm|profile health|trends?|trending|live trend|zeitgeist|your data|last 30 days|imported metrics|reply_score|profile_click_score|dwell_score)\b/i;
 
 function findCheck(checks: readonly VoiceCheck[], id: string): VoiceCheck {
   const check = checks.find((item) => item.id === id);
@@ -184,6 +184,12 @@ describe("deterministic post analyzer", () => {
     ],
     [
       "quality_claim_evidence",
+      "pass",
+      "Stripe has the best checkout flow because it shows one clear next step.",
+      /evidence|proof|claim|specific/i,
+    ],
+    [
+      "quality_claim_evidence",
       "warn",
       "Everyone should always remove friction because it is the only way to grow.",
       /evidence|proof|claim|sweeping/i,
@@ -198,6 +204,12 @@ describe("deterministic post analyzer", () => {
       "quality_profile_click_reason",
       "warn",
       "You should write better hooks and provide more value every day.",
+      /specific|experience|author|generic|reason/i,
+    ],
+    [
+      "quality_profile_click_reason",
+      "warn",
+      "Activation improves when onboarding asks for one setup step.",
       /specific|experience|author|generic|reason/i,
     ],
     [
