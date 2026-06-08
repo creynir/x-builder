@@ -362,6 +362,13 @@ function candidateHtmlSegment(
   return html.slice(start, end);
 }
 
+function dialogTextSegment(html: string) {
+  const start = html.indexOf('role="dialog"');
+  expect(start).toBeGreaterThanOrEqual(0);
+
+  return textContent(html.slice(start));
+}
+
 function createApiError(overrides: Partial<ApiError> = {}): ApiError {
   return {
     code: "engine_unreachable",
@@ -958,6 +965,7 @@ describe("WriterPage generation behavior", () => {
     await driver.generate();
     const html = await driver.openDetails(miniFramework.id);
     const text = textContent(html);
+    const dialogText = dialogTextSegment(html);
 
     expect(generateIdea).toHaveBeenCalledOnce();
     expect(analyzePosts).toHaveBeenCalledTimes(2);
@@ -966,22 +974,22 @@ describe("WriterPage generation behavior", () => {
       expectedExpandedAnalyzePostsRequestFor(miniFramework),
     );
     expect(html).toContain('role="dialog"');
-    expect(text).toContain("Deterministic details");
-    expect(text).toContain(miniFramework.text);
-    expect(text).toContain("74");
-    expect(text).toContain("Source format");
-    expect(text).toContain("mini-framework");
-    expect(text).toContain("Detected format");
-    expect(text).toContain("story");
-    expect(text).toContain("deterministic-v1");
-    expect(text).toContain("2026-06-07T12:00:00.000Z");
-    expect(text).toContain("Worth a look");
-    expect(text).toContain("API detail says the middle clause needs proof");
-    expect(text).toContain("Detail learning from expanded API data.");
-    expect(text).toContain("410 - 760");
-    expect(text).toContain("585");
-    expect(text).not.toContain(oneLiner.text);
-    expect(text).not.toContain(debateQuestion.text);
+    expect(dialogText).toContain("Deterministic details");
+    expect(dialogText).toContain(miniFramework.text);
+    expect(dialogText).toContain("74");
+    expect(dialogText).toContain("Source format");
+    expect(dialogText).toContain("mini-framework");
+    expect(dialogText).toContain("Detected format");
+    expect(dialogText).toContain("story");
+    expect(dialogText).toContain("deterministic-v1");
+    expect(dialogText).toContain("2026-06-07T12:00:00.000Z");
+    expect(dialogText).toContain("Worth a look");
+    expect(dialogText).toContain("API detail says the middle clause needs proof");
+    expect(dialogText).toContain("Detail learning from expanded API data.");
+    expect(dialogText).toContain("410 - 760");
+    expect(dialogText).toContain("585");
+    expect(text).toContain(oneLiner.text);
+    expect(text).toContain(debateQuestion.text);
   });
 
   it("shows missing follower recovery in details without hiding candidate text", async () => {
@@ -1134,6 +1142,178 @@ describe("WriterPage generation behavior", () => {
     expect(closedText).toContain(oneLiner.text);
     expect(closedText).toContain(miniFramework.text);
     expect(closedText).toContain(debateQuestion.text);
+  });
+
+  it("keeps compact board preview analysis after expanded details close", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const [oneLiner, miniFramework, debateQuestion] = response.candidates;
+    if (
+      oneLiner === undefined ||
+      miniFramework === undefined ||
+      debateQuestion === undefined
+    ) {
+      throw new Error("Expected the writer fixture to include three candidates.");
+    }
+    const previewOnlyCheck = "Preview-only Post Coach check";
+    const previewOnlyLearning = "Preview-only Post Coach learning.";
+    const expandedOnlyCheck = "Expanded-only Post Coach check";
+    const expandedOnlyLearning = "Expanded-only Post Coach learning.";
+    const analyzePosts = vi
+      .fn<WriterApiClient["analyzePosts"]>()
+      .mockImplementationOnce(async () => ({
+        items: [
+          scoredAnalysisItem(oneLiner),
+          scoredAnalysisItem(miniFramework, {
+            postCoach: readyPostCoach({
+              sections: [
+                {
+                  title: "Worth a look",
+                  items: [
+                    {
+                      id: "preview-only-check",
+                      label: previewOnlyCheck,
+                      status: "warn",
+                    },
+                  ],
+                },
+              ],
+              learnings: [
+                {
+                  text: previewOnlyLearning,
+                  relevance: "general",
+                },
+              ],
+            }),
+          }),
+          scoredAnalysisItem(debateQuestion),
+        ],
+      }))
+      .mockImplementationOnce(async () => ({
+        items: [
+          scoredAnalysisItem(miniFramework, {
+            postCoach: readyPostCoach({
+              expanded: true,
+              previewMode: false,
+              sections: [
+                {
+                  title: "Worth a look",
+                  items: [
+                    {
+                      id: "expanded-only-check",
+                      label: expandedOnlyCheck,
+                      status: "pass",
+                    },
+                  ],
+                },
+              ],
+              learnings: [
+                {
+                  text: expandedOnlyLearning,
+                  relevance: "matched",
+                },
+              ],
+            }),
+          }),
+        ],
+      }));
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(vi.fn(async () => response), analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Expanded details should not replace compact board preview.");
+    await driver.generate();
+    const openHtml = await driver.openDetails(miniFramework.id);
+
+    expect(dialogTextSegment(openHtml)).toContain(expandedOnlyCheck);
+    expect(dialogTextSegment(openHtml)).toContain(expandedOnlyLearning);
+
+    const closedText = textContent(driver.closeDetails());
+    const miniFrameworkSegment = candidateTextSegment(
+      closedText,
+      miniFramework.text,
+      debateQuestion.text,
+    );
+
+    expect(miniFrameworkSegment).toContain(previewOnlyCheck);
+    expect(miniFrameworkSegment).toContain(previewOnlyLearning);
+    expect(miniFrameworkSegment).not.toContain(expandedOnlyCheck);
+    expect(miniFrameworkSegment).not.toContain(expandedOnlyLearning);
+  });
+
+  it("does not reopen details when a closed expanded request resolves", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const [oneLiner, miniFramework, debateQuestion] = response.candidates;
+    if (
+      oneLiner === undefined ||
+      miniFramework === undefined ||
+      debateQuestion === undefined
+    ) {
+      throw new Error("Expected the writer fixture to include three candidates.");
+    }
+    const expandedDetails = createDeferred<AnalyzePostsResponse>();
+    const staleExpandedCheck = "Stale expanded detail should stay closed";
+    const analyzePosts = vi
+      .fn<WriterApiClient["analyzePosts"]>()
+      .mockImplementationOnce(async () => createAnalyzePostsResponse(response))
+      .mockImplementationOnce(() => expandedDetails.promise);
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(vi.fn(async () => response), analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Closed details should ignore stale expanded analysis.");
+    await driver.generate();
+    const openDetails = driver.openDetails(oneLiner.id);
+    await flushAsyncTasks();
+
+    const loadingHtml = driver.render();
+    expect(loadingHtml).toContain('role="dialog"');
+    expect(textContent(loadingHtml)).toContain("Loading deterministic details");
+
+    const closedHtml = driver.closeDetails();
+    expect(closedHtml).not.toContain('role="dialog"');
+
+    expandedDetails.resolve({
+      items: [
+        scoredAnalysisItem(oneLiner, {
+          postCoach: readyPostCoach({
+            expanded: true,
+            previewMode: false,
+            sections: [
+              {
+                title: "Worth a look",
+                items: [
+                  {
+                    id: "stale-expanded-check",
+                    label: staleExpandedCheck,
+                    status: "warn",
+                  },
+                ],
+              },
+            ],
+          }),
+        }),
+      ],
+    });
+    const resolvedHtml = await openDetails;
+    const resolvedText = textContent(resolvedHtml);
+
+    expect(analyzePosts).toHaveBeenCalledTimes(2);
+    expect(analyzePosts).toHaveBeenNthCalledWith(
+      2,
+      expectedExpandedAnalyzePostsRequestFor(oneLiner),
+    );
+    expect(resolvedHtml).not.toContain('role="dialog"');
+    expect(resolvedText).not.toContain("Deterministic details");
+    expect(resolvedText).not.toContain(staleExpandedCheck);
+    expect(resolvedText).toContain(oneLiner.text);
+    expect(resolvedText).toContain(miniFramework.text);
+    expect(resolvedText).toContain(debateQuestion.text);
   });
 
   it("closes details with Escape, keeps the board mounted, and returns focus to the details trigger", async () => {
