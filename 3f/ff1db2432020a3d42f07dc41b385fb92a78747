@@ -1,0 +1,28 @@
+client/src/features/writer/deterministic/components.tsx
+  s_9b10549703c0eb::t_9bd840d8bd9f7b 63,436-450
+client/src/features/writer/writer-workflow.ts
+  s_9b10549703c0eb::t_f02b846048578e 429-431,841,858-859,861,863-866,984
+  s_9b10549703c0eb::t_374e182dba0ab5 842-854
+client/src/features/writer/tests/writer-page.test.tsx
+  s_9b10549703c0eb::t_be713626291a7a 1665-1714,1922-2024
+  s_9b10549703c0eb::t_538993bbfe5a8d 794-896
+client/src/features/writer/writer-page.tsx
+  s_9b10549703c0eb::t_7a58629ac9c57f 3,342-351,354,358,362,366,370,374,378-379,383,387,391,395,405
+  s_9b10549703c0eb::t_87b7de04681e6f 315
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "3fff1db2432020a3d42f07dc41b385fb92a78747",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
