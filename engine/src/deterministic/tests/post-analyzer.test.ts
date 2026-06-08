@@ -39,6 +39,33 @@ function findCheck(checks: readonly VoiceCheck[], id: string): VoiceCheck {
   return check;
 }
 
+function scoreValueFromReturnedChecks(checks: readonly VoiceCheck[]): number {
+  const nonQualityChecks = checks.filter((check) => check.kind !== "quality");
+  const qualityChecks = checks.filter((check) => check.kind === "quality");
+  const nonQualityPoints = nonQualityChecks.reduce((sum, check) => {
+    if (check.status === "pass") {
+      return sum + 1;
+    }
+
+    if (check.status === "warn") {
+      return sum + 0.5;
+    }
+
+    return sum;
+  }, 0);
+  const nonQualityScore =
+    nonQualityChecks.length === 0
+      ? 100
+      : Math.round((nonQualityPoints / nonQualityChecks.length) * 100);
+  const qualityPasses = qualityChecks.filter((check) => check.status === "pass").length;
+  const qualityScore =
+    qualityChecks.length === 0
+      ? 100
+      : Math.round(40 + (qualityPasses / qualityChecks.length) * 60);
+
+  return Math.min(nonQualityScore, qualityScore);
+}
+
 describe("deterministic post analyzer", () => {
   it("detects the supported post formats from observable text structure", () => {
     expect(detectFormat("Hot take: most dashboards are just procrastination")).toBe("hot_take");
@@ -400,6 +427,12 @@ describe("deterministic post analyzer", () => {
     const failedSectionIds =
       card.sections.find((section) => section.title === "Worth a look")?.items.map((check) => check.id) ??
       [];
+    const warnedSectionIds =
+      card.sections.find((section) => section.title === "Nudges")?.items.map((check) => check.id) ??
+      [];
+    const passedSectionIds =
+      card.sections.find((section) => section.title === "On point")?.items.map((check) => check.id) ??
+      [];
 
     expect(failedSectionIds).toEqual(
       expect.arrayContaining([
@@ -407,6 +440,51 @@ describe("deterministic post analyzer", () => {
         "quality_answerable_question",
       ]),
     );
+    expect(card.failed.map((check) => check.id)).toEqual(
+      expect.arrayContaining(["quality_answerable_question", "link_density"]),
+    );
+    expect(card.warned.map((check) => check.id)).toEqual(
+      expect.arrayContaining([
+        "quality_vague_curiosity",
+        "quality_one_idea_focus",
+        "mention_density",
+      ]),
+    );
+    expect(card.passed.map((check) => check.id)).toEqual(
+      expect.arrayContaining(["line_length"]),
+    );
+    expect(warnedSectionIds).toEqual(
+      expect.arrayContaining([
+        "quality_vague_curiosity",
+        "quality_one_idea_focus",
+        "mention_density",
+      ]),
+    );
+    expect(passedSectionIds).toEqual(expect.arrayContaining(["line_length"]));
+  });
+
+  it("keeps the public voice score explainable from returned checks when variety is injected", () => {
+    const text = [
+      "This changed everything. What should we ship? Why now? Should pricing change? Who owns docs?",
+      "",
+      "Also read https://example.com/a and https://example.com/b",
+      "",
+      "Thanks @maya @lee @sam @jo",
+    ].join("\n");
+    const varietyCheck: VoiceCheck = {
+      id: "variety_recent_format",
+      label: "Recent format variety",
+      status: "pass",
+    };
+    const scoreWithoutVariety = runVoiceChecks(text);
+    const scoreWithVariety = runVoiceChecks(text, { varietyCheck });
+
+    expect(scoreWithoutVariety.value).toBe(scoreValueFromReturnedChecks(scoreWithoutVariety.checks));
+    expect(scoreWithVariety.checks.map((check) => check.id)).toEqual(
+      expect.arrayContaining(["variety_recent_format", ...enrichedTextCheckIds]),
+    );
+    expect(scoreWithVariety.value).toBe(scoreValueFromReturnedChecks(scoreWithVariety.checks));
+    expect(scoreWithVariety.value).toBe(scoreWithoutVariety.value);
   });
 
   it("derives a variety check from recent post history without browser storage", () => {
