@@ -44,13 +44,14 @@ Before starting the backlog, read:
 ## Backlog Order
 
 1. `[FND] Shared deterministic analyze schemas`
-2. `[FND] DeterministicAnalysisService wrapper`
-3. `[BE] POST /posts/analyze Fastify route`
-4. `[FE] EngineApiClient.analyzePosts`
-5. `[FND] Deterministic display primitives`
-6. `[FE] Writer two-phase generation/scoring state`
-7. `[FE] Manual follower context and prediction recompute`
-8. `[FE] Slot format vs detected format rendering`
-9. `[FE] Deterministic detail inspector`
-10. `[INT] Writer deterministic happy path`
-11. `[INT] Score retry preserves generated candidates`
+2. `[FND] Deterministic text enrichment checks`
+3. `[FND] DeterministicAnalysisService wrapper`
+4. `[BE] POST /posts/analyze Fastify route`
+5. `[FE] EngineApiClient.analyzePosts`
+6. `[FND] Deterministic display primitives`
+7. `[FE] Writer two-phase generation/scoring state`
+8. `[FE] Manual follower context and prediction recompute`
+9. `[FE] Slot format vs detected format rendering`
+10. `[FE] Deterministic detail inspector`
+11. `[INT] Writer deterministic happy path`
+12. `[INT] Score retry preserves generated candidates`
