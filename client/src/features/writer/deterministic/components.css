@@ -33,7 +33,8 @@
 }
 
 .xb-post-coach-card__summary,
-.xb-post-coach-card__engageability {
+.xb-post-coach-card__engageability,
+.xb-deterministic-detail-inspector__actions {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;

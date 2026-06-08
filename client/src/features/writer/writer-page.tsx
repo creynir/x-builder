@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useState,
   type FormEvent,
   type ReactElement,
@@ -7,18 +8,23 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { GeneratedIdeaCandidate } from "@x-builder/shared";
 
 import { RouteErrorBanner } from "../../shell/route-error-banner";
-import { Badge, Button, Skeleton } from "../../ui/foundation";
+import { Badge, Button, Drawer, Skeleton } from "../../ui/foundation";
 import {
   CandidateDeterministicSummary,
+  DeterministicDetailInspector,
   ManualScoringContextPanel,
 } from "./deterministic/components";
 import {
   applyFollowerDraftChange,
   applyIdeaChange,
+  closeDetails,
+  closeDetailsWithEscape,
   createInitialModel,
   runApplyFollowers,
   runGenerate,
+  runOpenDetails,
   runRetry,
+  runRetryDetails,
   runRetryScore,
   type CandidateAnalysisState,
   type WriterApiClient,
@@ -38,10 +44,17 @@ export type WriterPagePublicDriverOptions = WriterPageProps & {
 
 export type WriterPagePublicDriver = {
   applyFollowers: () => Promise<string>;
+  closeDetails: () => string;
+  closeDetailsWithEscape: () => {
+    activeTarget: string;
+    html: string;
+  };
   generate: () => Promise<string>;
+  openDetails: (itemId: string) => Promise<string>;
   openSettings: () => void;
   render: () => string;
   retry: () => Promise<string>;
+  retryDetails: () => Promise<string>;
   retryScore: (itemId: string) => Promise<string>;
   updateFollowers: (followers: string) => string;
   updateIdea: (idea: string) => string;
@@ -53,11 +66,14 @@ function candidateLabel(format: GeneratedIdeaCandidate["format"]): string {
 
 type WriterPageViewProps = WriterPageModel & {
   onApplyFollowers: () => void;
+  onCloseDetails: () => void;
   onFollowersChange: (followers: string) => void;
   onGenerate: () => void;
   onIdeaChange: (idea: string) => void;
+  onOpenDetails: (itemId: string) => void;
   onOpenSettings: () => void;
   onRetry: () => Promise<void>;
+  onRetryDetails: () => void;
   onRetryScore: (itemId: string) => Promise<void>;
 };
 
@@ -118,17 +134,21 @@ function WriterPageView({
   analysisByCandidateId,
   appliedFollowers,
   candidates,
+  detail,
   fieldError,
   followerDraft,
   followerError,
   idea,
   isGenerating,
   onApplyFollowers,
+  onCloseDetails,
   onFollowersChange,
   onGenerate,
   onIdeaChange,
+  onOpenDetails,
   onOpenSettings,
   onRetry,
+  onRetryDetails,
   onRetryScore,
   routeError,
 }: WriterPageViewProps): ReactElement {
@@ -205,11 +225,19 @@ function WriterPageView({
             <Skeleton height={92} label="Generating candidate three" width={540} />
           </div>
         ) : null}
-        {!isGenerating && candidates.length > 0 ? (
+        {!isGenerating && candidates.length > 0 && detail.status === "closed" ? (
           <div className="xb-writer-candidates">
             {candidates.map((candidate) => (
               <article className="xb-writer-candidate" key={candidate.id}>
                 <Badge variant="info">{candidateLabel(candidate.format)}</Badge>
+                <Button
+                  data-focus-target={`candidate-details:${candidate.id}`}
+                  onClick={() => onOpenDetails(candidate.id)}
+                  type="button"
+                  variant="secondary"
+                >
+                  Details
+                </Button>
                 <CandidateAnalysis
                   candidate={candidate}
                   onApplyFollowers={onApplyFollowers}
@@ -221,6 +249,37 @@ function WriterPageView({
           </div>
         ) : null}
       </section>
+      <Drawer
+        closeLabel="Close deterministic details"
+        onClose={onCloseDetails}
+        open={detail.status !== "closed"}
+        title="Deterministic details"
+      >
+        {detail.status === "closed" ? (
+          <DeterministicDetailInspector
+            message="Select a candidate to inspect deterministic scoring."
+            state="empty"
+          />
+        ) : detail.status === "loading" ? (
+          <DeterministicDetailInspector
+            label="Loading deterministic details"
+            state="loading"
+          />
+        ) : detail.status === "failed" ? (
+          <DeterministicDetailInspector
+            item={detail.item}
+            onRetryExpandedPostCoach={onRetryDetails}
+            state="failed"
+          />
+        ) : (
+          <DeterministicDetailInspector
+            item={detail.item}
+            onAddFollowers={onApplyFollowers}
+            onRetryExpandedPostCoach={onRetryDetails}
+            state="ready"
+          />
+        )}
+      </Drawer>
     </section>
   );
 }
@@ -233,6 +292,10 @@ export function WriterPage({
 
   const applyFollowers = () => {
     void runApplyFollowers(apiClient, model, setModel);
+  };
+
+  const closeDetailInspector = () => {
+    setModel((current) => closeDetailsWithEscape(current));
   };
 
   const updateFollowers = (followers: string) => {
@@ -251,19 +314,59 @@ export function WriterPage({
     await runRetry(apiClient, model, setModel);
   };
 
+  const openDetails = (itemId: string) => {
+    void runOpenDetails(apiClient, model, itemId, setModel);
+  };
+
+  const retryDetails = () => {
+    void runRetryDetails(apiClient, model, setModel);
+  };
+
   const retryScore = async (itemId: string) => {
     await runRetryScore(apiClient, model, itemId, setModel);
   };
+
+  useEffect(() => {
+    if (model.detail.status === "closed") {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setModel((current) => closeDetailsWithEscape(current));
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [model.detail.status]);
+
+  useEffect(() => {
+    if (model.activeFocusTarget === null) {
+      return;
+    }
+
+    const target = document.querySelector<HTMLElement>(
+      `[data-focus-target="${model.activeFocusTarget}"]`,
+    );
+    target?.focus();
+  }, [model.activeFocusTarget]);
 
   return (
     <WriterPageView
       {...model}
       onApplyFollowers={applyFollowers}
+      onCloseDetails={closeDetailInspector}
       onFollowersChange={updateFollowers}
       onGenerate={generate}
       onIdeaChange={updateIdea}
+      onOpenDetails={openDetails}
       onOpenSettings={onOpenSettings}
       onRetry={retry}
+      onRetryDetails={retryDetails}
       onRetryScore={retryScore}
     />
   );
@@ -277,11 +380,14 @@ function renderDriverPage(
     <WriterPageView
       {...model}
       onApplyFollowers={() => undefined}
+      onCloseDetails={() => undefined}
       onFollowersChange={() => undefined}
       onGenerate={() => undefined}
       onIdeaChange={() => undefined}
+      onOpenDetails={() => undefined}
       onOpenSettings={onOpenSettings}
       onRetry={async () => undefined}
+      onRetryDetails={() => undefined}
       onRetryScore={async () => undefined}
     />,
   );
@@ -302,8 +408,24 @@ export function createWriterPagePublicDriver(
       await runApplyFollowers(options.apiClient, model, publishModel);
       return render();
     },
+    closeDetails: () => {
+      model = closeDetails(model);
+      return render();
+    },
+    closeDetailsWithEscape: () => {
+      model = closeDetailsWithEscape(model);
+
+      return {
+        activeTarget: model.activeFocusTarget ?? "",
+        html: render(),
+      };
+    },
     generate: async () => {
       await runGenerate(options.apiClient, model, publishModel);
+      return render();
+    },
+    openDetails: async (itemId: string) => {
+      await runOpenDetails(options.apiClient, model, itemId, publishModel);
       return render();
     },
     openSettings: () => {
@@ -312,6 +434,10 @@ export function createWriterPagePublicDriver(
     render,
     retry: async () => {
       await runRetry(options.apiClient, model, publishModel);
+      return render();
+    },
+    retryDetails: async () => {
+      await runRetryDetails(options.apiClient, model, publishModel);
       return render();
     },
     retryScore: async (itemId: string) => {

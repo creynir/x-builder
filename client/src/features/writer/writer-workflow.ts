@@ -35,10 +35,37 @@ export type CandidateAnalysisState =
       status: "stale";
     };
 
+type ScoredAnalyzedPostItem = Extract<AnalyzedPostItem, { status: "scored" }>;
+type ScoreFailedAnalyzedPostItem = Extract<
+  AnalyzedPostItem,
+  { status: "score_failed" }
+>;
+
+export type CandidateDetailState =
+  | {
+      status: "closed";
+    }
+  | {
+      candidate: GeneratedIdeaCandidate;
+      status: "loading";
+    }
+  | {
+      candidate: GeneratedIdeaCandidate;
+      item: ScoredAnalyzedPostItem;
+      status: "ready";
+    }
+  | {
+      candidate: GeneratedIdeaCandidate;
+      item: ScoreFailedAnalyzedPostItem;
+      status: "failed";
+    };
+
 export type WriterPageModel = {
+  activeFocusTarget: string | null;
   analysisByCandidateId: Record<string, CandidateAnalysisState>;
   appliedFollowers: number | undefined;
   candidates: GeneratedIdeaCandidate[];
+  detail: CandidateDetailState;
   fieldError: string | null;
   followerDraft: string;
   followerError: string | null;
@@ -53,9 +80,13 @@ const invalidFollowersError = "Enter your current follower count to estimate imp
 
 export function createInitialModel(): WriterPageModel {
   return {
+    activeFocusTarget: null,
     analysisByCandidateId: {},
     appliedFollowers: undefined,
     candidates: [],
+    detail: {
+      status: "closed",
+    },
     fieldError: null,
     followerDraft: "",
     followerError: null,
@@ -138,6 +169,7 @@ function payloadFromIdea(idea: string): PayloadResult {
 function candidateAnalysisRequest(
   candidates: GeneratedIdeaCandidate[],
   followers: number | undefined,
+  postCoachMode: AnalyzePostsRequest["presentation"]["postCoachMode"] = "preview",
 ): AnalyzePostsRequest {
   return {
     items: candidates.map((candidate) => ({
@@ -146,7 +178,7 @@ function candidateAnalysisRequest(
       sourceFormat: candidate.format,
     })),
     presentation: {
-      postCoachMode: "preview",
+      postCoachMode,
     },
     scoringContext: followers === undefined ? {} : { followers },
   };
@@ -221,7 +253,7 @@ function createLoadingAnalysis(
 function createScoreFailedItem(
   candidate: GeneratedIdeaCandidate,
   error: ApiError,
-): AnalyzedPostItem {
+): ScoreFailedAnalyzedPostItem {
   return {
     status: "score_failed",
     id: candidate.id,
@@ -299,6 +331,7 @@ async function requestAnalysis(
   apiClient: WriterApiClient,
   candidates: GeneratedIdeaCandidate[],
   followers: number | undefined,
+  postCoachMode: AnalyzePostsRequest["presentation"]["postCoachMode"] = "preview",
 ): Promise<
   | {
       items: AnalyzedPostItem[];
@@ -311,7 +344,7 @@ async function requestAnalysis(
 > {
   try {
     const response = await apiClient.analyzePosts(
-      candidateAnalysisRequest(candidates, followers),
+      candidateAnalysisRequest(candidates, followers, postCoachMode),
     );
 
     return {
@@ -411,6 +444,83 @@ function applyAnalysisResult(
             : [[candidate.id, analysisStateFromItem(candidate, item)]];
         }),
       ),
+    },
+  };
+}
+
+function applyDetailAnalysisResult(
+  model: WriterPageModel,
+  candidate: GeneratedIdeaCandidate,
+  result: Awaited<ReturnType<typeof requestAnalysis>>,
+): WriterPageModel {
+  if (!candidatesStillPresent(model.candidates, [candidate])) {
+    return model;
+  }
+
+  if (result.type === "error") {
+    const item = createScoreFailedItem(candidate, result.error);
+
+    return {
+      ...model,
+      detail: {
+        candidate,
+        item,
+        status: "failed",
+      },
+    };
+  }
+
+  const item = result.items.find((analysisItem) => analysisItem.id === candidate.id);
+
+  if (item === undefined) {
+    const fallbackError: ApiError = {
+      code: "deterministic_analysis_failed",
+      message: "Could not load deterministic details.",
+      retryable: true,
+      scope: "writer",
+      status: 500,
+    };
+
+    return {
+      ...model,
+      detail: {
+        candidate,
+        item: createScoreFailedItem(candidate, fallbackError),
+        status: "failed",
+      },
+    };
+  }
+
+  const candidateItem = {
+    ...item,
+    sourceFormat: candidate.format,
+  };
+
+  if (candidateItem.status === "score_failed") {
+    return {
+      ...model,
+      analysisByCandidateId: {
+        ...model.analysisByCandidateId,
+        [candidate.id]: analysisStateFromItem(candidate, candidateItem),
+      },
+      detail: {
+        candidate,
+        item: candidateItem,
+        status: "failed",
+      },
+    };
+  }
+
+  return {
+    ...model,
+    analysisByCandidateId: {
+      ...model.analysisByCandidateId,
+      [candidate.id]: analysisStateFromItem(candidate, candidateItem),
+    },
+    detail: {
+      candidate,
+      item: candidateItem,
+      status: "ready",
     },
   };
 }
@@ -651,4 +761,96 @@ export async function runRetryScore(
   publish(currentModel);
 
   return currentModel;
+}
+
+export async function runOpenDetails(
+  apiClient: WriterApiClient,
+  model: WriterPageModel,
+  itemId: string,
+  publish: PublishModel,
+): Promise<WriterPageModel> {
+  const candidate = model.candidates.find((item) => item.id === itemId);
+
+  if (candidate === undefined) {
+    return model;
+  }
+
+  const followerContext = parseFollowerDraft(model.followerDraft);
+  let currentModel = applyParsedFollowers(
+    {
+      ...model,
+      activeFocusTarget: null,
+      detail: {
+        candidate,
+        status: "loading",
+      },
+    },
+    followerContext,
+  );
+
+  publish(currentModel);
+
+  if (followerContext.type === "error") {
+    const item = createScoreFailedItem(candidate, {
+      code: "validation_failed",
+      message: followerContext.error,
+      retryable: true,
+      scope: "field",
+      status: 400,
+    });
+
+    currentModel = {
+      ...currentModel,
+      detail: {
+        candidate,
+        item,
+        status: "failed",
+      },
+    };
+    publish(currentModel);
+    return currentModel;
+  }
+
+  const analysisResult = await requestAnalysis(
+    apiClient,
+    [candidate],
+    followerContext.followers,
+    "expanded",
+  );
+  currentModel = applyDetailAnalysisResult(currentModel, candidate, analysisResult);
+  publish(currentModel);
+
+  return currentModel;
+}
+
+export async function runRetryDetails(
+  apiClient: WriterApiClient,
+  model: WriterPageModel,
+  publish: PublishModel,
+): Promise<WriterPageModel> {
+  if (model.detail.status === "closed") {
+    return model;
+  }
+
+  return runOpenDetails(apiClient, model, model.detail.candidate.id, publish);
+}
+
+export function closeDetails(model: WriterPageModel): WriterPageModel {
+  return {
+    ...model,
+    detail: {
+      status: "closed",
+    },
+  };
+}
+
+export function closeDetailsWithEscape(model: WriterPageModel): WriterPageModel {
+  if (model.detail.status === "closed") {
+    return model;
+  }
+
+  return {
+    ...closeDetails(model),
+    activeFocusTarget: `candidate-details:${model.detail.candidate.id}`,
+  };
 }

@@ -20,6 +20,10 @@ import {
 import "./components.css";
 
 type ScoredAnalyzedPostItem = Extract<AnalyzedPostItem, { status: "scored" }>;
+type ScoreFailedAnalyzedPostItem = Extract<
+  AnalyzedPostItem,
+  { status: "score_failed" }
+>;
 
 export type CandidateDeterministicSummaryProps = {
   item: AnalyzedPostItem;
@@ -58,6 +62,13 @@ export type DeterministicDetailInspectorProps =
   | {
       state: "ready";
       item: ScoredAnalyzedPostItem;
+      onAddFollowers?: () => void;
+      onRetryExpandedPostCoach?: () => void;
+    }
+  | {
+      state: "failed";
+      item: ScoreFailedAnalyzedPostItem;
+      onRetryExpandedPostCoach?: () => void;
     };
 
 function scoreBadgeVariant(
@@ -403,13 +414,102 @@ export function DeterministicDetailInspector(
     );
   }
 
+  if (props.state === "failed") {
+    return (
+      <aside className="xb-deterministic-detail-inspector" aria-label="Deterministic details">
+        <h2>Deterministic details</h2>
+        <p className="xb-deterministic-detail-inspector__text">{props.item.text}</p>
+        <KeyValueList
+          items={[
+            {
+              label: "Source format",
+              value: props.item.sourceFormat ?? "Unknown",
+            },
+            {
+              label: "Reason",
+              value: props.item.reason,
+            },
+          ]}
+        />
+        <Alert
+          variant="danger"
+          title="Could not load details"
+          recovery={
+            props.onRetryExpandedPostCoach === undefined ? undefined : (
+              <Button
+                disabled={!props.item.retryable}
+                onClick={props.onRetryExpandedPostCoach}
+                type="button"
+                variant="secondary"
+              >
+                Retry expanded Post Coach
+              </Button>
+            )
+          }
+        >
+          {props.item.message}
+        </Alert>
+      </aside>
+    );
+  }
+
+  const showFollowersRecovery =
+    props.item.prediction.status === "disabled" &&
+    props.item.prediction.reason === "missing_followers" &&
+    props.onAddFollowers !== undefined;
+
   return (
     <aside className="xb-deterministic-detail-inspector" aria-label="Deterministic details">
       <h2>Deterministic details</h2>
-      <CandidateDeterministicSummary
-        item={props.item}
-        onRetryScore={() => undefined}
+      <p className="xb-deterministic-detail-inspector__text">{props.item.text}</p>
+      <ScoreBar
+        label="Deterministic score"
+        value={props.item.score.value}
+        bandLabel={
+          props.item.postCoach.state === "ready"
+            ? props.item.postCoach.badge.label
+            : undefined
+        }
+        helpText={props.item.heuristicLabel}
       />
+      <KeyValueList
+        items={[
+          {
+            label: "Source format",
+            value: props.item.sourceFormat ?? "Unknown",
+          },
+          {
+            label: "Detected format",
+            value: props.item.detectedFormat,
+          },
+          {
+            label: "Analyzed at",
+            value: props.item.analyzedAt,
+          },
+          {
+            label: "Analyzer",
+            value: props.item.analyzerVersion,
+          },
+        ]}
+      />
+      <PostCoachCard postCoach={props.item.postCoach} />
+      <EngagementPredictionCard prediction={props.item.prediction} />
+      <div className="xb-deterministic-detail-inspector__actions">
+        {showFollowersRecovery ? (
+          <Button onClick={props.onAddFollowers} type="button" variant="secondary">
+            Add followers
+          </Button>
+        ) : null}
+        {props.onRetryExpandedPostCoach === undefined ? null : (
+          <Button
+            onClick={props.onRetryExpandedPostCoach}
+            type="button"
+            variant="secondary"
+          >
+            Retry expanded Post Coach
+          </Button>
+        )}
+      </div>
     </aside>
   );
 }
