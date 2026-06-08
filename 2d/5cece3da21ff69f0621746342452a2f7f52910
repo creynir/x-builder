@@ -1,0 +1,21 @@
+client/src/features/writer/tests/deterministic-components.test.tsx
+  s_9b10549703c0eb::t_38ccba1f959701 552,574,587,590-591,619,621-622,626
+client/src/features/writer/tests/writer-page.test.tsx
+  s_9b10549703c0eb::t_84399c138715ff 46-49,916,929,939,975,978,1060,1095,1139-1176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "2d5cece3da21ff69f0621746342452a2f7f52910",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
