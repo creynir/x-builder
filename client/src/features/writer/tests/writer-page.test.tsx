@@ -791,6 +791,109 @@ describe("WriterPage generation behavior", () => {
     expect(finalText).not.toContain("Older generated text should not replace the current run.");
   });
 
+  it("does not score stale generation responses after a newer run succeeds", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const olderGeneration = createDeferred<GenerateIdeaResponse>();
+    const newerGeneration = createDeferred<GenerateIdeaResponse>();
+    const olderResponse: GenerateIdeaResponse = {
+      candidates: [
+        {
+          format: "one-liner",
+          id: "older-candidate",
+          text: "Older generated text should not be scored.",
+        },
+      ],
+    };
+    const newerResponse: GenerateIdeaResponse = {
+      candidates: [
+        {
+          format: "one-liner",
+          id: "newer-candidate",
+          text: "Newer generated text should be scored.",
+        },
+      ],
+    };
+    const generateIdea = vi
+      .fn<WriterApiClient["generateIdea"]>()
+      .mockImplementationOnce(() => olderGeneration.promise)
+      .mockImplementationOnce(() => newerGeneration.promise);
+    const analyzePosts = vi.fn<WriterApiClient["analyzePosts"]>(
+      async (request) => ({
+        items: request.items.map((item) =>
+          scoredAnalysisItem({
+            format: item.sourceFormat ?? "one-liner",
+            id: item.id,
+            text: item.text,
+          }),
+        ),
+      }),
+    );
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(generateIdea, analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Older generation request.");
+    const olderRun = driver.generate();
+    await flushAsyncTasks();
+    driver.updateIdea("Newer generation request.");
+    const newerRun = driver.generate();
+    await flushAsyncTasks();
+
+    newerGeneration.resolve(newerResponse);
+    await newerRun;
+    olderGeneration.resolve(olderResponse);
+    await olderRun;
+
+    expect(generateIdea).toHaveBeenCalledTimes(2);
+    expect(analyzePosts).toHaveBeenCalledOnce();
+    expect(analyzePosts).toHaveBeenCalledWith(
+      expectedAnalyzePostsRequest(newerResponse.candidates),
+    );
+  });
+
+  it("uses latest follower draft when generation resolves after follower edits", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const generation = createDeferred<GenerateIdeaResponse>();
+    const analyzePosts = vi.fn<WriterApiClient["analyzePosts"]>(async () => ({
+      items: response.candidates.map((candidate) =>
+        scoredAnalysisItem(candidate, {
+          prediction: availablePrediction({
+            rangeLow: 700,
+            rangeHigh: 1400,
+            midpoint: 1050,
+          }),
+        }),
+      ),
+    }));
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(vi.fn(() => generation.promise), analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateFollowers("4200");
+    driver.updateIdea("Follower edits during generation should not strand scoring.");
+    const generate = driver.generate();
+    await flushAsyncTasks();
+    driver.updateFollowers("7777");
+
+    generation.resolve(response);
+    const html = await generate;
+    const text = textContent(html);
+
+    expect(analyzePosts).toHaveBeenCalledOnce();
+    expect(analyzePosts).toHaveBeenCalledWith(
+      expectedAnalyzePostsRequest(response.candidates, { followers: 7777 }),
+    );
+    expect(html).toContain('value="7777"');
+    expect(text).toContain("700 - 1400");
+    expect(text).not.toContain("Scoring candidate");
+    expect(text).not.toContain("Prediction needs refresh.");
+  });
+
   it("attaches successful scoring results to their generated candidates by candidate id", async () => {
     const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
     const response = createValidIdeaResponse();
@@ -1559,6 +1662,56 @@ describe("WriterPage generation behavior", () => {
     expect(text).toContain(debateQuestion.text);
   });
 
+  it("closes stale details when a new generation succeeds", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const firstResponse = createValidIdeaResponse();
+    const [oneLiner] = firstResponse.candidates;
+    if (oneLiner === undefined) {
+      throw new Error("Expected the writer fixture to include a candidate.");
+    }
+    const nextResponse: GenerateIdeaResponse = {
+      candidates: [
+        {
+          format: "one-liner",
+          id: "replacement-candidate",
+          text: "Replacement candidate should not share stale details.",
+        },
+      ],
+    };
+    const generateIdea = vi
+      .fn<WriterApiClient["generateIdea"]>()
+      .mockImplementationOnce(async () => firstResponse)
+      .mockImplementationOnce(async () => nextResponse);
+    const analyzePosts = vi
+      .fn<WriterApiClient["analyzePosts"]>()
+      .mockImplementationOnce(async () => createAnalyzePostsResponse(firstResponse))
+      .mockImplementationOnce(async () => ({
+        items: [scoredAnalysisItem(oneLiner)],
+      }))
+      .mockImplementationOnce(async () => createAnalyzePostsResponse(nextResponse));
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(generateIdea, analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Open details before generating again.");
+    await driver.generate();
+    const openHtml = await driver.openDetails(oneLiner.id);
+
+    expect(openHtml).toContain('role="dialog"');
+    expect(dialogTextSegment(openHtml)).toContain(oneLiner.text);
+
+    const nextHtml = await driver.generate();
+    const nextText = textContent(nextHtml);
+
+    expect(generateIdea).toHaveBeenCalledTimes(2);
+    expect(nextHtml).not.toContain('role="dialog"');
+    expect(nextText).not.toContain("Deterministic details");
+    expect(nextText).not.toContain(oneLiner.text);
+    expect(nextText).toContain("Replacement candidate should not share stale details.");
+  });
+
   it("closes an open detail inspector when follower context changes", async () => {
     const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
     const response = createValidIdeaResponse();
@@ -1764,6 +1917,111 @@ describe("WriterPage generation behavior", () => {
     expect(retryText).toContain("88");
     expect(retryText).toContain("On point");
     expect(retryText).toContain("Recovered expanded Post Coach payload");
+  });
+
+  it("offers retry when detail route analysis fails", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const [oneLiner] = response.candidates;
+    if (oneLiner === undefined) {
+      throw new Error("Expected the writer fixture to include a candidate.");
+    }
+    const detailError = createApiError({
+      code: "deterministic_analysis_failed",
+      message: "Expanded deterministic details are temporarily unavailable.",
+      retryable: true,
+      scope: "writer",
+      status: 503,
+    });
+    const analyzePosts = vi
+      .fn<WriterApiClient["analyzePosts"]>()
+      .mockImplementationOnce(async () => createAnalyzePostsResponse(response))
+      .mockImplementationOnce(async () => throwApiError(detailError))
+      .mockImplementationOnce(async () => ({
+        items: [
+          scoredAnalysisItem(oneLiner, {
+            postCoach: readyPostCoach({
+              expanded: true,
+              previewMode: false,
+              sections: [
+                {
+                  title: "On point",
+                  items: [
+                    {
+                      id: "retried-detail",
+                      label: "Retried detail payload",
+                      status: "pass",
+                    },
+                  ],
+                },
+              ],
+            }),
+          }),
+        ],
+      }));
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(vi.fn(async () => response), analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Detail route errors should expose retry.");
+    await driver.generate();
+    const failedHtml = await driver.openDetails(oneLiner.id);
+    const failedDialogText = dialogTextSegment(failedHtml);
+
+    expect(failedDialogText).toContain("Expanded deterministic details are temporarily unavailable.");
+    expect(failedDialogText).toContain("Retry expanded Post Coach");
+
+    const retryHtml = await driver.retryDetails();
+    const retryDialogText = dialogTextSegment(retryHtml);
+
+    expect(analyzePosts).toHaveBeenCalledTimes(3);
+    expect(analyzePosts).toHaveBeenNthCalledWith(
+      3,
+      expectedExpandedAnalyzePostsRequestFor(oneLiner),
+    );
+    expect(retryDialogText).toContain("Retried detail payload");
+  });
+
+  it("does not start duplicate expanded detail analysis while details are loading", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const [oneLiner] = response.candidates;
+    if (oneLiner === undefined) {
+      throw new Error("Expected the writer fixture to include a candidate.");
+    }
+    const expandedDetails = createDeferred<AnalyzePostsResponse>();
+    const analyzePosts = vi
+      .fn<WriterApiClient["analyzePosts"]>()
+      .mockImplementationOnce(async () => createAnalyzePostsResponse(response))
+      .mockImplementationOnce(() => expandedDetails.promise)
+      .mockImplementation(async () => ({
+        items: [scoredAnalysisItem(oneLiner)],
+      }));
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(vi.fn(async () => response), analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Duplicate details clicks should not duplicate expanded scoring.");
+    await driver.generate();
+    const firstOpen = driver.openDetails(oneLiner.id);
+    await flushAsyncTasks();
+    const secondOpen = driver.openDetails(oneLiner.id);
+    await flushAsyncTasks();
+
+    expect(analyzePosts).toHaveBeenCalledTimes(2);
+
+    expandedDetails.resolve({
+      items: [scoredAnalysisItem(oneLiner)],
+    });
+    const firstHtml = await firstOpen;
+    const secondHtml = await secondOpen;
+
+    expect(textContent(firstHtml)).toContain(oneLiner.text);
+    expect(textContent(secondHtml)).toContain(oneLiner.text);
   });
 
   it("closes details and returns to the candidate board", async () => {

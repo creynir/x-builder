@@ -426,6 +426,9 @@ function applyGenerationResult(
           : createLoadingAnalysis(result.candidates, options.analysisRequestId),
       activeGenerationRequestId: null,
       candidates: result.candidates,
+      detail: {
+        status: "closed",
+      },
       fieldError: null,
       isGenerating: false,
       isScoring: options.analysisRequestId !== null,
@@ -835,18 +838,32 @@ async function runGenerationFromStart(
   const generationResult = await requestGeneration(apiClient, start.payload);
   const analysisRequestId =
     generationResult.type === "success" ? nextAnalysisRequestId++ : null;
-  let currentModel = publishLatest(publish, start.model, (latestModel) =>
-    applyGenerationResult(latestModel, start.payload, start.requestId, generationResult, {
-      analysisRequestId,
-    }),
-  );
+  let generationApplied = false;
+  let currentModel = publishLatest(publish, start.model, (latestModel) => {
+    const nextModel = applyGenerationResult(
+      latestModel,
+      start.payload,
+      start.requestId,
+      generationResult,
+      {
+        analysisRequestId,
+      },
+    );
+    generationApplied = nextModel !== latestModel;
+    return nextModel;
+  });
 
   if (
     generationResult.type === "success" &&
-    analysisRequestId !== null
+    analysisRequestId !== null &&
+    generationApplied
   ) {
+    const latestFollowerContext = parseFollowerDraft(currentModel.followerDraft);
     const requestedFollowers =
-      start.followerContext.type === "valid" ? start.followerContext.followers : undefined;
+      latestFollowerContext.type === "valid" ? latestFollowerContext.followers : undefined;
+    currentModel = publishLatest(publish, currentModel, (latestModel) =>
+      applyParsedFollowers(latestModel, latestFollowerContext),
+    );
     const analysisResult = await requestAnalysis(
       apiClient,
       generationResult.candidates,
@@ -964,7 +981,7 @@ export async function runOpenDetails(
   itemId: string,
   publish: PublishModel,
 ): Promise<WriterPageModel> {
-  if (model.isScoring) {
+  if (model.isScoring || model.detail.status === "loading") {
     return model;
   }
 

@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type FormEvent,
   type ReactElement,
@@ -311,6 +312,7 @@ function WriterPageView({
         ) : detail.status === "error" ? (
           <DeterministicDetailInspector
             message={detail.error.message}
+            onRetryExpandedPostCoach={onRetryDetails}
             state="error"
           />
         ) : detail.status === "failed" ? (
@@ -337,50 +339,60 @@ export function WriterPage({
   onOpenSettings,
 }: WriterPageProps): ReactElement {
   const [model, setModel] = useState(createInitialModel);
+  const modelRef = useRef(model);
+  const publishModel = (
+    update: WriterPageModel | ((current: WriterPageModel) => WriterPageModel),
+  ) => {
+    const nextModel =
+      typeof update === "function" ? update(modelRef.current) : update;
+
+    modelRef.current = nextModel;
+    setModel(nextModel);
+  };
 
   const applyFollowers = () => {
-    void runApplyFollowers(apiClient, model, setModel);
+    void runApplyFollowers(apiClient, modelRef.current, publishModel);
   };
 
   const focusFollowers = () => {
-    setModel((current) => focusManualFollowers(current));
+    publishModel((current) => focusManualFollowers(current));
   };
 
   const closeDetailInspector = () => {
-    setModel((current) => closeDetailsWithEscape(current));
+    publishModel((current) => closeDetailsWithEscape(current));
   };
 
   const updateFollowers = (followers: string) => {
-    setModel((current) => applyFollowerDraftChange(current, followers));
+    publishModel((current) => applyFollowerDraftChange(current, followers));
   };
 
   const updateIdea = (idea: string) => {
-    setModel((current) => applyIdeaChange(current, idea));
+    publishModel((current) => applyIdeaChange(current, idea));
   };
 
   const generate = () => {
-    void runGenerate(apiClient, model, setModel);
+    void runGenerate(apiClient, modelRef.current, publishModel);
   };
 
   const retry = async () => {
-    if (shouldRetryAnalysis(model)) {
-      await runRetryAnalysis(apiClient, model, setModel);
+    if (shouldRetryAnalysis(modelRef.current)) {
+      await runRetryAnalysis(apiClient, modelRef.current, publishModel);
       return;
     }
 
-    await runRetry(apiClient, model, setModel);
+    await runRetry(apiClient, modelRef.current, publishModel);
   };
 
   const openDetails = (itemId: string) => {
-    void runOpenDetails(apiClient, model, itemId, setModel);
+    void runOpenDetails(apiClient, modelRef.current, itemId, publishModel);
   };
 
   const retryDetails = () => {
-    void runRetryDetails(apiClient, model, setModel);
+    void runRetryDetails(apiClient, modelRef.current, publishModel);
   };
 
   const retryScore = async (itemId: string) => {
-    await runRetryScore(apiClient, model, itemId, setModel);
+    await runRetryScore(apiClient, modelRef.current, itemId, publishModel);
   };
 
   useEffect(() => {
@@ -390,7 +402,7 @@ export function WriterPage({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setModel((current) => closeDetailsWithEscape(current));
+        publishModel((current) => closeDetailsWithEscape(current));
       }
     };
 

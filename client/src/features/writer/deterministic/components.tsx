@@ -60,6 +60,7 @@ export type DeterministicDetailInspectorProps =
   | {
       state: "error";
       message: string;
+      onRetryExpandedPostCoach?: () => void;
     }
   | {
       state: "ready";
@@ -432,7 +433,21 @@ export function DeterministicDetailInspector(
   if (props.state === "error") {
     return (
       <aside className="xb-deterministic-detail-inspector" aria-label="Deterministic details">
-        <Alert variant="danger" title="Could not load details">
+        <Alert
+          variant="danger"
+          title="Could not load details"
+          recovery={
+            props.onRetryExpandedPostCoach === undefined ? undefined : (
+              <Button
+                onClick={props.onRetryExpandedPostCoach}
+                type="button"
+                variant="secondary"
+              >
+                Retry expanded Post Coach
+              </Button>
+            )
+          }
+        >
           {props.message}
         </Alert>
       </aside>
