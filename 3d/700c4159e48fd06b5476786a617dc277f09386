@@ -1,0 +1,55 @@
+client/src/features/writer/writer-workflow.ts
+  s_9b10549703c0eb::t_bdf5c8b385bb5e 836-837,839-840,848-849,863
+  s_9b10549703c0eb::t_38ccae40f13fd0 844-845,847
+  s_9b10549703c0eb::t_65c0f0ab9423ff 846
+  s_9b10549703c0eb::t_97d59c65c2ce65 900-901,903,915,921,995-996,1001
+  s_9b10549703c0eb::t_ee36580d3c612e 712,725
+  s_9b10549703c0eb::t_c7ffe71882783d 483,492-493,501-502,519,528-529,546-549
+  s_9b10549703c0eb::t_62d9f1f876bfe3 423-426
+  s_9b10549703c0eb::t_4b30e49b9a8e49 894-897,908-909,918-920,922-924
+  s_9b10549703c0eb::t_ff6efe7e4f81a1 576,578,598,600,636,642,644,693-697,707-709,720-722
+  s_9b10549703c0eb::t_d8fecd00de56b3 300
+  s_9b10549703c0eb::t_c81ceee2f67e15 410,413,416-419,427,431,443,446,455,458,469,488-491,494,508,516-518,521-527,530-545,550-551,554-555
+  s_9b10549703c0eb::t_42bf4da0d75297 33-38,50,53,82-87,93,103,111,113,119,131,267,281,305
+  s_9b10549703c0eb::t_1e4cba041a2e78 782,785,791,811,813,818
+  s_9b10549703c0eb::t_52ecee7f0f06da 757
+  s_9b10549703c0eb::t_5643fed5037acc 967-970
+engine/src/deterministic/tests/post-analyzer.test.ts
+  s_9b10549703c0eb::t_20c1986bb342f3 483-493
+  s_9b10549703c0eb::t_dbb07301285343 475-482
+client/src/features/writer/writer-page.tsx
+  s_9b10549703c0eb::t_7dbadd7d048749 11,113-136,181,247,276,311-314
+  s_9b10549703c0eb::t_33ded5b2b8c5a8 410
+engine/src/deterministic/tests/deterministic-analysis-service.test.ts
+  s_9b10549703c0eb::t_f6798ee9598b5f 304-310
+  s_9b10549703c0eb::t_f116cf1bbc26f7 318
+  s_9b10549703c0eb::t_19bb9acf3aef15 284-303,311-317,319-334
+  s_9b10549703c0eb::t_bf40ead8d394ca 10
+engine/src/deterministic/post-analyzer.ts
+  s_9b10549703c0eb::t_ca8a02c01ac050 1276-1285
+  s_9b10549703c0eb::t_4b3e3094a4db45 1043,1050,1055
+engine/src/deterministic/deterministic-analysis-service.ts
+  s_9b10549703c0eb::t_452337c1df304c 19,22-27,32-33,35,49-73
+client/src/features/writer/tests/writer-page.test.tsx
+  s_9b10549703c0eb::t_7f148d35efb5d8 509-526,528-533,727-791
+  s_9b10549703c0eb::t_d8c1cabc3d6c55 478,493-494,496-499,502-506
+  s_9b10549703c0eb::t_cc7c1d219799df 1185-1231,1653-1693
+  s_9b10549703c0eb::t_c49068957704f3 1562-1603
+  s_9b10549703c0eb::t_9ba05212ac88a6 974-1007,1287-1375
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "3d700c4159e48fd06b5476786a617dc277f09386",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
