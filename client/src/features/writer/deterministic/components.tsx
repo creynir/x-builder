@@ -32,8 +32,14 @@ export type ManualScoringContextPanelProps = {
     source: "manual" | "missing";
     skipped: boolean;
   };
+  applyLabel?: string;
   disabled?: boolean;
+  error?: string | null;
+  isStale?: boolean;
+  onApplyFollowers?: () => void;
+  onFollowersDraftChange?: (followers: string) => void;
   onFollowersChange?: (followers: number | undefined) => void;
+  value?: string;
 };
 
 export type DeterministicDetailInspectorProps =
@@ -303,29 +309,45 @@ export function CandidateDeterministicSummary({
 }
 
 export function ManualScoringContextPanel({
+  applyLabel = "Apply followers",
   context,
   disabled = false,
+  error,
+  isStale = false,
+  onApplyFollowers,
+  onFollowersDraftChange,
   onFollowersChange,
+  value,
 }: ManualScoringContextPanelProps): ReactElement {
   const handleFollowersChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { value } = event.target;
 
+    onFollowersDraftChange?.(value);
     onFollowersChange?.(value === "" ? undefined : Number(value));
   };
 
   return (
     <section className="xb-manual-scoring-context" aria-label="Manual account context">
-      <h3>Manual account context</h3>
+      <h2>Manual account context</h2>
       <Input
         disabled={disabled}
+        error={error ?? undefined}
         helperText="Used for this route prediction context."
         id="deterministic-followers"
         label="Followers"
         onChange={handleFollowersChange}
-        readOnly={onFollowersChange === undefined}
+        readOnly={onFollowersChange === undefined && onFollowersDraftChange === undefined}
         type="number"
-        value={context.followers ?? ""}
+        value={value ?? context.followers ?? ""}
       />
+      {isStale ? (
+        <p className="xb-manual-scoring-context__stale">Prediction needs refresh.</p>
+      ) : null}
+      {onApplyFollowers === undefined ? null : (
+        <Button disabled={disabled} onClick={onApplyFollowers} type="button" variant="secondary">
+          {applyLabel}
+        </Button>
+      )}
       <KeyValueList
         disabled={disabled}
         items={[

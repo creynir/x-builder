@@ -25,7 +25,7 @@
 }
 
 .xb-deterministic-card__title,
-.xb-manual-scoring-context h3,
+.xb-manual-scoring-context h2,
 .xb-deterministic-detail-inspector h2 {
   margin: 0;
   color: var(--text-heading);

@@ -18,7 +18,10 @@ import {
 
 import { RouteErrorBanner } from "../../shell/route-error-banner";
 import { Badge, Button, Skeleton } from "../../ui/foundation";
-import { CandidateDeterministicSummary } from "./deterministic/components";
+import {
+  CandidateDeterministicSummary,
+  ManualScoringContextPanel,
+} from "./deterministic/components";
 
 export type WriterApiClient = {
   analyzePosts: (input: AnalyzePostsRequest) => Promise<AnalyzePostsResponse>;
@@ -52,8 +55,11 @@ export type WriterPageProps = {
 
 type WriterPageModel = {
   analysisByCandidateId: Record<string, CandidateAnalysisState>;
+  appliedFollowers: number | undefined;
   candidates: GeneratedIdeaCandidate[];
   fieldError: string | null;
+  followerDraft: string;
+  followerError: string | null;
   idea: string;
   isGenerating: boolean;
   lastPayload: GenerateIdeaRequest | null;
@@ -65,21 +71,27 @@ export type WriterPagePublicDriverOptions = WriterPageProps & {
 };
 
 export type WriterPagePublicDriver = {
+  applyFollowers: () => Promise<string>;
   generate: () => Promise<string>;
   openSettings: () => void;
   render: () => string;
   retry: () => Promise<string>;
   retryScore: (itemId: string) => Promise<string>;
+  updateFollowers: (followers: string) => string;
   updateIdea: (idea: string) => string;
 };
 
 const emptyIdeaError = "Enter an idea before generating.";
+const invalidFollowersError = "Enter your current follower count to estimate impressions.";
 
 function createInitialModel(): WriterPageModel {
   return {
     analysisByCandidateId: {},
+    appliedFollowers: undefined,
     candidates: [],
     fieldError: null,
+    followerDraft: "",
+    followerError: null,
     idea: "",
     isGenerating: false,
     lastPayload: null,
@@ -166,6 +178,7 @@ function candidateLabel(format: GeneratedIdeaCandidate["format"]): string {
 
 function candidateAnalysisRequest(
   candidates: GeneratedIdeaCandidate[],
+  followers: number | undefined,
 ): AnalyzePostsRequest {
   return {
     items: candidates.map((candidate) => ({
@@ -176,7 +189,42 @@ function candidateAnalysisRequest(
     presentation: {
       postCoachMode: "preview",
     },
-    scoringContext: {},
+    scoringContext: followers === undefined ? {} : { followers },
+  };
+}
+
+type FollowersParseResult =
+  | {
+      followers: number | undefined;
+      type: "valid";
+    }
+  | {
+      error: string;
+      type: "error";
+    };
+
+function parseFollowerDraft(followerDraft: string): FollowersParseResult {
+  const trimmedFollowers = followerDraft.trim();
+
+  if (trimmedFollowers.length === 0) {
+    return {
+      followers: undefined,
+      type: "valid",
+    };
+  }
+
+  const followers = Number(trimmedFollowers);
+
+  if (!Number.isInteger(followers) || followers <= 0) {
+    return {
+      error: invalidFollowersError,
+      type: "error",
+    };
+  }
+
+  return {
+    followers,
+    type: "valid",
   };
 }
 
@@ -237,6 +285,8 @@ function candidatesStillPresent(
 }
 
 type WriterPageViewProps = WriterPageModel & {
+  onApplyFollowers: () => void;
+  onFollowersChange: (followers: string) => void;
   onGenerate: () => void;
   onIdeaChange: (idea: string) => void;
   onOpenSettings: () => void;
@@ -246,10 +296,12 @@ type WriterPageViewProps = WriterPageModel & {
 
 function CandidateAnalysis({
   candidate,
+  onApplyFollowers,
   onRetryScore,
   state,
 }: {
   candidate: GeneratedIdeaCandidate;
+  onApplyFollowers: () => void;
   onRetryScore: (itemId: string) => void;
   state: CandidateAnalysisState;
 }): ReactElement {
@@ -270,7 +322,10 @@ function CandidateAnalysis({
           item={state.item}
           onRetryScore={onRetryScore}
         />
-        <p>Score needs refresh.</p>
+        <p>Prediction needs refresh.</p>
+        <Button onClick={onApplyFollowers} type="button" variant="secondary">
+          Recompute prediction
+        </Button>
       </div>
     );
   }
@@ -294,10 +349,15 @@ function CandidateAnalysis({
 
 function WriterPageView({
   analysisByCandidateId,
+  appliedFollowers,
   candidates,
   fieldError,
+  followerDraft,
+  followerError,
   idea,
   isGenerating,
+  onApplyFollowers,
+  onFollowersChange,
   onGenerate,
   onIdeaChange,
   onOpenSettings,
@@ -350,6 +410,22 @@ function WriterPageView({
           Generate
         </Button>
       </form>
+      <ManualScoringContextPanel
+        applyLabel="Recompute prediction"
+        context={{
+          followers: appliedFollowers,
+          source: appliedFollowers === undefined ? "missing" : "manual",
+          skipped: appliedFollowers === undefined,
+        }}
+        disabled={isGenerating}
+        error={followerError}
+        isStale={Object.values(analysisByCandidateId).some(
+          (state) => state.status === "stale",
+        )}
+        onApplyFollowers={onApplyFollowers}
+        onFollowersDraftChange={onFollowersChange}
+        value={followerDraft}
+      />
       <section
         aria-label="Generated candidates"
         aria-live="polite"
@@ -369,6 +445,7 @@ function WriterPageView({
                 <Badge variant="info">{candidateLabel(candidate.format)}</Badge>
                 <CandidateAnalysis
                   candidate={candidate}
+                  onApplyFollowers={onApplyFollowers}
                   onRetryScore={onRetryScore}
                   state={analysisByCandidateId[candidate.id] ?? { status: "idle" }}
                 />
@@ -423,9 +500,12 @@ async function requestGeneration(
 async function requestAnalysis(
   apiClient: WriterApiClient,
   candidates: GeneratedIdeaCandidate[],
+  followers: number | undefined,
 ): Promise<AnalysisResult> {
   try {
-    const response = await apiClient.analyzePosts(candidateAnalysisRequest(candidates));
+    const response = await apiClient.analyzePosts(
+      candidateAnalysisRequest(candidates, followers),
+    );
 
     return {
       items: response.items,
@@ -556,20 +636,73 @@ function markAnalysisStale(
   );
 }
 
+function applyFollowerDraftChange(
+  model: WriterPageModel,
+  followerDraft: string,
+): WriterPageModel {
+  return {
+    ...model,
+    analysisByCandidateId: markAnalysisStale(model.analysisByCandidateId),
+    followerDraft,
+    followerError: null,
+  };
+}
+
+function applyFollowerValidation(
+  model: WriterPageModel,
+  followerDraft: string,
+): WriterPageModel | { followers: number | undefined; model: WriterPageModel } {
+  const parsedFollowers = parseFollowerDraft(followerDraft);
+
+  if (parsedFollowers.type === "error") {
+    return {
+      ...model,
+      followerError: parsedFollowers.error,
+    };
+  }
+
+  return {
+    followers: parsedFollowers.followers,
+    model: {
+      ...model,
+      appliedFollowers: parsedFollowers.followers,
+      followerError: null,
+    },
+  };
+}
+
 export function WriterPage({
   apiClient,
   onOpenSettings,
 }: WriterPageProps): ReactElement {
   const [model, setModel] = useState(createInitialModel);
 
-  const scoreCandidates = async (candidates: GeneratedIdeaCandidate[]) => {
-    if (candidates.length === 0) {
-      return;
-    }
+  const applyFollowers = () => {
+    void (async () => {
+      const validation = applyFollowerValidation(model, model.followerDraft);
 
-    const result = await requestAnalysis(apiClient, candidates);
+      if (!("model" in validation)) {
+        setModel(validation);
+        return;
+      }
 
-    setModel((current) => applyAnalysisResult(current, candidates, result));
+      const nextModel = validation.model;
+
+      if (nextModel.candidates.length === 0) {
+        setModel(nextModel);
+        return;
+      }
+
+      const { candidates } = nextModel;
+
+      setModel(applyAnalysisLoading(nextModel, candidates));
+      const result = await requestAnalysis(apiClient, candidates, validation.followers);
+      setModel((current) => applyAnalysisResult(current, candidates, result));
+    })();
+  };
+
+  const updateFollowers = (followers: string) => {
+    setModel((current) => applyFollowerDraftChange(current, followers));
   };
 
   const updateIdea = (idea: string) => {
@@ -584,6 +717,7 @@ export function WriterPage({
   const generate = () => {
     void (async () => {
       const payloadResult = payloadFromIdea(model.idea);
+      const followerValidation = applyFollowerValidation(model, model.followerDraft);
 
       if (payloadResult.type === "field-error") {
         setModel((current) => ({
@@ -594,19 +728,32 @@ export function WriterPage({
         return;
       }
 
-      const { payload } = payloadResult;
+      if (!("model" in followerValidation)) {
+        setModel(followerValidation);
+        return;
+      }
 
-      setModel((current) => ({
-        ...current,
+      const { payload } = payloadResult;
+      const nextModel = followerValidation.model;
+
+      setModel({
+        ...nextModel,
         fieldError: null,
         isGenerating: true,
         lastPayload: payload,
-      }));
+      });
       const result = await requestGeneration(apiClient, payload);
       setModel((current) => applyGenerationResult(current, payload, result));
 
       if (result.type === "success") {
-        await scoreCandidates(result.candidates);
+        const analysisResult = await requestAnalysis(
+          apiClient,
+          result.candidates,
+          followerValidation.followers,
+        );
+        setModel((current) =>
+          applyAnalysisResult(current, result.candidates, analysisResult),
+        );
       }
     })();
   };
@@ -618,15 +765,31 @@ export function WriterPage({
       return;
     }
 
+    const followerValidation = applyFollowerValidation(model, model.followerDraft);
+
+    if (!("model" in followerValidation)) {
+      setModel(followerValidation);
+      return;
+    }
+
     setModel((current) => ({
       ...current,
+      appliedFollowers: followerValidation.followers,
+      followerError: null,
       isGenerating: true,
     }));
     const result = await requestGeneration(apiClient, payload);
     setModel((current) => applyGenerationResult(current, payload, result));
 
     if (result.type === "success") {
-      await scoreCandidates(result.candidates);
+      const analysisResult = await requestAnalysis(
+        apiClient,
+        result.candidates,
+        followerValidation.followers,
+      );
+      setModel((current) =>
+        applyAnalysisResult(current, result.candidates, analysisResult),
+      );
     }
   };
 
@@ -638,13 +801,15 @@ export function WriterPage({
     }
 
     setModel((current) => applyAnalysisLoading(current, [candidate]));
-    const result = await requestAnalysis(apiClient, [candidate]);
+    const result = await requestAnalysis(apiClient, [candidate], model.appliedFollowers);
     setModel((current) => applyAnalysisResult(current, [candidate], result));
   };
 
   return (
     <WriterPageView
       {...model}
+      onApplyFollowers={applyFollowers}
+      onFollowersChange={updateFollowers}
       onGenerate={generate}
       onIdeaChange={updateIdea}
       onOpenSettings={onOpenSettings}
@@ -661,6 +826,8 @@ function renderDriverPage(
   return renderToStaticMarkup(
     <WriterPageView
       {...model}
+      onApplyFollowers={() => undefined}
+      onFollowersChange={() => undefined}
       onGenerate={() => undefined}
       onIdeaChange={() => undefined}
       onOpenSettings={onOpenSettings}
@@ -677,8 +844,35 @@ export function createWriterPagePublicDriver(
 
   const render = () => renderDriverPage(options.onOpenSettings, model);
 
+  const applyFollowers = async () => {
+    const validation = applyFollowerValidation(model, model.followerDraft);
+
+    if (!("model" in validation)) {
+      model = validation;
+      return render();
+    }
+
+    model = validation.model;
+
+    if (model.candidates.length === 0) {
+      return render();
+    }
+
+    const { candidates } = model;
+
+    model = applyAnalysisLoading(model, candidates);
+    model = applyAnalysisResult(
+      model,
+      candidates,
+      await requestAnalysis(options.apiClient, candidates, validation.followers),
+    );
+
+    return render();
+  };
+
   const generate = async () => {
     const payloadResult = payloadFromIdea(model.idea);
+    const followerValidation = applyFollowerValidation(model, model.followerDraft);
 
     if (payloadResult.type === "field-error") {
       model = {
@@ -689,10 +883,15 @@ export function createWriterPagePublicDriver(
       return render();
     }
 
+    if (!("model" in followerValidation)) {
+      model = followerValidation;
+      return render();
+    }
+
     const { payload } = payloadResult;
 
     model = {
-      ...model,
+      ...followerValidation.model,
       fieldError: null,
       isGenerating: true,
       lastPayload: payload,
@@ -705,7 +904,7 @@ export function createWriterPagePublicDriver(
       model = applyAnalysisResult(
         model,
         candidates,
-        await requestAnalysis(options.apiClient, candidates),
+        await requestAnalysis(options.apiClient, candidates, followerValidation.followers),
       );
     }
 
@@ -713,6 +912,7 @@ export function createWriterPagePublicDriver(
   };
 
   return {
+    applyFollowers,
     generate,
     openSettings: () => {
       options.onOpenSettings();
@@ -725,8 +925,15 @@ export function createWriterPagePublicDriver(
         return render();
       }
 
+      const followerValidation = applyFollowerValidation(model, model.followerDraft);
+
+      if (!("model" in followerValidation)) {
+        model = followerValidation;
+        return render();
+      }
+
       model = {
-        ...model,
+        ...followerValidation.model,
         isGenerating: true,
       };
       const result = await requestGeneration(options.apiClient, payload);
@@ -737,7 +944,7 @@ export function createWriterPagePublicDriver(
         model = applyAnalysisResult(
           model,
           candidates,
-          await requestAnalysis(options.apiClient, candidates),
+          await requestAnalysis(options.apiClient, candidates, followerValidation.followers),
         );
       }
 
@@ -754,9 +961,13 @@ export function createWriterPagePublicDriver(
       model = applyAnalysisResult(
         model,
         [candidate],
-        await requestAnalysis(options.apiClient, [candidate]),
+        await requestAnalysis(options.apiClient, [candidate], model.appliedFollowers),
       );
 
+      return render();
+    },
+    updateFollowers: (followers: string) => {
+      model = applyFollowerDraftChange(model, followers);
       return render();
     },
     updateIdea: (idea: string) => {
