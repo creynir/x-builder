@@ -5,6 +5,7 @@ import type {
   AnalyzePostsRequest,
   AnalyzePostsResponse,
   ApiError,
+  EngagementPrediction,
   GenerateIdeaRequest,
   GenerateIdeaResponse,
   GeneratedIdeaCandidate,
@@ -20,6 +21,10 @@ type ScoreFailedAnalyzedPostItem = Extract<
   { status: "score_failed" }
 >;
 type ReadyPostCoachViewModel = Extract<PostCoachViewModel, { state: "ready" }>;
+type AvailableEngagementPrediction = Extract<
+  EngagementPrediction,
+  { status: "available" }
+>;
 
 type WriterApiClient = {
   analyzePosts: (input: AnalyzePostsRequest) => Promise<AnalyzePostsResponse>;
@@ -36,11 +41,13 @@ type WriterPagePublicDriverOptions = WriterPageProps & {
 };
 
 type WriterPagePublicDriver = {
+  applyFollowers: () => Promise<string>;
   generate: () => Promise<string>;
   openSettings: () => void;
   render: () => string;
   retry: () => Promise<string>;
   retryScore: (itemId: string) => Promise<string>;
+  updateFollowers: (followers: string) => string;
   updateIdea: (idea: string) => string;
 };
 
@@ -183,6 +190,31 @@ function readyPostCoach(
   };
 }
 
+function availablePrediction(
+  overrides: Partial<AvailableEngagementPrediction> = {},
+): AvailableEngagementPrediction {
+  return {
+    status: "available",
+    rangeLow: 120,
+    rangeHigh: 280,
+    midpoint: 200,
+    confidence: "medium",
+    signals: [
+      {
+        signal_key: "voice_score",
+        label: "Voice score 74",
+        multiplier: 0.9,
+      },
+      {
+        signal_key: "manual_followers",
+        label: "Manual follower context",
+        multiplier: 1.2,
+      },
+    ],
+    ...overrides,
+  };
+}
+
 function scoredAnalysisItem(
   candidate: GeneratedIdeaCandidate,
   overrides: Partial<ScoredAnalyzedPostItem> = {},
@@ -252,6 +284,7 @@ function createAnalyzePostsResponse(
 
 function expectedAnalyzePostsRequest(
   candidates: GeneratedIdeaCandidate[],
+  scoringContext: AnalyzePostsRequest["scoringContext"] = {},
 ): AnalyzePostsRequest {
   return {
     items: candidates.map((candidate) => ({
@@ -262,14 +295,15 @@ function expectedAnalyzePostsRequest(
     presentation: {
       postCoachMode: "preview",
     },
-    scoringContext: {},
+    scoringContext,
   };
 }
 
 function expectedAnalyzePostsRequestFor(
   candidate: GeneratedIdeaCandidate,
+  scoringContext: AnalyzePostsRequest["scoringContext"] = {},
 ): AnalyzePostsRequest {
-  return expectedAnalyzePostsRequest([candidate]);
+  return expectedAnalyzePostsRequest([candidate], scoringContext);
 }
 
 function candidateTextSegment(
@@ -326,6 +360,174 @@ function createDriver(
 ) {
   return createWriterPagePublicDriver(options);
 }
+
+describe("WriterPage manual follower prediction context", () => {
+  it("renders manual follower context while empty followers keep prediction missing and Post Coach visible", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const analyzePosts = vi.fn<WriterApiClient["analyzePosts"]>(async () =>
+      createAnalyzePostsResponse(response),
+    );
+    const apiClient = createApiClient(vi.fn(async () => response), analyzePosts);
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Manual followers should not be required for Post Coach.");
+    const html = await driver.generate();
+    const text = textContent(html);
+
+    expect(analyzePosts).toHaveBeenCalledOnce();
+    expect(analyzePosts).toHaveBeenCalledWith(
+      expectedAnalyzePostsRequest(response.candidates),
+    );
+    expect(text).toContain("Manual account context");
+    expect(text).toContain("Followers");
+    expect(text).toContain("Post Coach");
+    expect(text).toContain("Prediction needs follower count.");
+    expect(text).toContain("missing_followers");
+  });
+
+  it("submits valid manual followers with analysis and renders available prediction results", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const analyzePosts = vi.fn<WriterApiClient["analyzePosts"]>(async () => ({
+      items: response.candidates.map((candidate) =>
+        scoredAnalysisItem(candidate, {
+          prediction: availablePrediction(),
+        }),
+      ),
+    }));
+    const apiClient = createApiClient(vi.fn(async () => response), analyzePosts);
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateFollowers("2400");
+    driver.updateIdea("Use follower count only for this prediction request.");
+    const html = await driver.generate();
+    const text = textContent(html);
+
+    expect(analyzePosts).toHaveBeenCalledOnce();
+    expect(analyzePosts).toHaveBeenCalledWith(
+      expectedAnalyzePostsRequest(response.candidates, { followers: 2400 }),
+    );
+    expect(text).toContain("120 - 280");
+    expect(text).toContain("200");
+    expect(text).toContain("medium");
+    expect(text).toContain("Manual follower context");
+    expect(text).not.toContain("missing_followers");
+  });
+
+  it("shows inline validation for invalid followers without calling analysis again", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const analyzePosts = vi.fn<WriterApiClient["analyzePosts"]>(async () =>
+      createAnalyzePostsResponse(response),
+    );
+    const apiClient = createApiClient(vi.fn(async () => response), analyzePosts);
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Invalid follower edits should stay local.");
+    await driver.generate();
+
+    for (const invalidFollowers of ["not-a-number", "0", "-7"]) {
+      driver.updateFollowers(invalidFollowers);
+      const html = await driver.applyFollowers();
+
+      expect(textContent(html)).toContain(
+        "Enter your current follower count to estimate impressions.",
+      );
+    }
+
+    expect(apiClient.generateIdea).toHaveBeenCalledOnce();
+    expect(analyzePosts).toHaveBeenCalledOnce();
+  });
+
+  it("recomputes prediction analysis with updated followers without regenerating candidates", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const analyzePosts = vi
+      .fn<WriterApiClient["analyzePosts"]>()
+      .mockImplementationOnce(async () => createAnalyzePostsResponse(response))
+      .mockImplementationOnce(async () => ({
+        items: response.candidates.map((candidate) =>
+          scoredAnalysisItem(candidate, {
+            prediction: availablePrediction({
+              rangeLow: 320,
+              rangeHigh: 640,
+              midpoint: 480,
+            }),
+          }),
+        ),
+      }));
+    const generateIdea = vi.fn<WriterApiClient["generateIdea"]>(async () => response);
+    const apiClient = createApiClient(generateIdea, analyzePosts);
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Follower changes should only refresh deterministic analysis.");
+    await driver.generate();
+    const staleHtml = driver.updateFollowers("4800");
+    const staleText = textContent(staleHtml);
+
+    expect(staleText).toContain("Prediction needs refresh.");
+    expect(staleText).toContain("Recompute prediction");
+
+    const recomputedHtml = await driver.applyFollowers();
+    const recomputedText = textContent(recomputedHtml);
+
+    expect(generateIdea).toHaveBeenCalledOnce();
+    expect(analyzePosts).toHaveBeenCalledTimes(2);
+    expect(analyzePosts).toHaveBeenNthCalledWith(
+      2,
+      expectedAnalyzePostsRequest(response.candidates, { followers: 4800 }),
+    );
+    expect(recomputedText).toContain("320 - 640");
+    expect(recomputedText).toContain("480");
+    expect(recomputedText).toContain(response.candidates[0]?.text);
+  });
+
+  it("does not persist manual followers into a fresh writer route render", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const apiClient = createApiClient(vi.fn(async () => response));
+    const firstDriver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    firstDriver.updateFollowers("2400");
+    firstDriver.updateIdea("Follower context should be request scoped.");
+    await firstDriver.generate();
+
+    const freshDriver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+    const freshHtml = freshDriver.render();
+    const freshText = textContent(freshHtml);
+
+    expect(freshText).toContain("Manual account context");
+    expect(freshText).toContain("Followers");
+    expect(freshHtml).toContain('id="deterministic-followers"');
+    expect(freshHtml).not.toContain('value="2400"');
+    expect(freshText).not.toContain("manual");
+  });
+});
 
 describe("WriterPage generation behavior", () => {
   it("keeps empty submissions local and shows a field error", async () => {
