@@ -1,0 +1,19 @@
+e2e-tests/tests/writer-deterministic-flow.spec.ts
+  s_9b10549703c0eb::t_29536ecdd13126 54-58,234-255,281-285,305-312,325-329,445-624
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "1df181e9935b7faf971d3be4d8a73ffff5cf353c",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
