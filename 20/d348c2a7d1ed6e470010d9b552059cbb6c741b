@@ -1,0 +1,21 @@
+docs/features/deterministic-engine/tickets/README.md
+  s_acd12e8d782639::t_13abe91c1d81b0 47-57
+docs/features/my-x-data-import/README.md
+  s_acd12e8d782639::t_b98354a099ab06 4-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "20d348c2a7d1ed6e470010d9b552059cbb6c741b",
+  "prompts": {},
+  "sessions": {
+    "s_acd12e8d782639": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1a5-4153-7ed1-8c0e-3c580b6dc00f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
