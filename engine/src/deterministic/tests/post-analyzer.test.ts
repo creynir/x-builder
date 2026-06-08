@@ -14,6 +14,31 @@ import {
   type VoiceCheck,
 } from "../post-analyzer";
 
+const enrichedTextCheckIds = [
+  "quality_answerable_question",
+  "quality_vague_curiosity",
+  "quality_standalone_context",
+  "quality_claim_evidence",
+  "quality_profile_click_reason",
+  "quality_one_idea_focus",
+  "line_length",
+  "link_density",
+  "mention_density",
+] as const;
+
+const bannedClaimPattern =
+  /\b(ranking|rank|algorithm|profile health|live trend|Trending topic|your data|last 30 days|imported metrics|reply_score|profile_click_score|dwell_score)\b/i;
+
+function findCheck(checks: readonly VoiceCheck[], id: string): VoiceCheck {
+  const check = checks.find((item) => item.id === id);
+
+  if (!check) {
+    throw new Error(`Expected check "${id}" to be present.`);
+  }
+
+  return check;
+}
+
 describe("deterministic post analyzer", () => {
   it("detects the supported post formats from observable text structure", () => {
     expect(detectFormat("Hot take: most dashboards are just procrastination")).toBe("hot_take");
@@ -50,6 +75,233 @@ describe("deterministic post analyzer", () => {
     );
   });
 
+  it("exposes the enriched text-only checks through the canonical analyzer score", () => {
+    const result = analyzePost(
+      [
+        "Builders, I shipped a 14 day onboarding test and learned one thing:",
+        "",
+        "Specific setup screens beat clever copy when users need to finish their first run.",
+        "",
+        "Which setup step would you remove first: profile import or workspace invite?",
+      ].join("\n"),
+      { followers: 1000 },
+    );
+
+    expect(result.score.checks.map((check) => check.id)).toEqual(
+      expect.arrayContaining([...enrichedTextCheckIds]),
+    );
+
+    for (const id of enrichedTextCheckIds) {
+      expect(Object.keys(findCheck(result.score.checks, id)).sort()).toEqual([
+        "id",
+        "kind",
+        "label",
+        "status",
+      ]);
+    }
+  });
+
+  it.each([
+    [
+      "quality_answerable_question",
+      "pass",
+      "Builders, which setup step would you remove first: profile import or workspace invite?",
+      /answer|reply|question|choice/i,
+    ],
+    [
+      "quality_answerable_question",
+      "warn",
+      "I rewrote the onboarding checklist after 12 user calls. Thoughts?",
+      /vague|specific|answer|reply|question/i,
+    ],
+    [
+      "quality_answerable_question",
+      "fail",
+      "What should we ship next? Why are users stuck? Should pricing change? Who owns the docs?",
+      /too many|stack|one question|focus/i,
+    ],
+    [
+      "quality_vague_curiosity",
+      "pass",
+      "This onboarding teardown changed how I write activation emails for B2B teams.",
+      /specific|concrete|curiosity|anchor/i,
+    ],
+    [
+      "quality_vague_curiosity",
+      "warn",
+      "This changed everything. Nobody talks about this enough.",
+      /vague|concrete|curiosity|anchor/i,
+    ],
+    [
+      "quality_standalone_context",
+      "pass",
+      "Onboarding emails fail when the first task is hidden behind three clicks.",
+      /context|standalone|subject|opener/i,
+    ],
+    [
+      "quality_standalone_context",
+      "warn",
+      "This changed everything after we looked at the signup flow.",
+      /context|standalone|subject|opener/i,
+    ],
+    [
+      "quality_claim_evidence",
+      "pass",
+      "In 14 onboarding calls, pricing confusion showed up before feature confusion.",
+      /evidence|proof|claim|specific/i,
+    ],
+    [
+      "quality_claim_evidence",
+      "warn",
+      "Everyone should always remove friction because it is the only way to grow.",
+      /evidence|proof|claim|sweeping/i,
+    ],
+    [
+      "quality_profile_click_reason",
+      "pass",
+      "I shipped the trial reset flow last week and learned activation improves when support can replay it.",
+      /experience|project|author|profile|reason/i,
+    ],
+    [
+      "quality_profile_click_reason",
+      "warn",
+      "You should write better hooks and provide more value every day.",
+      /specific|experience|author|generic|reason/i,
+    ],
+    [
+      "quality_one_idea_focus",
+      "pass",
+      "Activation improved when we moved workspace invites after the first successful run.",
+      /focus|one idea|single/i,
+    ],
+    [
+      "quality_one_idea_focus",
+      "warn",
+      "Activation needs better invites. Also pricing is confusing. Plus docs need a rewrite. One more thing: support macros matter.",
+      /focus|one idea|pivots|too many/i,
+    ],
+    [
+      "line_length",
+      "pass",
+      "Short lines scan cleanly.\n\nEach point gets room.",
+      /line|scan|read/i,
+    ],
+    [
+      "line_length",
+      "warn",
+      "This onboarding note keeps every caveat, result, setup detail, audience qualifier, and example in one dense line that is deliberately long enough to cross the scanability threshold for the deterministic checker.",
+      /line|dense|scan|break/i,
+    ],
+    [
+      "link_density",
+      "pass",
+      "The teardown stands on its own without making readers leave the post.",
+      /link|click|self-contained|useful/i,
+    ],
+    [
+      "link_density",
+      "warn",
+      "I wrote the full teardown here: https://example.com/onboarding",
+      /link|click|useful|without/i,
+    ],
+    [
+      "link_density",
+      "fail",
+      "Launch notes: https://example.com/a docs: https://example.com/b demo: https://example.com/c",
+      /links|link-heavy|too many/i,
+    ],
+    [
+      "mention_density",
+      "pass",
+      "Thanks @maya for pushing the onboarding teardown into real examples.",
+      /mention|read|scan|restrained/i,
+    ],
+    [
+      "mention_density",
+      "warn",
+      "Thanks @maya @lee @sam for the launch notes and signup teardown.",
+      /mention|read|scan|too many/i,
+    ],
+    [
+      "mention_density",
+      "fail",
+      "@maya @lee @sam @jo @ren please review this",
+      /mention|read|scan|too many|dense/i,
+    ],
+  ] as const)(
+    "%s returns %s for a deterministic text fixture",
+    (id, expectedStatus, text, labelPattern) => {
+      const check = findCheck(runVoiceChecks(text).checks, id);
+
+      expect(check).toMatchObject({
+        id,
+        status: expectedStatus,
+      });
+      expect(check.label).toMatch(labelPattern);
+      expect(check.label).not.toMatch(bannedClaimPattern);
+    },
+  );
+
+  it("keeps enriched Post Coach checks flowing through failed, warned, and passed sections", () => {
+    const score = runVoiceChecks(
+      [
+        "This changed everything. What should we ship? Why now? Should pricing change? Who owns docs?",
+        "",
+        "Also read https://example.com/a and https://example.com/b",
+        "",
+        "Thanks @maya @lee @sam @jo",
+      ].join("\n"),
+    );
+    const card = derivePostCoachCard({
+      expanded: true,
+      hasText: true,
+      score,
+    });
+
+    if (card.state !== "ready") {
+      throw new Error("Expected ready card.");
+    }
+
+    expect(card.sections.map((section) => section.title)).toEqual([
+      "Worth a look",
+      "Nudges",
+      "On point",
+    ]);
+    expect(card.failed.map((check) => check.id)).toEqual(
+      expect.arrayContaining(["quality_answerable_question", "link_density"]),
+    );
+    expect(card.warned.map((check) => check.id)).toEqual(
+      expect.arrayContaining([
+        "quality_vague_curiosity",
+        "quality_one_idea_focus",
+        "mention_density",
+      ]),
+    );
+    expect(card.passed.map((check) => check.id)).toEqual(
+      expect.arrayContaining(["line_length"]),
+    );
+  });
+
+  it("keeps enriched check labels in writing-quality language without ranking or data claims", () => {
+    const texts = [
+      "This changed everything. Nobody talks about this enough.",
+      "Everyone should always remove friction because it is the only way to grow.",
+      "I wrote the full teardown here: https://example.com/onboarding",
+      "Thanks @maya @lee @sam for the launch notes and signup teardown.",
+      "Builders, I shipped a 14 day onboarding test. Which setup step would you remove first?",
+    ];
+    const labels = texts.flatMap((text) =>
+      runVoiceChecks(text).checks
+        .filter((check) => enrichedTextCheckIds.includes(check.id as (typeof enrichedTextCheckIds)[number]))
+        .map((check) => check.label),
+    );
+
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(bannedClaimPattern)]),
+    );
+  });
+
   it("keeps the engagement prediction card math stable", () => {
     const prediction = predictEngagement({
       text: "Clear writing compounds when the point is specific.",
@@ -76,6 +328,23 @@ describe("deterministic post analyzer", () => {
         },
       ],
     });
+  });
+
+  it("documents current zeitgeist prediction math without live-trend copy claims", () => {
+    const prediction = predictEngagement({
+      text: "AI onboarding gets easier when the first run has one clear success moment.",
+      score: 66,
+      format: "insight_share",
+      followers: 1000,
+    });
+
+    const signal = prediction?.signals.find((item) => item.signal_key === "zeitgeist");
+
+    expect(signal).toMatchObject({
+      signal_key: "zeitgeist",
+      multiplier: 1.4,
+    });
+    expect(signal?.label).not.toMatch(bannedClaimPattern);
   });
 
   it("supports disabled checks and an injected variety check for future engine composition", () => {
