@@ -475,7 +475,7 @@ describe("WriterPage manual follower prediction context", () => {
     expect(text).not.toContain("missing_followers");
   });
 
-  it("shows inline validation for invalid followers without calling analysis again", async () => {
+  it("shows inline validation while recomputing invalid followers without prediction context", async () => {
     const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
     const response = createValidIdeaResponse();
     const analyzePosts = vi.fn<WriterApiClient["analyzePosts"]>(async () =>
@@ -490,18 +490,47 @@ describe("WriterPage manual follower prediction context", () => {
 
     driver.updateIdea("Invalid follower edits should stay local.");
     await driver.generate();
+    driver.updateFollowers("not-a-number");
+    const html = await driver.applyFollowers();
 
-    for (const invalidFollowers of ["not-a-number", "0", "-7"]) {
-      driver.updateFollowers(invalidFollowers);
-      const html = await driver.applyFollowers();
-
-      expect(textContent(html)).toContain(
-        "Enter your current follower count to estimate impressions.",
-      );
-    }
+    expect(textContent(html)).toContain(
+      "Enter your current follower count to estimate impressions.",
+    );
+    expect(textContent(html)).toContain("Prediction needs follower count.");
 
     expect(apiClient.generateIdea).toHaveBeenCalledOnce();
+    expect(analyzePosts).toHaveBeenCalledTimes(2);
+    expect(analyzePosts).toHaveBeenNthCalledWith(
+      2,
+      expectedAnalyzePostsRequest(response.candidates),
+    );
+  });
+
+  it("still scores generated candidates when follower input is invalid", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const analyzePosts = vi.fn<WriterApiClient["analyzePosts"]>(async () =>
+      createAnalyzePostsResponse(response),
+    );
+    const apiClient = createApiClient(vi.fn(async () => response), analyzePosts);
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateFollowers("not-a-number");
+    driver.updateIdea("Invalid followers should not block deterministic scoring.");
+    const html = await driver.generate();
+    const text = textContent(html);
+
     expect(analyzePosts).toHaveBeenCalledOnce();
+    expect(analyzePosts).toHaveBeenCalledWith(
+      expectedAnalyzePostsRequest(response.candidates),
+    );
+    expect(text).toContain("Enter your current follower count to estimate impressions.");
+    expect(text).toContain("Post Coach");
+    expect(text).toContain("missing_followers");
   });
 
   it("recomputes prediction analysis with updated followers without regenerating candidates", async () => {
@@ -695,6 +724,73 @@ describe("WriterPage generation behavior", () => {
     expectIdeaPreserved(html, editedIdea);
   });
 
+  it("ignores older generation responses after a newer run succeeds", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const olderGeneration = createDeferred<GenerateIdeaResponse>();
+    const newerGeneration = createDeferred<GenerateIdeaResponse>();
+    const olderResponse: GenerateIdeaResponse = {
+      candidates: [
+        {
+          format: "one-liner",
+          id: "older-candidate",
+          text: "Older generated text should not replace the current run.",
+        },
+      ],
+    };
+    const newerResponse: GenerateIdeaResponse = {
+      candidates: [
+        {
+          format: "one-liner",
+          id: "newer-candidate",
+          text: "Newer generated text should remain visible.",
+        },
+      ],
+    };
+    const generateIdea = vi
+      .fn<WriterApiClient["generateIdea"]>()
+      .mockImplementationOnce(() => olderGeneration.promise)
+      .mockImplementationOnce(() => newerGeneration.promise);
+    const analyzePosts = vi.fn<WriterApiClient["analyzePosts"]>(
+      async (request) => ({
+        items: request.items.map((item) =>
+          scoredAnalysisItem(
+            {
+              format: item.sourceFormat ?? "one-liner",
+              id: item.id,
+              text: item.text,
+            },
+            {
+              text: item.text,
+            },
+          ),
+        ),
+      }),
+    );
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(generateIdea, analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Older generation request.");
+    const olderRun = driver.generate();
+    await flushAsyncTasks();
+    driver.updateIdea("Newer generation request.");
+    const newerRun = driver.generate();
+    await flushAsyncTasks();
+
+    newerGeneration.resolve(newerResponse);
+    const newerHtml = await newerRun;
+    olderGeneration.resolve(olderResponse);
+    const finalHtml = await olderRun;
+    const finalText = textContent(finalHtml);
+
+    expect(generateIdea).toHaveBeenCalledTimes(2);
+    expect(textContent(newerHtml)).toContain("Newer generated text should remain visible.");
+    expect(finalText).toContain("Newer generated text should remain visible.");
+    expect(finalText).not.toContain("Older generated text should not replace the current run.");
+  });
+
   it("attaches successful scoring results to their generated candidates by candidate id", async () => {
     const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
     const response = createValidIdeaResponse();
@@ -875,6 +971,40 @@ describe("WriterPage generation behavior", () => {
     expect(text).toContain(debateQuestion.text);
   });
 
+  it("turns partial analysis responses into terminal per-candidate errors", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const [oneLiner, miniFramework, debateQuestion] = response.candidates;
+    if (
+      oneLiner === undefined ||
+      miniFramework === undefined ||
+      debateQuestion === undefined
+    ) {
+      throw new Error("Expected the writer fixture to include three candidates.");
+    }
+    const analyzePosts = vi.fn<WriterApiClient["analyzePosts"]>(async () => ({
+      items: [scoredAnalysisItem(oneLiner)],
+    }));
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(vi.fn(async () => response), analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Partial scoring responses should not leave cards loading.");
+    const html = await driver.generate();
+    const text = textContent(html);
+
+    expect(analyzePosts).toHaveBeenCalledOnce();
+    expect(text).toContain(oneLiner.text);
+    expect(text).toContain(miniFramework.text);
+    expect(text).toContain(debateQuestion.text);
+    expect(text).toContain("Could not score candidate");
+    expect(text).toContain("Scoring did not return a result for this candidate.");
+    expect(text).toContain("Retry score");
+    expect(text).not.toContain("Scoring candidate");
+  });
+
   it("surfaces full analysis route failures without turning every card into score_failed", async () => {
     const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
     const response = createValidIdeaResponse();
@@ -1052,6 +1182,53 @@ describe("WriterPage generation behavior", () => {
     expect(retryText).toContain("Top tier");
   });
 
+  it("retries scoring with invalid followers by omitting prediction context", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const [oneLiner, miniFramework, debateQuestion] = response.candidates;
+    if (
+      oneLiner === undefined ||
+      miniFramework === undefined ||
+      debateQuestion === undefined
+    ) {
+      throw new Error("Expected the writer fixture to include three candidates.");
+    }
+    const generateIdea = vi.fn<WriterApiClient["generateIdea"]>(async () => response);
+    const analyzePosts = vi
+      .fn<WriterApiClient["analyzePosts"]>()
+      .mockImplementationOnce(async () => ({
+        items: [
+          scoredAnalysisItem(oneLiner),
+          scoreFailedAnalysisItem(miniFramework),
+          scoredAnalysisItem(debateQuestion),
+        ],
+      }))
+      .mockImplementationOnce(async () => ({
+        items: [scoredAnalysisItem(miniFramework)],
+      }));
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(generateIdea, analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Invalid followers should not block score retry.");
+    await driver.generate();
+    driver.updateFollowers("not-a-number");
+    const retryHtml = await driver.retryScore(miniFramework.id);
+    const retryText = textContent(retryHtml);
+
+    expect(generateIdea).toHaveBeenCalledOnce();
+    expect(analyzePosts).toHaveBeenCalledTimes(2);
+    expect(analyzePosts).toHaveBeenNthCalledWith(
+      2,
+      expectedAnalyzePostsRequestFor(miniFramework),
+    );
+    expect(retryText).toContain("Enter your current follower count to estimate impressions.");
+    expect(retryText).toContain("Prediction needs follower count.");
+    expect(retryText).toContain(miniFramework.text);
+  });
+
   it("keeps the existing score_failed card when score retry hits a route failure", async () => {
     const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
     const response = createValidIdeaResponse();
@@ -1105,6 +1282,97 @@ describe("WriterPage generation behavior", () => {
     expect(retryText).toContain(miniFramework.text);
     expect(retryText).toContain("Deterministic analysis failed for this candidate.");
     expect(retryText).toContain("Retry score");
+  });
+
+  it("keeps newer analysis success when an older analysis failure resolves later", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const olderAnalysis = createDeferred<AnalyzePostsResponse>();
+    const newerAnalysis = createDeferred<AnalyzePostsResponse>();
+    const staleError = createApiError({
+      code: "deterministic_analysis_failed",
+      message: "Older scoring failure should not replace newer success.",
+      retryable: true,
+      scope: "writer",
+      status: 503,
+    });
+    const analyzePosts = vi
+      .fn<WriterApiClient["analyzePosts"]>()
+      .mockImplementationOnce(async () => createAnalyzePostsResponse(response))
+      .mockImplementationOnce(() => olderAnalysis.promise)
+      .mockImplementationOnce(() => newerAnalysis.promise);
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(vi.fn(async () => response), analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Late scoring failures should not erase newer results.");
+    await driver.generate();
+    driver.updateFollowers("4200");
+    const olderRun = driver.applyFollowers();
+    await flushAsyncTasks();
+    driver.updateFollowers("7777");
+    driver.updateFollowers("4200");
+    const newerRun = driver.applyFollowers();
+    await flushAsyncTasks();
+
+    newerAnalysis.resolve({
+      items: response.candidates.map((candidate) =>
+        scoredAnalysisItem(candidate, {
+          prediction: availablePrediction({
+            rangeLow: 500,
+            rangeHigh: 900,
+            midpoint: 700,
+          }),
+        }),
+      ),
+    });
+    const newerHtml = await newerRun;
+    olderAnalysis.reject(Object.assign(new Error(staleError.message), { apiError: staleError }));
+    const finalHtml = await olderRun;
+    const finalText = textContent(finalHtml);
+
+    expect(analyzePosts).toHaveBeenCalledTimes(3);
+    expect(textContent(newerHtml)).toContain("500 - 900");
+    expect(finalText).toContain("500 - 900");
+    expect(finalText).toContain("700");
+    expect(finalText).not.toContain("Older scoring failure should not replace newer success.");
+    expect(finalText).not.toContain("Route unavailable");
+  });
+
+  it("does not start duplicate analysis while generated candidates are still being scored", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const [oneLiner] = response.candidates;
+    if (oneLiner === undefined) {
+      throw new Error("Expected the writer fixture to include a candidate.");
+    }
+    const analysis = createDeferred<AnalyzePostsResponse>();
+    const analyzePosts = vi.fn<WriterApiClient["analyzePosts"]>(
+      () => analysis.promise,
+    );
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(vi.fn(async () => response), analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Preview scoring should be the only active analysis request.");
+    const generate = driver.generate();
+    await flushAsyncTasks();
+
+    await driver.openDetails(oneLiner.id);
+    await driver.retryScore(oneLiner.id);
+    await driver.applyFollowers();
+
+    expect(analyzePosts).toHaveBeenCalledOnce();
+    expect(textContent(driver.render())).toContain("Scoring candidate");
+
+    analysis.resolve(createAnalyzePostsResponse(response));
+    const html = await generate;
+
+    expect(textContent(html)).toContain("Deterministic score");
   });
 
   it("keeps newer edits when follower recompute resolves from an older draft", async () => {
@@ -1291,6 +1559,48 @@ describe("WriterPage generation behavior", () => {
     expect(text).toContain(debateQuestion.text);
   });
 
+  it("closes an open detail inspector when follower context changes", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const [, miniFramework] = response.candidates;
+    if (miniFramework === undefined) {
+      throw new Error("Expected the writer fixture to include a candidate.");
+    }
+    const analyzePosts = vi
+      .fn<WriterApiClient["analyzePosts"]>()
+      .mockImplementationOnce(async () => createAnalyzePostsResponse(response))
+      .mockImplementationOnce(async () => ({
+        items: [
+          scoredAnalysisItem(miniFramework, {
+            prediction: availablePrediction({
+              rangeLow: 410,
+              rangeHigh: 760,
+              midpoint: 585,
+            }),
+          }),
+        ],
+      }));
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(vi.fn(async () => response), analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Follower changes should invalidate open details.");
+    await driver.generate();
+    const openHtml = await driver.openDetails(miniFramework.id);
+
+    expect(dialogTextSegment(openHtml)).toContain("410 - 760");
+
+    const changedHtml = driver.updateFollowers("9999");
+    const changedText = textContent(changedHtml);
+
+    expect(changedHtml).not.toContain('role="dialog"');
+    expect(changedText).not.toContain("Deterministic details");
+    expect(changedText).not.toContain("410 - 760");
+    expect(changedText).toContain("Prediction needs refresh.");
+  });
+
   it("shows missing follower recovery in details without hiding candidate text", async () => {
     const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
     const response = createValidIdeaResponse();
@@ -1338,6 +1648,49 @@ describe("WriterPage generation behavior", () => {
       focusResult.focusRequest,
     );
     expect(focusResult.html).toContain('data-focus-target="manual-followers"');
+  });
+
+  it("opens details with invalid followers by omitting prediction context", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const [oneLiner] = response.candidates;
+    if (oneLiner === undefined) {
+      throw new Error("Expected the writer fixture to include a candidate.");
+    }
+    const analyzePosts = vi
+      .fn<WriterApiClient["analyzePosts"]>()
+      .mockImplementationOnce(async () => createAnalyzePostsResponse(response))
+      .mockImplementationOnce(async () => ({
+        items: [
+          scoredAnalysisItem(oneLiner, {
+            prediction: {
+              status: "disabled",
+              reason: "missing_followers",
+              message: "Prediction needs follower count.",
+            },
+          }),
+        ],
+      }));
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient: createApiClient(vi.fn(async () => response), analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Invalid followers should not block details.");
+    await driver.generate();
+    driver.updateFollowers("not-a-number");
+    const html = await driver.openDetails(oneLiner.id);
+    const text = textContent(html);
+
+    expect(analyzePosts).toHaveBeenCalledTimes(2);
+    expect(analyzePosts).toHaveBeenNthCalledWith(
+      2,
+      expectedExpandedAnalyzePostsRequestFor(oneLiner),
+    );
+    expect(text).toContain("Enter your current follower count to estimate impressions.");
+    expect(dialogTextSegment(html)).toContain(oneLiner.text);
+    expect(dialogTextSegment(html)).toContain("Prediction needs follower count.");
   });
 
   it("retries detail analysis without regenerating candidates", async () => {

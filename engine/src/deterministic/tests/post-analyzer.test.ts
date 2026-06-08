@@ -472,6 +472,25 @@ describe("deterministic post analyzer", () => {
     });
   });
 
+  it("does not compute engagement prediction without explicit followers", () => {
+    const result = analyzePost(
+      "genuine question: why do deterministic scoring tools need explicit follower context?",
+    );
+
+    expect(result.prediction).toBeNull();
+  });
+
+  it("does not let the exported engagement predictor use an implicit follower fallback", () => {
+    const prediction = predictEngagement({
+      text: "Clear writing compounds when the point is specific.",
+      score: 66,
+      format: "insight_share",
+      followers: undefined,
+    });
+
+    expect(prediction).toBeNull();
+  });
+
   it("documents current zeitgeist prediction math without live-trend copy claims", () => {
     const prediction = predictEngagement({
       text: "AI onboarding gets easier when the first run has one clear success moment.",

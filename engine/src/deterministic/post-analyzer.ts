@@ -1040,19 +1040,19 @@ export function predictEngagement(input: {
   text: string;
   score: number;
   format: Format;
-  followers?: number;
+  followers: number | undefined;
   aiRating?: number;
 }): EngagementPrediction | null {
   const {
     text,
     score,
     format,
-    followers = 1000,
+    followers,
     aiRating,
   } = input;
   const trimmed = text.trim();
 
-  if (trimmed.length < 15) {
+  if (followers === undefined || trimmed.length < 15) {
     return null;
   }
 
@@ -1273,13 +1273,16 @@ export function analyzePost(text: string, options: AnalyzeOptions = {}): Analyze
     enabled: options.enabled,
     varietyCheck: options.varietyCheck,
   });
-  const prediction = predictEngagement({
-    text,
-    score: score.value,
-    format,
-    followers: options.followers ?? 1000,
-    aiRating: options.aiRating,
-  });
+  const prediction =
+    options.followers === undefined
+      ? null
+      : predictEngagement({
+          text,
+          score: score.value,
+          format,
+          followers: options.followers,
+          aiRating: options.aiRating,
+        });
 
   return {
     text,

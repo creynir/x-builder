@@ -8,7 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { GeneratedIdeaCandidate } from "@x-builder/shared";
 
 import { RouteErrorBanner } from "../../shell/route-error-banner";
-import { Badge, Button, Drawer, Skeleton } from "../../ui/foundation";
+import { Alert, Badge, Button, Drawer, Skeleton } from "../../ui/foundation";
 import {
   CandidateDeterministicSummary,
   DeterministicDetailInspector,
@@ -110,6 +110,30 @@ function CandidateAnalysis({
     );
   }
 
+  if (state.status === "unavailable") {
+    return (
+      <div className="xb-writer-candidate__analysis">
+        <p>{state.candidate.text}</p>
+        <Alert
+          variant="danger"
+          title="Could not score candidate"
+          recovery={
+            <Button
+              disabled={!state.error.retryable}
+              onClick={() => onRetryScore(state.candidate.id)}
+              type="button"
+              variant="secondary"
+            >
+              Retry score
+            </Button>
+          }
+        >
+          {state.error.message}
+        </Alert>
+      </div>
+    );
+  }
+
   if (state.status === "stale") {
     return (
       <div className="xb-writer-candidate__analysis">
@@ -154,6 +178,7 @@ function WriterPageView({
   followerError,
   idea,
   isGenerating,
+  isScoring,
   onApplyFollowers,
   onCloseDetails,
   onFocusFollowers,
@@ -219,7 +244,7 @@ function WriterPageView({
           source: appliedFollowers === undefined ? "missing" : "manual",
           skipped: appliedFollowers === undefined,
         }}
-        disabled={isGenerating}
+        disabled={isGenerating || isScoring}
         error={followerError}
         isStale={Object.values(analysisByCandidateId).some(
           (state) => state.status === "stale",
@@ -248,6 +273,7 @@ function WriterPageView({
                 <Badge variant="info">{candidateLabel(candidate.format)}</Badge>
                 <Button
                   data-focus-target={`candidate-details:${candidate.id}`}
+                  disabled={isGenerating || isScoring}
                   onClick={() => onOpenDetails(candidate.id)}
                   type="button"
                   variant="secondary"
@@ -281,6 +307,11 @@ function WriterPageView({
           <DeterministicDetailInspector
             label="Loading deterministic details"
             state="loading"
+          />
+        ) : detail.status === "error" ? (
+          <DeterministicDetailInspector
+            message={detail.error.message}
+            state="error"
           />
         ) : detail.status === "failed" ? (
           <DeterministicDetailInspector
@@ -376,7 +407,7 @@ export function WriterPage({
     }
 
     const target = document.querySelector<HTMLElement>(
-      `[data-focus-target="${model.activeFocusTarget}"]`,
+      `[data-focus-target="${CSS.escape(model.activeFocusTarget)}"]`,
     );
     target?.focus();
   }, [model.activeFocusRequest, model.activeFocusTarget]);

@@ -16,40 +16,25 @@ import { deriveApiPostCoach } from "./post-coach-view-model.js";
 import { toEngagementPrediction } from "./prediction-view-model.js";
 
 const nowIso = (): string => new Date().toISOString();
+type AnalyzePost = typeof analyzePost;
 
 export class DeterministicAnalysisService {
+  private readonly analyzePost: AnalyzePost;
+
+  constructor(options: { analyzePost?: AnalyzePost } = {}) {
+    this.analyzePost = options.analyzePost ?? analyzePost;
+  }
+
   analyzePosts(request: AnalyzePostsRequest): AnalyzePostsResponse {
     const parsedRequest = analyzePostsRequestSchema.parse(request);
     const analyzedAt = nowIso();
     const items = parsedRequest.items.map((item): AnalyzedPostItem => {
-      try {
-        const analysis = analyzePost(item.text, {
-          followers: parsedRequest.scoringContext.followers,
-        });
-        const score = sanitizeScoreLearnings(analysis.score);
-        const postCoach = deriveApiPostCoach({
-          score,
-          text: item.text,
-          mode: parsedRequest.presentation.postCoachMode,
-        });
-        const prediction = toEngagementPrediction({
-          analyzerPrediction: analysis.prediction,
-          followers: parsedRequest.scoringContext.followers,
-        });
+      let analysis: ReturnType<AnalyzePost>;
 
-        return {
-          status: "scored",
-          id: item.id,
-          text: item.text,
-          sourceFormat: item.sourceFormat,
-          detectedFormat: analysis.format,
-          score,
-          postCoach,
-          prediction,
-          heuristicLabel,
-          analyzedAt,
-          analyzerVersion,
-        };
+      try {
+        analysis = this.analyzePost(item.text, {
+          followers: parsedRequest.scoringContext.followers,
+        });
       } catch {
         return {
           status: "score_failed",
@@ -61,6 +46,31 @@ export class DeterministicAnalysisService {
           retryable: true,
         };
       }
+
+      const score = sanitizeScoreLearnings(analysis.score);
+      const postCoach = deriveApiPostCoach({
+        score,
+        text: item.text,
+        mode: parsedRequest.presentation.postCoachMode,
+      });
+      const prediction = toEngagementPrediction({
+        analyzerPrediction: analysis.prediction,
+        followers: parsedRequest.scoringContext.followers,
+      });
+
+      return {
+        status: "scored",
+        id: item.id,
+        text: item.text,
+        sourceFormat: item.sourceFormat,
+        detectedFormat: analysis.format,
+        score,
+        postCoach,
+        prediction,
+        heuristicLabel,
+        analyzedAt,
+        analyzerVersion,
+      };
     });
 
     return analyzePostsResponseSchema.parse({ items });

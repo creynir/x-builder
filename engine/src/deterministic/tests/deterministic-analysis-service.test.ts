@@ -7,6 +7,7 @@ import {
   type PostCoachViewModel,
 } from "@x-builder/shared";
 import { DeterministicAnalysisService } from "../deterministic-analysis-service";
+import { analyzePost, type AnalyzeResult } from "../post-analyzer";
 
 const learningCaveat = "Static rule check. Imported performance data is not connected yet.";
 
@@ -279,5 +280,57 @@ describe("deterministic analysis service", () => {
     expect(expandedPostCoach.expanded).toBe(true);
     expect(expandedPostCoach.sections.map((section) => section.title)).not.toEqual(["Sample"]);
     expect(expandedPostCoach.learnings.length).toBeGreaterThan(0);
+  });
+
+  it("returns item-level score_failed when the analyzer itself throws", () => {
+    const service = new DeterministicAnalysisService({
+      analyzePost: () => {
+        throw new Error("Analyzer failed.");
+      },
+    });
+    const response = service.analyzePosts({
+      items: [
+        {
+          id: "candidate-1",
+          text: strongQuestion,
+        },
+      ],
+      scoringContext: {},
+      presentation: {
+        postCoachMode: "preview",
+      },
+    });
+
+    expect(response.items).toHaveLength(1);
+    expect(response.items[0]).toMatchObject({
+      status: "score_failed",
+      id: "candidate-1",
+      text: strongQuestion,
+      retryable: true,
+    });
+  });
+
+  it("does not downgrade response mapping failures to item-level score_failed", () => {
+    const service = new DeterministicAnalysisService({
+      analyzePost: (text, options) => ({
+        ...analyzePost(text, options),
+        format: "unsupported_format",
+      }) as unknown as AnalyzeResult,
+    });
+
+    expect(() =>
+      service.analyzePosts({
+        items: [
+          {
+            id: "candidate-1",
+            text: strongQuestion,
+          },
+        ],
+        scoringContext: {},
+        presentation: {
+          postCoachMode: "preview",
+        },
+      }),
+    ).toThrow();
   });
 });
