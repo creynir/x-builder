@@ -365,6 +365,50 @@ describe("deterministic post analyzer", () => {
     expect(score.checks).toEqual(expect.arrayContaining([varietyCheck]));
   });
 
+  it("keeps enriched text checks when composing voice checks with an injected variety check", () => {
+    const varietyCheck: VoiceCheck = {
+      id: "variety_recent_format",
+      label: "Recent format variety",
+      status: "fail",
+    };
+    const score = runVoiceChecks(
+      [
+        "This changed everything. What should we ship? Why now? Should pricing change? Who owns docs?",
+        "",
+        "Also read https://example.com/a and https://example.com/b",
+        "",
+        "Thanks @maya @lee @sam @jo",
+      ].join("\n"),
+      { varietyCheck },
+    );
+    const checkIds = score.checks.map((check) => check.id);
+
+    expect(checkIds).toEqual(
+      expect.arrayContaining(["variety_recent_format", ...enrichedTextCheckIds]),
+    );
+
+    const card = derivePostCoachCard({
+      expanded: true,
+      hasText: true,
+      score,
+    });
+
+    if (card.state !== "ready") {
+      throw new Error("Expected ready card.");
+    }
+
+    const failedSectionIds =
+      card.sections.find((section) => section.title === "Worth a look")?.items.map((check) => check.id) ??
+      [];
+
+    expect(failedSectionIds).toEqual(
+      expect.arrayContaining([
+        "variety_recent_format",
+        "quality_answerable_question",
+      ]),
+    );
+  });
+
   it("derives a variety check from recent post history without browser storage", () => {
     const history: PostHistoryItem[] = [
       { format: "insight_share", at: "2026-06-07T09:00:00.000Z" },
