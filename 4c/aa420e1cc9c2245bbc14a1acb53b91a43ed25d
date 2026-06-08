@@ -1,0 +1,19 @@
+engine/src/deterministic/post-analyzer.ts
+  s_9b10549703c0eb::t_2270cbaeff2d73 1219-1220,1440-1442
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "4caa420e1cc9c2245bbc14a1acb53b91a43ed25d",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
