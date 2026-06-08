@@ -1,0 +1,22 @@
+engine/src/deterministic/tests/post-analyzer.test.ts
+  s_9b10549703c0eb::t_8a0173f0cfc5cc 30,185-190,209-212
+engine/src/deterministic/text-enrichment-checks.ts
+  s_9b10549703c0eb::t_6088f02fdd07d8 3-19,37-41,43,45,48,56,178-180,184-185
+  s_9b10549703c0eb::t_e9317f45981f7d 20-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "61f7d20a114ecf72d55a4cb2f9c846cb13de5074",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
