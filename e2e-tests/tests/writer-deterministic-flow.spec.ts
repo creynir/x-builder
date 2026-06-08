@@ -326,7 +326,6 @@ test("writer generates and scores candidates with deterministic Post Coach detai
 
   expect(captured.generate[0]).toEqual({
     idea,
-    useKnownPostIds: [],
   });
   expect(captured.analyze[0]).toEqual({
     items: candidates.map((candidate) => ({

@@ -97,10 +97,7 @@ export class EngineApiClient {
       this.request(
         "/ideas/generate",
         {
-          body: {
-            ...input,
-            useKnownPostIds: input.useKnownPostIds ?? [],
-          },
+          body: input,
           method: "POST",
         },
         generateIdeaResponseSchema,
