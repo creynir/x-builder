@@ -51,6 +51,11 @@ type CapturedRequests = {
   generate: unknown[];
 };
 
+type StubEngineOptions = {
+  analyze?: (route: Route, body: AnalyzeRequest, requestCount: number) => Promise<void>;
+  generate?: (route: Route, body: unknown, requestCount: number) => Promise<void>;
+};
+
 function subsystem(label: string) {
   return {
     checkedAt,
@@ -226,6 +231,28 @@ function scoredCandidate(candidate: Candidate, mode: "preview" | "expanded", ind
   };
 }
 
+function scoreFailedCandidate(candidate: Candidate, message = "Deterministic scoring timed out.") {
+  return {
+    status: "score_failed",
+    id: candidate.id,
+    text: candidate.text,
+    sourceFormat: candidate.format,
+    reason: "deterministic_analysis_failed",
+    message,
+    retryable: true,
+  };
+}
+
+function routeError(message: string, code: "generation_failed" | "deterministic_analysis_failed") {
+  return {
+    code,
+    message,
+    retryable: true,
+    scope: code === "generation_failed" ? "writer" : "deterministic",
+    status: 503,
+  };
+}
+
 async function fulfillJson(route: Route, status: number, body: unknown) {
   await route.fulfill({
     body: JSON.stringify(body),
@@ -251,7 +278,11 @@ function requestJson(route: Route): unknown {
   return JSON.parse(postData);
 }
 
-async function stubEngine(page: Page, captured: CapturedRequests) {
+async function stubEngine(
+  page: Page,
+  captured: CapturedRequests,
+  options: StubEngineOptions = {},
+) {
   await page.route(`${engineBaseUrl}/status`, async (route) => {
     await fulfillJson(route, 200, readyStatus());
   });
@@ -271,7 +302,14 @@ async function stubEngine(page: Page, captured: CapturedRequests) {
       return;
     }
 
-    captured.generate.push(requestJson(route));
+    const body = requestJson(route);
+    captured.generate.push(body);
+
+    if (options.generate !== undefined) {
+      await options.generate(route, body, captured.generate.length);
+      return;
+    }
+
     await fulfillJson(route, 200, { candidates });
   });
 
@@ -283,6 +321,11 @@ async function stubEngine(page: Page, captured: CapturedRequests) {
 
     const body = requestJson(route) as AnalyzeRequest;
     captured.analyze.push(body);
+
+    if (options.analyze !== undefined) {
+      await options.analyze(route, body, captured.analyze.length);
+      return;
+    }
 
     await fulfillJson(route, 200, {
       items: body.items.map((item, index) => {
@@ -398,4 +441,185 @@ test("writer generates and scores candidates with deterministic Post Coach detai
   expect(pageText).not.toMatch(/last 30 days/i);
   expect(pageText).not.toMatch(/imported metrics/i);
   expect(pageText).not.toMatch(/live trend/i);
+});
+
+test("writer retries deterministic scoring without regenerating candidates", async ({
+  page,
+}) => {
+  const captured: CapturedRequests = {
+    analyze: [],
+    generate: [],
+  };
+  const idea = "Make deterministic recovery obvious without changing the generated copy.";
+  const failedCandidate = candidates[1];
+
+  await stubEngine(page, captured, {
+    analyze: async (route, body, requestCount) => {
+      if (requestCount === 1) {
+        await fulfillJson(route, 200, {
+          items: body.items.map((item, index) => {
+            const candidate = candidates.find((entry) => entry.id === item.id);
+
+            if (candidate === undefined) {
+              throw new Error(`Unexpected candidate id ${item.id}.`);
+            }
+
+            return candidate.id === failedCandidate.id
+              ? scoreFailedCandidate(candidate)
+              : scoredCandidate(candidate, "preview", index + 1);
+          }),
+        });
+        return;
+      }
+
+      expect(body.items).toEqual([
+        {
+          id: failedCandidate.id,
+          sourceFormat: failedCandidate.format,
+          text: failedCandidate.text,
+        },
+      ]);
+
+      await fulfillJson(route, 200, {
+        items: [scoredCandidate(failedCandidate, "preview", 2)],
+      });
+    },
+  });
+  await page.goto("/writer");
+
+  await page.getByRole("textbox", { name: "Idea" }).fill(idea);
+  await page.getByRole("spinbutton", { name: "Followers" }).fill("4200");
+  await page.getByRole("button", { name: "Generate" }).click();
+
+  await expect.poll(() => captured.generate.length).toBe(1);
+  await expect.poll(() => captured.analyze.length).toBe(1);
+  expect(captured.generate[0]).toEqual({ idea });
+
+  const results = page.getByRole("region", { name: "Generated candidates" });
+  const failedArticle = results.locator("article", {
+    hasText: failedCandidate.text,
+  });
+
+  await expect(failedArticle.getByText(failedCandidate.text)).toBeVisible();
+  await expect(failedArticle.getByText("Score failed")).toBeVisible();
+  await expect(failedArticle.getByText("Deterministic scoring timed out.")).toBeVisible();
+
+  await failedArticle.getByRole("button", { name: "Retry score" }).click();
+
+  await expect.poll(() => captured.analyze.length).toBe(2);
+  expect(captured.generate).toHaveLength(1);
+  expect(captured.analyze[1]).toEqual({
+    items: [
+      {
+        id: failedCandidate.id,
+        sourceFormat: failedCandidate.format,
+        text: failedCandidate.text,
+      },
+    ],
+    presentation: {
+      postCoachMode: "preview",
+    },
+    scoringContext: {
+      followers: 4200,
+    },
+  });
+
+  await expect(failedArticle.getByText(failedCandidate.text)).toBeVisible();
+  await expect(failedArticle.getByRole("progressbar", { name: "Deterministic score" })).toHaveAttribute(
+    "aria-valuenow",
+    "78",
+  );
+  await expect(failedArticle.getByText("Preview API learning 2: keep the reader payoff explicit.")).toBeVisible();
+  await expect(failedArticle.getByText(learningCaveat)).toBeVisible();
+  await expect(failedArticle.getByText("341 - 621")).toBeVisible();
+  await expect(failedArticle.getByText("481")).toBeVisible();
+  await expect(failedArticle.getByText("Manual follower context")).toBeVisible();
+});
+
+test("writer keeps candidates visible when deterministic analysis route fails", async ({
+  page,
+}) => {
+  const captured: CapturedRequests = {
+    analyze: [],
+    generate: [],
+  };
+  const idea = "Keep generated drafts on screen when scoring cannot reach the route.";
+
+  await stubEngine(page, captured, {
+    analyze: async (route) => {
+      await fulfillJson(
+        route,
+        503,
+        routeError(
+          "Deterministic scoring is temporarily unavailable.",
+          "deterministic_analysis_failed",
+        ),
+      );
+    },
+  });
+  await page.goto("/writer");
+
+  await page.getByRole("textbox", { name: "Idea" }).fill(idea);
+  await page.getByRole("button", { name: "Generate" }).click();
+
+  await expect.poll(() => captured.generate.length).toBe(1);
+  await expect.poll(() => captured.analyze.length).toBe(1);
+
+  const results = page.getByRole("region", { name: "Generated candidates" });
+  for (const candidate of candidates) {
+    await expect(results.getByText(candidate.text)).toBeVisible();
+  }
+
+  const recovery = page.getByRole("alert");
+  await expect(recovery.getByText("Route unavailable")).toBeVisible();
+  await expect(
+    recovery.getByText("Deterministic scoring is temporarily unavailable."),
+  ).toBeVisible();
+  await expect(recovery.getByRole("button", { name: "Retry" })).toBeVisible();
+});
+
+test("writer generation retry still calls the generation route again", async ({
+  page,
+}) => {
+  const captured: CapturedRequests = {
+    analyze: [],
+    generate: [],
+  };
+  const idea = "Retry generation after an engine route outage.";
+
+  await stubEngine(page, captured, {
+    generate: async (route, _body, requestCount) => {
+      if (requestCount === 1) {
+        await fulfillJson(
+          route,
+          503,
+          routeError("Generation is temporarily unavailable.", "generation_failed"),
+        );
+        return;
+      }
+
+      await fulfillJson(route, 200, { candidates });
+    },
+  });
+  await page.goto("/writer");
+
+  await page.getByRole("textbox", { name: "Idea" }).fill(idea);
+  await page.getByRole("button", { name: "Generate" }).click();
+
+  await expect.poll(() => captured.generate.length).toBe(1);
+  const recovery = page.getByRole("alert");
+  await expect(recovery.getByText("Route unavailable")).toBeVisible();
+  await expect(recovery.getByText("Generation is temporarily unavailable.")).toBeVisible();
+
+  await recovery.getByRole("button", { name: "Retry" }).click();
+
+  await expect.poll(() => captured.generate.length).toBe(2);
+  await expect.poll(() => captured.analyze.length).toBe(1);
+  expect(captured.generate).toEqual([{ idea }, { idea }]);
+
+  const results = page.getByRole("region", { name: "Generated candidates" });
+  await expect(results.getByText(candidates[0].text)).toBeVisible();
+  await expect(
+    results.getByRole("progressbar", { name: "Deterministic score" }).first(),
+  ).toHaveAttribute("aria-valuenow", "77");
 });
