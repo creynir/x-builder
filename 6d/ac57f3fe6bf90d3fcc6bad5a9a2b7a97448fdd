@@ -1,0 +1,19 @@
+client/src/features/writer/writer-workflow.ts
+  s_9b10549703c0eb::t_a9808a65fd26f7 236-244,247,253,409-411
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "6dac57f3fe6bf90d3fcc6bad5a9a2b7a97448fdd",
+  "prompts": {},
+  "sessions": {
+    "s_9b10549703c0eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea1e4-77dd-7383-a5a2-ebffe7c07408",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
