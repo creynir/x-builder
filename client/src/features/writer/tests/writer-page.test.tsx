@@ -45,11 +45,13 @@ type WriterPagePublicDriver = {
   closeDetails: () => string;
   closeDetailsWithEscape: () => {
     activeTarget: string;
+    focusRequest: number;
     html: string;
   };
   generate: () => Promise<string>;
   focusFollowers: () => {
     activeTarget: string;
+    focusRequest: number;
     html: string;
   };
   openDetails: (itemId: string) => Promise<string>;
@@ -950,6 +952,43 @@ describe("WriterPage generation behavior", () => {
     }
   });
 
+  it("retries analysis transport failures without regenerating candidates", async () => {
+    const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
+    const response = createValidIdeaResponse();
+    const analysisError = createApiError({
+      code: "engine_unreachable",
+      message: "Could not reach the engine while scoring.",
+      retryable: true,
+      scope: "route",
+      status: 503,
+    });
+    const generateIdea = vi.fn<WriterApiClient["generateIdea"]>(async () => response);
+    const analyzePosts = vi
+      .fn<WriterApiClient["analyzePosts"]>()
+      .mockImplementationOnce(async () => throwApiError(analysisError))
+      .mockImplementationOnce(async () => createAnalyzePostsResponse(response));
+    const apiClient = createApiClient(generateIdea, analyzePosts);
+    const driver = createDriver(createWriterPagePublicDriver, {
+      apiClient,
+      onOpenSettings: vi.fn(),
+      renderPage: WriterPage,
+    });
+
+    driver.updateIdea("Transport failures from analysis should not regenerate.");
+    await driver.generate();
+    await flushAsyncTasks();
+    const retryText = textContent(await driver.retry());
+
+    expect(generateIdea).toHaveBeenCalledOnce();
+    expect(analyzePosts).toHaveBeenCalledTimes(2);
+    expect(analyzePosts).toHaveBeenNthCalledWith(
+      2,
+      expectedAnalyzePostsRequest(response.candidates),
+    );
+    expect(retryText).toContain("Deterministic score");
+    expect(retryText).not.toContain("Could not reach the engine while scoring.");
+  });
+
   it("retries scoring for an existing candidate without regenerating text", async () => {
     const { WriterPage, createWriterPagePublicDriver } = await loadWriterPage();
     const response = createValidIdeaResponse();
@@ -1089,8 +1128,19 @@ describe("WriterPage generation behavior", () => {
     const applyFollowers = driver.applyFollowers();
     await flushAsyncTasks();
     driver.updateFollowers("7777");
-    recompute.resolve(createAnalyzePostsResponse(response));
+    recompute.resolve({
+      items: response.candidates.map((candidate) =>
+        scoredAnalysisItem(candidate, {
+          prediction: availablePrediction({
+            rangeLow: 420,
+            rangeHigh: 840,
+            midpoint: 630,
+          }),
+        }),
+      ),
+    });
     const html = await applyFollowers;
+    const text = textContent(html);
 
     expect(analyzePosts).toHaveBeenNthCalledWith(
       2,
@@ -1099,6 +1149,9 @@ describe("WriterPage generation behavior", () => {
       }),
     );
     expect(html).toContain('value="7777"');
+    expect(text).toContain("Prediction needs refresh.");
+    expect(text).not.toContain("420");
+    expect(text).not.toContain("840");
   });
 
   it("keeps newer idea edits when score retry resolves", async () => {
@@ -1277,8 +1330,13 @@ describe("WriterPage generation behavior", () => {
     expect(text).toContain("Add followers");
 
     const focusResult = driver.focusFollowers();
+    const repeatedFocusResult = driver.focusFollowers();
 
     expect(focusResult.activeTarget).toBe("manual-followers");
+    expect(repeatedFocusResult.activeTarget).toBe("manual-followers");
+    expect(repeatedFocusResult.focusRequest).toBeGreaterThan(
+      focusResult.focusRequest,
+    );
     expect(focusResult.html).toContain('data-focus-target="manual-followers"');
   });
 

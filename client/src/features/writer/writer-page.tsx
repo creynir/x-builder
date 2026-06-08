@@ -28,6 +28,7 @@ import {
   runRetryAnalysis,
   runRetryDetails,
   runRetryScore,
+  shouldRetryAnalysis,
   type CandidateAnalysisState,
   type WriterApiClient,
   type WriterPageModel,
@@ -49,11 +50,13 @@ export type WriterPagePublicDriver = {
   closeDetails: () => string;
   closeDetailsWithEscape: () => {
     activeTarget: string;
+    focusRequest: number;
     html: string;
   };
   generate: () => Promise<string>;
   focusFollowers: () => {
     activeTarget: string;
+    focusRequest: number;
     html: string;
   };
   openDetails: (itemId: string) => Promise<string>;
@@ -329,10 +332,7 @@ export function WriterPage({
   };
 
   const retry = async () => {
-    if (
-      model.routeError?.code === "deterministic_analysis_failed" &&
-      model.candidates.length > 0
-    ) {
+    if (shouldRetryAnalysis(model)) {
       await runRetryAnalysis(apiClient, model, setModel);
       return;
     }
@@ -379,7 +379,7 @@ export function WriterPage({
       `[data-focus-target="${model.activeFocusTarget}"]`,
     );
     target?.focus();
-  }, [model.activeFocusTarget]);
+  }, [model.activeFocusRequest, model.activeFocusTarget]);
 
   return (
     <WriterPageView
@@ -447,6 +447,7 @@ export function createWriterPagePublicDriver(
 
       return {
         activeTarget: model.activeFocusTarget ?? "",
+        focusRequest: model.activeFocusRequest,
         html: render(),
       };
     },
@@ -459,6 +460,7 @@ export function createWriterPagePublicDriver(
 
       return {
         activeTarget: model.activeFocusTarget ?? "",
+        focusRequest: model.activeFocusRequest,
         html: render(),
       };
     },
@@ -471,10 +473,7 @@ export function createWriterPagePublicDriver(
     },
     render,
     retry: async () => {
-      if (
-        model.routeError?.code === "deterministic_analysis_failed" &&
-        model.candidates.length > 0
-      ) {
+      if (shouldRetryAnalysis(model)) {
         await runRetryAnalysis(options.apiClient, model, publishModel);
       } else {
         await runRetry(options.apiClient, model, publishModel);

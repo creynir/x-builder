@@ -74,6 +74,7 @@ export type CandidateDetailState =
     };
 
 export type WriterPageModel = {
+  activeFocusRequest: number;
   activeFocusTarget: string | null;
   analysisByCandidateId: Record<string, CandidateAnalysisState>;
   appliedFollowers: number | undefined;
@@ -86,6 +87,7 @@ export type WriterPageModel = {
   isGenerating: boolean;
   lastPayload: GenerateIdeaRequest | null;
   routeError: ApiError | null;
+  routeErrorOrigin: "analysis" | "generation" | null;
 };
 
 const emptyIdeaError = "Enter an idea before generating.";
@@ -94,6 +96,7 @@ let nextDetailRequestId = 1;
 
 export function createInitialModel(): WriterPageModel {
   return {
+    activeFocusRequest: 0,
     activeFocusTarget: null,
     analysisByCandidateId: {},
     appliedFollowers: undefined,
@@ -108,6 +111,7 @@ export function createInitialModel(): WriterPageModel {
     isGenerating: false,
     lastPayload: null,
     routeError: null,
+    routeErrorOrigin: null,
   };
 }
 
@@ -410,6 +414,7 @@ function applyGenerationResult(
       isGenerating: false,
       lastPayload: payload,
       routeError: null,
+      routeErrorOrigin: null,
     };
   }
 
@@ -422,6 +427,7 @@ function applyGenerationResult(
       isGenerating: false,
       lastPayload: payload,
       routeError: null,
+      routeErrorOrigin: null,
     };
   }
 
@@ -431,15 +437,20 @@ function applyGenerationResult(
     isGenerating: false,
     lastPayload: payload,
     routeError: result.error,
+    routeErrorOrigin: "generation",
   };
 }
 
 function applyAnalysisResult(
   model: WriterPageModel,
   requestedCandidates: GeneratedIdeaCandidate[],
+  requestedFollowers: number | undefined,
   result: Awaited<ReturnType<typeof requestAnalysis>>,
 ): WriterPageModel {
-  if (!candidatesStillPresent(model.candidates, requestedCandidates)) {
+  if (
+    !candidatesStillPresent(model.candidates, requestedCandidates) ||
+    !followerDraftStillMatches(model, requestedFollowers)
+  ) {
     return model;
   }
 
@@ -462,6 +473,7 @@ function applyAnalysisResult(
       ...model,
       analysisByCandidateId: nextAnalysisByCandidateId,
       routeError: result.error,
+      routeErrorOrigin: "analysis",
     };
   }
 
@@ -482,6 +494,7 @@ function applyAnalysisResult(
       ),
     },
     routeError: null,
+    routeErrorOrigin: null,
   };
 }
 
@@ -570,6 +583,7 @@ function applyAnalysisLoading(
       ...createLoadingAnalysis(candidates, model.analysisByCandidateId),
     },
     routeError: null,
+    routeErrorOrigin: null,
   };
 }
 
@@ -588,9 +602,35 @@ function markAnalysisStale(
         ];
       }
 
+      if (state.status === "loading") {
+        return state.previous === undefined
+          ? [
+              candidateId,
+              {
+                status: "idle" as const,
+              },
+            ]
+          : [
+              candidateId,
+              {
+                item: state.previous.item,
+                status: "stale" as const,
+              },
+            ];
+      }
+
       return [candidateId, state];
     }),
   );
+}
+
+function followerDraftStillMatches(
+  model: WriterPageModel,
+  requestedFollowers: number | undefined,
+): boolean {
+  const latestFollowers = parseFollowerDraft(model.followerDraft);
+
+  return latestFollowers.type === "valid" && latestFollowers.followers === requestedFollowers;
 }
 
 export function applyFollowerDraftChange(
@@ -721,10 +761,11 @@ async function runGenerationFromStart(
   );
 
   if (generationResult.type === "success" && start.followerContext.type === "valid") {
+    const requestedFollowers = start.followerContext.followers;
     const analysisResult = await requestAnalysis(
       apiClient,
       generationResult.candidates,
-      start.followerContext.followers,
+      requestedFollowers,
     );
     currentModel = publishLatest(
       publish,
@@ -733,6 +774,7 @@ async function runGenerationFromStart(
         applyAnalysisResult(
           latestModel,
           generationResult.candidates,
+          requestedFollowers,
           analysisResult,
         ),
     );
@@ -780,7 +822,7 @@ async function runAnalysisForCandidates(
     followerContext.followers,
   );
   currentModel = publishLatest(publish, currentModel, (latestModel) =>
-    applyAnalysisResult(latestModel, candidates, analysisResult),
+    applyAnalysisResult(latestModel, candidates, followerContext.followers, analysisResult),
   );
 
   return currentModel;
@@ -926,6 +968,7 @@ export function closeDetailsWithEscape(model: WriterPageModel): WriterPageModel 
 
   return {
     ...closeDetails(model),
+    activeFocusRequest: model.activeFocusRequest + 1,
     activeFocusTarget: `candidate-details:${model.detail.candidate.id}`,
   };
 }
@@ -933,6 +976,11 @@ export function closeDetailsWithEscape(model: WriterPageModel): WriterPageModel 
 export function focusManualFollowers(model: WriterPageModel): WriterPageModel {
   return {
     ...model,
+    activeFocusRequest: model.activeFocusRequest + 1,
     activeFocusTarget: "manual-followers",
   };
+}
+
+export function shouldRetryAnalysis(model: WriterPageModel): boolean {
+  return model.routeErrorOrigin === "analysis" && model.candidates.length > 0;
 }
