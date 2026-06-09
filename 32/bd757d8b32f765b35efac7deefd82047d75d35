@@ -1,0 +1,20 @@
+engine/src/llm/tests/structured-llm-service.test.ts
+  s_2150378e11d0bc::t_6172a9c2f24ee3 27-32,368,416-419
+  s_2150378e11d0bc::t_325e0ec160c5a7 24-26,33-34,115-117,128,156-197,268-290,366-367,369-370,372-415,420-445
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "32bd757d8b32f765b35efac7deefd82047d75d35",
+  "prompts": {},
+  "sessions": {
+    "s_2150378e11d0bc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab99-20f6-7b60-8138-44a7328e2887",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
