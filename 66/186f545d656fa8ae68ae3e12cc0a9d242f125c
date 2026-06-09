@@ -1,0 +1,83 @@
+engine/src/deterministic/rule-lexicon.ts
+  s_4cbda645920fe5::t_f74b02e8baeb79 1-88
+engine/src/deterministic/tests/score-aggregator.test.ts
+  s_2150378e11d0bc::t_427524be39bdde 1-28
+engine/src/deterministic/text-metrics.ts
+  s_4cbda645920fe5::t_f74b02e8baeb79 1-17
+engine/src/deterministic/prediction-estimator.ts
+  s_4cbda645920fe5::t_3fb77dd1ec3e32 15-19,28,39
+  s_4cbda645920fe5::t_58f4dce8aa77fd 1-14,20-27,29-38,40-166
+engine/src/deterministic/tests/format-history.test.ts
+  s_2150378e11d0bc::t_427524be39bdde 1-55
+engine/src/deterministic/post-coach-model.ts
+  s_4cbda645920fe5::t_406f5aa3de505e 1-143
+engine/src/deterministic/format-history.ts
+  s_4cbda645920fe5::t_0b08f1ee99562e 1-84
+engine/src/deterministic/tests/analyzer.test.ts
+  s_2150378e11d0bc::t_427524be39bdde 5-6,13,19-21
+  s_4cbda645920fe5::t_e2a88e6c2e38b2 1-4,7-12,14-18,22-44
+engine/src/deterministic/tests/learning-model.test.ts
+  s_2150378e11d0bc::t_427524be39bdde 1-30
+engine/src/deterministic/score-aggregator.ts
+  s_4cbda645920fe5::t_716bcb1b68b342 1-43
+engine/src/deterministic/tests/post-coach-model.test.ts
+  s_2150378e11d0bc::t_427524be39bdde 1-116
+engine/src/deterministic/voice-score.ts
+  s_4cbda645920fe5::t_716bcb1b68b342 1-57
+engine/src/deterministic/tests/text-metrics.test.ts
+  s_2150378e11d0bc::t_427524be39bdde 1-23
+engine/src/deterministic/engagement-readiness.ts
+  s_4cbda645920fe5::t_81413d9059f65e 1-168
+engine/src/deterministic/format-classifier.ts
+  s_4cbda645920fe5::t_0b08f1ee99562e 1-82
+docs/features/codex-adapter/tickets/CAD-002-safe-process-execution-boundary.md
+  s_2150378e11d0bc::t_11e8507241a05f 63,83,86,92
+engine/src/deterministic/tests/format-classifier.test.ts
+  s_2150378e11d0bc::t_427524be39bdde 1-13
+engine/src/deterministic/writing-checks.ts
+  s_4cbda645920fe5::t_d941f6b68bfa13 1-352
+engine/src/deterministic/quality-signal-checks.ts
+  s_4cbda645920fe5::t_c01960150c78b1 1-242
+engine/src/deterministic/analyzer.ts
+  s_4cbda645920fe5::t_3663d843d74caa 1-32
+engine/src/deterministic/const/scoring-weights.ts
+  s_4cbda645920fe5::t_f74b02e8baeb79 1-73
+engine/src/deterministic/learning-model.ts
+  s_4cbda645920fe5::t_81413d9059f65e 1-61
+engine/src/deterministic/tests/engagement-readiness.test.ts
+  s_2150378e11d0bc::t_427524be39bdde 1-23
+engine/src/deterministic/tests/quality-signal-checks.test.ts
+  s_2150378e11d0bc::t_427524be39bdde 1-156
+engine/src/deterministic/tests/test-helpers.ts
+  s_2150378e11d0bc::t_427524be39bdde 1-26
+engine/src/deterministic/tests/voice-score.test.ts
+  s_2150378e11d0bc::t_427524be39bdde 1-121
+engine/src/deterministic/tests/prediction-estimator.test.ts
+  s_2150378e11d0bc::t_427524be39bdde 1-62
+engine/src/deterministic/types.ts
+  s_4cbda645920fe5::t_f74b02e8baeb79 1-119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "66186f545d656fa8ae68ae3e12cc0a9d242f125c",
+  "prompts": {},
+  "sessions": {
+    "s_2150378e11d0bc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab99-20f6-7b60-8138-44a7328e2887",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    },
+    "s_4cbda645920fe5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab75-00c2-7f01-aa48-2c93cdce0506",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
