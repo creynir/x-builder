@@ -1,0 +1,19 @@
+engine/src/llm/codex-readiness-probe.ts
+  s_2150378e11d0bc::t_db4d311fdea16f 38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "f5f34545960b80d98cc78501e0e4f3dc2154cc24",
+  "prompts": {},
+  "sessions": {
+    "s_2150378e11d0bc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab99-20f6-7b60-8138-44a7328e2887",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
