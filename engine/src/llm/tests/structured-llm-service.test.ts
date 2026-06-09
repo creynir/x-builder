@@ -21,6 +21,17 @@ type FakeProvider = LlmProvider<unknown> & {
   generateStructured: ReturnType<typeof vi.fn>;
 };
 
+const supportedPurposes = ["writer_first_pass", "writer_variants", "candidate_judge"] as const;
+
+const providerFailureCases = [
+  ["provider_unavailable", true],
+  ["request_timeout", true],
+  ["process_failed", false],
+  ["nonzero_exit", false],
+  ["output_too_large", false],
+  ["invalid_provider_response", false],
+] as const;
+
 const draftOutputSchema = z.object({
   draft: z.string(),
   score: z.number(),
@@ -101,6 +112,9 @@ function successResult(output: unknown): StructuredLlmProviderResult<unknown> {
 function failedResult(
   code: string,
   retryable: boolean,
+  details: Record<string, unknown> = {
+    stage: "fake-provider",
+  },
 ): StructuredLlmProviderResult<unknown> {
   return {
     status: "failed",
@@ -111,9 +125,7 @@ function failedResult(
     retryable,
     durationMs: 9,
     completedAt: "2026-06-09T10:00:00.000Z",
-    details: {
-      stage: "fake-provider",
-    },
+    details,
   };
 }
 
@@ -141,6 +153,48 @@ function fakeProvider(
 }
 
 describe("structured LLM service", () => {
+  it.each(supportedPurposes)(
+    "passes %s requests to the provider and returns typed output",
+    async (purpose) => {
+      const provider = fakeProvider();
+      const service = await createService(provider);
+
+      const result = await service.generateStructured(request({ purpose }));
+
+      expect(result).toMatchObject({
+        status: "success",
+        provider: "codex-cli",
+        output: {
+          draft: "Specific proof beats generic claims.",
+          score: 91,
+        },
+        requestId: expect.any(String),
+        durationMs: expect.any(Number),
+        completedAt: expect.any(String),
+        usage: {
+          inputTokens: 12,
+          outputTokens: 8,
+        },
+      });
+      expect(provider.generateStructured).toHaveBeenCalledOnce();
+      expect(provider.generateStructured).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "codex-cli",
+          purpose,
+          options: {
+            timeoutMs: 60_000,
+            outputByteLimit: 500_000,
+            attempts: 1,
+          },
+          structuredOutput: expect.objectContaining({
+            name: "draft_quality",
+            strict: true,
+          }),
+        }),
+      );
+    },
+  );
+
   it("returns typed output for a valid request and successful fake provider", async () => {
     const provider = fakeProvider();
     const service = await createService(provider);
@@ -207,6 +261,29 @@ describe("structured LLM service", () => {
         draft: "The retry returned valid structured output.",
         score: 77,
       },
+    });
+    expect(generateStructured).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops after two total attempts when retryable provider failures continue", async () => {
+    const generateStructured = vi.fn(async () => failedResult("provider_unavailable", true));
+    const provider = fakeProvider(generateStructured);
+    const service = await createService(provider);
+
+    const result = await service.generateStructured(
+      request({
+        options: {
+          attempts: 2,
+        },
+      }),
+    );
+
+    expect(result).toMatchObject({
+      status: "failed",
+      provider: "codex-cli",
+      code: "provider_unavailable",
+      retryable: true,
+      message: "Provider failed safely.",
     });
     expect(generateStructured).toHaveBeenCalledTimes(2);
   });
@@ -286,17 +363,85 @@ describe("structured LLM service", () => {
     expect(provider.generateStructured).not.toHaveBeenCalled();
   });
 
-  it("resolves expected provider failures as failed results instead of throwing", async () => {
-    const provider = fakeProvider(vi.fn(async () => failedResult("process_failed", false)));
-    const service = await createService(provider);
+  it.each(providerFailureCases)(
+    "resolves %s provider failures as failed results instead of throwing",
+    async (code, retryable) => {
+      const provider = fakeProvider(vi.fn(async () => failedResult(code, retryable)));
+      const service = await createService(provider);
 
-    await expect(service.generateStructured(request())).resolves.toMatchObject({
-      status: "failed",
-      provider: "codex-cli",
-      code: "process_failed",
-      retryable: false,
-      message: "Provider failed safely.",
-    });
-    expect(provider.generateStructured).toHaveBeenCalledOnce();
+      await expect(service.generateStructured(request())).resolves.toMatchObject({
+        status: "failed",
+        provider: "codex-cli",
+        code,
+        retryable,
+        message: "Provider failed safely.",
+      });
+      expect(provider.generateStructured).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("does not log prompts or raw provider output details", async () => {
+    const promptSentinel = "SENSITIVE_PROMPT_SENTINEL_DO_NOT_LOG";
+    const rawStdoutSentinel = "RAW_STDOUT_SENTINEL_DO_NOT_LOG";
+    const rawStderrSentinel = "RAW_STDERR_SENTINEL_DO_NOT_LOG";
+    const logSpies = [
+      vi.spyOn(console, "debug").mockImplementation(() => undefined),
+      vi.spyOn(console, "error").mockImplementation(() => undefined),
+      vi.spyOn(console, "info").mockImplementation(() => undefined),
+      vi.spyOn(console, "log").mockImplementation(() => undefined),
+      vi.spyOn(console, "warn").mockImplementation(() => undefined),
+    ];
+
+    try {
+      const provider = fakeProvider(
+        vi.fn(async () =>
+          failedResult("invalid_provider_response", false, {
+            rawStdout: rawStdoutSentinel,
+            rawStderr: rawStderrSentinel,
+          }),
+        ),
+      );
+      const service = await createService(provider);
+
+      const result = await service.generateStructured(
+        request({
+          instructions: promptSentinel,
+          turns: [
+            {
+              role: "system",
+              content: promptSentinel,
+            },
+            {
+              role: "user",
+              content: promptSentinel,
+            },
+            {
+              role: "assistant",
+              content: promptSentinel,
+            },
+          ],
+        }),
+      );
+
+      expect(result).toMatchObject({
+        status: "failed",
+        provider: "codex-cli",
+        code: "invalid_provider_response",
+      });
+      expect(provider.generateStructured).toHaveBeenCalledOnce();
+
+      const loggedText = logSpies
+        .flatMap((spy) => spy.mock.calls)
+        .flatMap((call) => call.map((argument) => String(argument)))
+        .join("\n");
+
+      expect(loggedText).not.toContain(promptSentinel);
+      expect(loggedText).not.toContain(rawStdoutSentinel);
+      expect(loggedText).not.toContain(rawStderrSentinel);
+    } finally {
+      for (const spy of logSpies) {
+        spy.mockRestore();
+      }
+    }
   });
 });
