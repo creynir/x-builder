@@ -1,0 +1,26 @@
+engine/src/server/server.ts
+  s_2150378e11d0bc::t_459865361ab1dd 28-29,231-235
+engine/src/index.ts
+  s_2150378e11d0bc::t_afbbea0c1befde 7
+engine/src/llm/codex-readiness-probe.ts
+  s_2150378e11d0bc::t_cd6a3d495dde64 18-25,39,46,49,51-53,55-56,59
+  s_2150378e11d0bc::t_194bf8fd45b1e0 1-17,26-38,40-44,57-58,60-75,78-81,83-138
+  s_2150378e11d0bc::t_41e8938a32943e 45,47-48,50,54
+  s_2150378e11d0bc::t_394a9322424501 76-77,82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "e936225162e0eed4dd8a6ddf3c2facea5b4ccb12",
+  "prompts": {},
+  "sessions": {
+    "s_2150378e11d0bc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab99-20f6-7b60-8138-44a7328e2887",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
