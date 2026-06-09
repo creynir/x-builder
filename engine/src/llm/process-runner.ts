@@ -25,6 +25,7 @@ export type ProcessRunOptions = {
   timeoutMs: number;
   maxStdoutBytes: number;
   maxStderrBytes: number;
+  stdin?: string;
   env?: Record<string, string>;
   envAllowlist?: readonly ProcessEnvAllowlistName[];
 };
@@ -467,6 +468,15 @@ const waitForProcessResult = (
     new ProcessLifecycle(child, options, output, startedAt, resolve).start();
   });
 
+const writeProcessStdin = (child: ChildProcessWithoutNullStreams, stdin: string | undefined): void => {
+  if (stdin === undefined) {
+    return;
+  }
+
+  child.stdin.on("error", () => undefined);
+  child.stdin.end(stdin);
+};
+
 export class NodeProcessRunner implements ProcessRunner {
   async run(command: string, args: readonly string[], options: ProcessRunOptions): Promise<ProcessRunResult> {
     const startedAt = Date.now();
@@ -476,6 +486,8 @@ export class NodeProcessRunner implements ProcessRunner {
     if (process.status === "failed") {
       return process.result;
     }
+
+    writeProcessStdin(process.child, options.stdin);
 
     return await waitForProcessResult(process.child, options, output, startedAt);
   }
