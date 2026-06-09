@@ -1,0 +1,21 @@
+client/src/shell/app-shell.tsx
+  s_2150378e11d0bc::t_61031783866373 31-35,755,880,896
+docs/features/codex-adapter/tickets/CAD-006-e2e-shell-readiness-smoke.md
+  s_2150378e11d0bc::t_ca3f1f8e1fb24b 12-15,35-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "9b85b14db135942d8de312b0c20dca1e77d3c058",
+  "prompts": {},
+  "sessions": {
+    "s_2150378e11d0bc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab99-20f6-7b60-8138-44a7328e2887",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
