@@ -1,0 +1,6 @@
+packages:
+  - "engine"
+  - "client"
+  - "shared"
+  - "e2e-tests"
+  - "tools/*"

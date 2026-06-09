@@ -1,0 +1,1000 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>X Builder Product Components</title>
+    <link rel="stylesheet" href="./product-tokens.css" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--surface-primary);
+        color: var(--text-primary);
+        font: var(--type-body);
+      }
+
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+      }
+
+      .page {
+        min-height: 100vh;
+        display: grid;
+        grid-template-rows: var(--header-height) 1fr;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding-inline: var(--space-4);
+        border-bottom: var(--border-width-thin) solid var(--border-subtle);
+        background: var(--surface-secondary);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+      }
+
+      .brand-mark {
+        width: var(--icon-size-lg);
+        height: var(--icon-size-lg);
+        border: var(--border-width-thick) solid var(--interactive-default);
+        border-radius: var(--radius-md);
+        transform: rotate(45deg);
+        flex: 0 0 auto;
+      }
+
+      .brand-title {
+        color: var(--text-heading);
+        font: var(--type-panel-title);
+        white-space: nowrap;
+      }
+
+      .status-strip {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+        color: var(--text-secondary);
+        font: var(--type-caption);
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: var(--sidebar-width-expanded) 1fr;
+        min-height: 0;
+      }
+
+      .sidebar {
+        border-right: var(--border-width-thin) solid var(--sidebar-border);
+        background: var(--sidebar-bg);
+        padding: var(--space-3);
+      }
+
+      .nav {
+        display: grid;
+        gap: var(--space-1);
+      }
+
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: var(--density-nav-item-height);
+        color: var(--sidebar-fg);
+        text-decoration: none;
+        border-radius: var(--radius-md);
+        padding-inline: var(--space-2);
+        font: var(--type-body-small);
+      }
+
+      .nav-item[aria-current="page"] {
+        background: var(--surface-selected);
+        color: var(--text-heading);
+        box-shadow: inset var(--border-width-heavy) 0 0 var(--sidebar-active-indicator);
+      }
+
+      .nav-icon {
+        width: var(--icon-size-md);
+        height: var(--icon-size-md);
+        color: currentColor;
+        flex: 0 0 auto;
+      }
+
+      main {
+        min-width: 0;
+        overflow: auto;
+        padding: var(--padding-page);
+      }
+
+      .section {
+        max-width: 1320px;
+        margin-inline: auto;
+        margin-block-end: var(--space-6);
+      }
+
+      .section-header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: var(--space-4);
+        margin-block-end: var(--space-3);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        color: var(--text-heading);
+        font: var(--type-page-title);
+      }
+
+      h2 {
+        color: var(--text-heading);
+        font: var(--type-section-heading);
+      }
+
+      h3 {
+        color: var(--text-heading);
+        font: var(--type-panel-title);
+      }
+
+      .section-note {
+        color: var(--text-secondary);
+        font: var(--type-body-small);
+        max-width: var(--text-measure-compact);
+      }
+
+      .workbench {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) var(--inspector-width);
+        gap: var(--space-3);
+        align-items: start;
+      }
+
+      .workbench > .panel:first-child {
+        grid-column: 1 / -1;
+      }
+
+      .panel {
+        background: var(--elevation-panel-surface);
+        border: var(--border-width-thin) solid var(--elevation-border-default);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        min-height: var(--control-height-md);
+        padding: var(--space-2) var(--space-3);
+        border-bottom: var(--border-width-thin) solid var(--border-subtle);
+        background: var(--surface-secondary);
+      }
+
+      .panel-body {
+        padding: var(--padding-panel-default);
+      }
+
+      .stack {
+        display: grid;
+        gap: var(--space-3);
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+      }
+
+      .btn {
+        min-height: var(--density-button-height);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-1);
+        border-radius: var(--radius-md);
+        padding-inline: var(--space-3);
+        border: var(--border-width-thin) solid transparent;
+        color: var(--text-primary);
+        background: transparent;
+        cursor: default;
+        white-space: nowrap;
+      }
+
+      .btn-primary {
+        background: var(--interactive-default);
+        color: var(--text-on-accent);
+      }
+
+      .btn-secondary {
+        border-color: var(--border-default);
+        background: var(--surface-tertiary);
+      }
+
+      .btn-ghost {
+        color: var(--text-secondary);
+      }
+
+      .btn-danger {
+        border-color: var(--border-danger);
+        background: var(--danger-3);
+        color: var(--text-danger);
+      }
+
+      .icon-btn {
+        width: var(--density-button-height);
+        padding-inline: 0;
+      }
+
+      .icon {
+        width: var(--icon-size-md);
+        height: var(--icon-size-md);
+        stroke: currentColor;
+        stroke-width: 1.8;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .field {
+        display: grid;
+        gap: var(--space-1);
+      }
+
+      .label {
+        color: var(--text-secondary);
+        font: var(--type-label);
+      }
+
+      .textarea,
+      .input,
+      .select {
+        width: 100%;
+        min-height: var(--density-input-height);
+        border: var(--border-width-thin) solid var(--border-default);
+        border-radius: var(--radius-md);
+        background: var(--surface-sunken);
+        color: var(--text-primary);
+        padding: var(--space-2) var(--space-3);
+      }
+
+      .textarea {
+        min-height: 176px;
+        resize: vertical;
+        line-height: var(--line-height-relaxed);
+      }
+
+      .helper-row {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-2);
+        color: var(--text-muted);
+        font: var(--type-caption);
+      }
+
+      .mono {
+        font-family: var(--font-mono);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        min-height: 20px;
+        border-radius: var(--radius-sm);
+        padding-inline: var(--space-1-5);
+        font: var(--type-badge);
+        border: var(--border-width-thin) solid var(--border-subtle);
+        color: var(--text-secondary);
+        background: var(--surface-tertiary);
+        white-space: nowrap;
+      }
+
+      .badge-accent {
+        border-color: var(--border-accent);
+        color: var(--text-accent);
+        background: var(--accent-3);
+      }
+
+      .badge-success {
+        border-color: var(--border-success);
+        color: var(--text-success);
+        background: var(--success-3);
+      }
+
+      .badge-warning {
+        border-color: var(--border-warning);
+        color: var(--text-warning);
+        background: var(--warning-3);
+      }
+
+      .badge-danger {
+        border-color: var(--border-danger);
+        color: var(--text-danger);
+        background: var(--danger-3);
+      }
+
+      .badge-info {
+        border-color: var(--border-info);
+        color: var(--text-info);
+        background: var(--info-3);
+      }
+
+      .badge-uncertain {
+        border-color: var(--border-uncertain);
+        color: var(--text-uncertain);
+        background: var(--uncertain-3);
+      }
+
+      .dot {
+        width: 0.625rem;
+        height: 0.625rem;
+        border-radius: var(--radius-full);
+        background: var(--score-unknown);
+        flex: 0 0 auto;
+      }
+
+      .dot-success {
+        background: var(--score-strong);
+      }
+
+      .dot-warning {
+        background: var(--score-usable);
+      }
+
+      .dot-danger {
+        background: var(--score-needs-rewrite);
+      }
+
+      .candidate-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(180px, 1fr));
+        gap: var(--space-3);
+      }
+
+      .candidate {
+        display: grid;
+        gap: var(--space-3);
+        align-content: start;
+        min-width: 0;
+        padding: var(--space-3);
+        background: var(--candidate-bg);
+        border: var(--border-width-thin) solid var(--candidate-border);
+        border-radius: var(--radius-lg);
+      }
+
+      .candidate[data-selected="true"] {
+        border-color: var(--candidate-selected-border);
+        outline: var(--border-width-thick) solid var(--candidate-selected-outline);
+        outline-offset: var(--space-neg-0-5);
+        background: var(--candidate-selected-bg);
+      }
+
+      .candidate-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+      }
+
+      .rank {
+        color: var(--text-heading);
+        font: var(--type-data);
+      }
+
+      .post-text {
+        color: var(--text-heading);
+        font: var(--type-post);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .score {
+        display: grid;
+        gap: var(--space-1);
+      }
+
+      .score-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        color: var(--text-secondary);
+        font: var(--type-caption);
+      }
+
+      .score-track {
+        height: var(--space-1);
+        border-radius: var(--radius-full);
+        background: var(--surface-sunken);
+        overflow: hidden;
+        border: var(--border-width-thin) solid var(--border-subtle);
+      }
+
+      .score-fill {
+        height: 100%;
+        width: var(--score-width);
+        background: var(--score-color);
+      }
+
+      .reason-list {
+        display: grid;
+        gap: var(--space-1);
+        color: var(--text-secondary);
+        font: var(--type-body-small);
+        padding-inline-start: var(--space-4);
+        margin: 0;
+      }
+
+      .judge-box {
+        display: grid;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        border: var(--border-width-thin) solid var(--judge-border);
+        border-radius: var(--radius-lg);
+        background: var(--judge-bg);
+        color: var(--judge-fg);
+      }
+
+      .judge-box[data-state="unavailable"] {
+        border-color: var(--border-uncertain);
+        background: var(--judge-unavailable-bg);
+        color: var(--judge-unavailable-fg);
+      }
+
+      .judge-box[data-state="failed"] {
+        border-color: var(--border-danger);
+        background: var(--judge-failed-bg);
+        color: var(--judge-failed-fg);
+      }
+
+      .judge-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        color: currentColor;
+        font: var(--type-label);
+      }
+
+      .kv {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: var(--space-1) var(--space-3);
+        font: var(--type-body-small);
+      }
+
+      .kv dt {
+        color: var(--text-muted);
+      }
+
+      .kv dd {
+        margin: 0;
+        color: var(--text-primary);
+      }
+
+      .component-matrix {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: var(--space-3);
+      }
+
+      .specimen-cell {
+        display: grid;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        background: var(--surface-secondary);
+        border: var(--border-width-thin) solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+      }
+
+      .cell-label {
+        color: var(--text-muted);
+        font: var(--type-caption);
+      }
+
+      .table-wrap {
+        overflow: auto;
+        border: var(--border-width-thin) solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 820px;
+      }
+
+      th,
+      td {
+        height: var(--density-row-height);
+        padding: var(--padding-table-cell-block) var(--padding-table-cell-inline);
+        border-bottom: var(--border-width-thin) solid var(--post-row-border);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--text-muted);
+        background: var(--surface-secondary);
+        font: var(--type-label);
+      }
+
+      td {
+        color: var(--text-primary);
+        font: var(--type-body-small);
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .post-cell {
+        max-width: 48ch;
+        color: var(--text-heading);
+      }
+
+      .usage-unused {
+        color: var(--usage-unused-fg);
+        background: var(--usage-unused-bg);
+      }
+
+      .usage-voice {
+        color: var(--usage-voice-fg);
+        background: var(--usage-voice-bg);
+      }
+
+      .usage-signal {
+        color: var(--usage-signal-fg);
+        background: var(--usage-signal-bg);
+      }
+
+      .usage-generation {
+        color: var(--usage-generation-fg);
+        background: var(--usage-generation-bg);
+      }
+
+      .usage-excluded {
+        color: var(--usage-excluded-fg);
+        background: var(--usage-excluded-bg);
+      }
+
+      .import-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-3);
+      }
+
+      .alert {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        border-radius: var(--radius-lg);
+        border: var(--border-width-thin) solid var(--border-warning);
+        background: var(--warning-3);
+        color: var(--text-warning);
+        font: var(--type-body-small);
+      }
+
+      .footer-note {
+        color: var(--text-muted);
+        font: var(--type-caption);
+        max-width: var(--text-measure-ui);
+      }
+
+      @media (max-width: 1180px) {
+        .workbench {
+          grid-template-columns: 1fr;
+        }
+
+        .candidate-grid,
+        .component-matrix,
+        .import-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .shell {
+          grid-template-columns: var(--sidebar-width-collapsed) 1fr;
+        }
+
+        .nav-item span {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div class="brand-title">X Builder Components</div>
+        </div>
+        <div class="status-strip" aria-label="Runtime status">
+          <span class="badge badge-success"><span class="dot dot-success"></span> Engine ready</span>
+          <span class="badge badge-info">Codex judge idle</span>
+          <span class="mono">local · 2026-06-05</span>
+        </div>
+      </header>
+
+      <div class="shell">
+        <aside class="sidebar" aria-label="Product routes">
+          <nav class="nav">
+            <a class="nav-item" aria-current="page" href="#writer">
+              <svg class="nav-icon icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11-4-4L4 16v4Z" /><path d="m13 7 4 4" /></svg>
+              <span>Writer</span>
+            </a>
+            <a class="nav-item" href="#voice">
+              <svg class="nav-icon icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18" /><path d="M6 8v8" /><path d="M18 8v8" /></svg>
+              <span>Voice</span>
+            </a>
+            <a class="nav-item" href="#library">
+              <svg class="nav-icon icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z" /><path d="M8 8h8" /><path d="M8 12h8" /><path d="M8 16h5" /></svg>
+              <span>Post Library</span>
+            </a>
+            <a class="nav-item" href="#settings">
+              <svg class="nav-icon icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" /><path d="M3 12h2" /><path d="M19 12h2" /><path d="M12 3v2" /><path d="M12 19v2" /></svg>
+              <span>Settings</span>
+            </a>
+          </nav>
+        </aside>
+
+        <main>
+          <section class="section">
+            <div class="section-header">
+              <div class="stack">
+                <h1>Component Contract Preview</h1>
+                <p class="section-note">The specimens below use real X Builder states: candidate ranking, judge availability, known-post memory, and manual import review.</p>
+              </div>
+              <div class="toolbar">
+                <button class="btn btn-secondary">Open docs</button>
+                <button class="btn btn-primary">Generate</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="section" id="writer">
+            <div class="section-header">
+              <h2>Writer Workbench Components</h2>
+              <p class="section-note">Candidate text stays primary. Scores and judge notes support the decision.</p>
+            </div>
+            <div class="workbench">
+              <div class="panel">
+                <div class="panel-head">
+                  <h3>Idea Input</h3>
+                  <span class="badge badge-uncertain">Draft</span>
+                </div>
+                <div class="panel-body stack">
+                  <label class="field">
+                    <span class="label">Idea</span>
+                    <textarea class="textarea">What if the hardest part of founder-led content is not writing more, but building a taste loop that makes every draft less random?</textarea>
+                  </label>
+                  <div class="helper-row">
+                    <span>Voice profile: 42 known posts</span>
+                    <span class="mono">218 chars</span>
+                  </div>
+                  <label class="field">
+                    <span class="label">First pass</span>
+                    <select class="select">
+                      <option>One of each format</option>
+                    </select>
+                  </label>
+                  <button class="btn btn-primary">Generate candidates</button>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <h3>Candidates</h3>
+                  <span class="badge badge-accent">Heuristic rank, not prediction.</span>
+                </div>
+                <div class="panel-body">
+                  <div class="candidate-grid">
+                    <article class="candidate" data-selected="true">
+                      <div class="candidate-head">
+                        <span class="badge badge-accent">Lesson/framework</span>
+                        <span class="rank">#1 · 86</span>
+                      </div>
+                      <p class="post-text">The best founder content is not a writing habit.
+
+It is a feedback loop:
+1. capture the idea
+2. test the angle
+3. compare against your own archive
+4. publish what still feels true after the score</p>
+                      <div class="score">
+                        <div class="score-row"><span>Reach potential</span><span class="mono">88 · strong</span></div>
+                        <div class="score-track"><div class="score-fill" style="--score-width: 88%; --score-color: var(--score-strong)"></div></div>
+                      </div>
+                      <ul class="reason-list">
+                        <li>Clear repeatable frame.</li>
+                        <li>Founder pain is specific.</li>
+                        <li>Risk: list format may feel familiar.</li>
+                      </ul>
+                      <div class="toolbar">
+                        <button class="btn btn-secondary">Select</button>
+                        <button class="btn btn-ghost icon-btn" aria-label="Copy candidate">
+                          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h11v11H8z" /><path d="M5 16H4V5h11v1" /></svg>
+                        </button>
+                      </div>
+                    </article>
+
+                    <article class="candidate">
+                      <div class="candidate-head">
+                        <span class="badge">One-liner</span>
+                        <span class="rank">#2 · 79</span>
+                      </div>
+                      <p class="post-text">Most founder posts fail before writing starts: the idea has no opponent, no proof, and no memory of what worked before.</p>
+                      <div class="score">
+                        <div class="score-row"><span>Reply potential</span><span class="mono">81 · good</span></div>
+                        <div class="score-track"><div class="score-fill" style="--score-width: 81%; --score-color: var(--score-good)"></div></div>
+                      </div>
+                      <ul class="reason-list">
+                        <li>Sharp claim.</li>
+                        <li>High save potential is lower.</li>
+                        <li>Risk: abstract unless paired with example.</li>
+                      </ul>
+                      <div class="toolbar">
+                        <button class="btn btn-secondary">Select</button>
+                        <button class="btn btn-ghost icon-btn" aria-label="Copy candidate">
+                          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h11v11H8z" /><path d="M5 16H4V5h11v1" /></svg>
+                        </button>
+                      </div>
+                    </article>
+
+                    <article class="candidate">
+                      <div class="candidate-head">
+                        <span class="badge badge-warning">Debate/question</span>
+                        <span class="rank">#3 · 72</span>
+                      </div>
+                      <p class="post-text">Do founder posts work better when they are written from conviction, or when they are scored against what previously created real replies?</p>
+                      <div class="score">
+                        <div class="score-row"><span>Engagement pull</span><span class="mono">72 · usable</span></div>
+                        <div class="score-track"><div class="score-fill" style="--score-width: 72%; --score-color: var(--score-usable)"></div></div>
+                      </div>
+                      <ul class="reason-list">
+                        <li>Creates debate.</li>
+                        <li>Could attract generic answers.</li>
+                        <li>Needs stronger personal stake.</li>
+                      </ul>
+                      <div class="toolbar">
+                        <button class="btn btn-secondary">Select</button>
+                        <button class="btn btn-ghost icon-btn" aria-label="Copy candidate">
+                          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h11v11H8z" /><path d="M5 16H4V5h11v1" /></svg>
+                        </button>
+                      </div>
+                    </article>
+                  </div>
+                </div>
+              </div>
+
+              <aside class="panel">
+                <div class="panel-head">
+                  <h3>Judge</h3>
+                  <span class="badge badge-info">Codex judge</span>
+                </div>
+                <div class="panel-body stack">
+                  <div class="judge-box">
+                    <div class="judge-title">
+                      <span>Recommendation</span>
+                      <span class="mono">0.74</span>
+                    </div>
+                    <p>Use the framework post. It gives the strongest reason to save while still sounding like a founder building the tool in public.</p>
+                  </div>
+                  <div class="judge-box" data-state="unavailable">
+                    <div class="judge-title">
+                      <span>Unavailable state</span>
+                      <span class="badge badge-uncertain">Partial</span>
+                    </div>
+                    <p>Codex judge unavailable. Deterministic scoring still ran.</p>
+                  </div>
+                  <dl class="kv">
+                    <dt>Adapter</dt>
+                    <dd class="mono">codex-cli</dd>
+                    <dt>Latency</dt>
+                    <dd class="mono">4.8s</dd>
+                    <dt>Raw output</dt>
+                    <dd>Collapsed by default</dd>
+                  </dl>
+                </div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-header">
+              <h2>Primitive And State Specimens</h2>
+              <p class="section-note">These are component states as they appear in the product, not abstract palette samples.</p>
+            </div>
+            <div class="component-matrix">
+              <div class="specimen-cell">
+                <span class="cell-label">Buttons</span>
+                <div class="toolbar">
+                  <button class="btn btn-primary">Generate</button>
+                  <button class="btn btn-secondary">Save</button>
+                  <button class="btn btn-ghost">Cancel</button>
+                  <button class="btn btn-danger">Exclude</button>
+                </div>
+              </div>
+              <div class="specimen-cell">
+                <span class="cell-label">Usage badges</span>
+                <div class="toolbar">
+                  <span class="badge usage-unused">Unused</span>
+                  <span class="badge usage-voice">Voice</span>
+                  <span class="badge usage-signal">Signal</span>
+                  <span class="badge usage-generation">Generation</span>
+                  <span class="badge usage-excluded">Excluded</span>
+                </div>
+              </div>
+              <div class="specimen-cell">
+                <span class="cell-label">Runtime states</span>
+                <div class="toolbar">
+                  <span class="badge badge-success"><span class="dot dot-success"></span> Saved</span>
+                  <span class="badge badge-warning"><span class="dot dot-warning"></span> Stale</span>
+                  <span class="badge badge-danger"><span class="dot dot-danger"></span> Failed</span>
+                </div>
+              </div>
+              <div class="specimen-cell">
+                <span class="cell-label">Form controls</span>
+                <input class="input" value="Search known posts" />
+                <select class="select"><option>Unused signal only</option></select>
+              </div>
+            </div>
+          </section>
+
+          <section class="section" id="library">
+            <div class="section-header">
+              <h2>Known Posts Table</h2>
+              <p class="section-note">Post memory is a core surface. Usage and source remain visible in every row.</p>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <div class="toolbar">
+                  <input class="input" value="founder content loop" aria-label="Search known posts" />
+                  <button class="btn btn-secondary">Filter</button>
+                  <button class="btn btn-secondary">Bulk tag</button>
+                </div>
+                <button class="btn btn-primary">Import posts</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Post</th>
+                      <th>Format</th>
+                      <th>Usage</th>
+                      <th>Source</th>
+                      <th>Metrics</th>
+                      <th>Freshness</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="post-cell">The biggest unlock in founder content is not posting daily. It is knowing which ideas deserve another draft.</td>
+                      <td>Founder truth</td>
+                      <td><span class="badge usage-voice">Voice</span></td>
+                      <td><span class="badge">MANUAL</span></td>
+                      <td class="mono">replies 18 · saves 41</td>
+                      <td><span class="badge badge-success">Fresh</span></td>
+                      <td><button class="btn btn-ghost">Mark used</button></td>
+                    </tr>
+                    <tr>
+                      <td class="post-cell">A good post has a job. A bad post has a vibe.</td>
+                      <td>One-liner</td>
+                      <td><span class="badge usage-signal">Signal</span></td>
+                      <td><span class="badge">X API</span></td>
+                      <td class="mono">replies 53 · saves 29</td>
+                      <td><span class="badge badge-warning">Stale</span></td>
+                      <td><button class="btn btn-ghost">Exclude</button></td>
+                    </tr>
+                    <tr>
+                      <td class="post-cell">If a writing tool cannot remember what worked, it is just a prompt box with nicer furniture.</td>
+                      <td>Debate</td>
+                      <td><span class="badge usage-unused">Unused</span></td>
+                      <td><span class="badge">MANUAL</span></td>
+                      <td class="mono">missing</td>
+                      <td><span class="badge badge-uncertain">No metrics</span></td>
+                      <td><button class="btn btn-ghost">Use signal</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-header">
+              <h2>Manual Import Review</h2>
+              <p class="section-note">Valid rows can move forward while partial rows stay repairable.</p>
+            </div>
+            <div class="import-grid">
+              <div class="panel">
+                <div class="panel-head">
+                  <h3>Paste Export</h3>
+                  <span class="badge badge-warning">Partial parse</span>
+                </div>
+                <div class="panel-body stack">
+                  <textarea class="textarea">post_text, replies, reposts, likes
+"A good post has a job. A bad post has a vibe.", 53, 12, 440</textarea>
+                  <div class="alert">
+                    <span class="dot dot-warning" aria-hidden="true"></span>
+                    <p>2 rows parsed, 1 duplicate, 1 row missing saves. Import valid rows or repair the missing metric.</p>
+                  </div>
+                  <div class="toolbar">
+                    <button class="btn btn-primary">Import valid rows</button>
+                    <button class="btn btn-secondary">Repair selected</button>
+                  </div>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-head">
+                  <h3>Import Row States</h3>
+                  <span class="badge">Preview</span>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Status</th>
+                        <th>Post</th>
+                        <th>Repair</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="badge badge-success">Parsed</span></td>
+                        <td class="post-cell">A good post has a job. A bad post has a vibe.</td>
+                        <td><button class="btn btn-ghost">Review</button></td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge badge-warning">Duplicate</span></td>
+                        <td class="post-cell">Founder content gets easier when the archive starts arguing back.</td>
+                        <td><button class="btn btn-ghost">Match</button></td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge badge-danger">Invalid</span></td>
+                        <td class="post-cell">Missing post text</td>
+                        <td><button class="btn btn-ghost">Fix</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <p class="footer-note">Review note: this page is a component specimen, not final screen composition. Stage 5 will assemble full screens from these components and run visual critique before presentation.</p>
+          </section>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

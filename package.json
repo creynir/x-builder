@@ -1,0 +1,18 @@
+{
+  "name": "x-builder",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "test": "turbo test --filter=!@x-builder/e2e-tests",
+    "test:e2e": "turbo test --filter=@x-builder/e2e-tests",
+    "typecheck": "turbo typecheck",
+    "lint": "turbo lint"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

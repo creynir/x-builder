@@ -1,0 +1,1257 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>X Builder Product Screens</title>
+    <link rel="stylesheet" href="./product-tokens.css" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        accent-color: var(--interactive-default);
+      }
+
+      body {
+        margin: var(--space-0);
+        min-height: 100vh;
+        background: var(--surface-primary);
+        color: var(--text-primary);
+        font: var(--type-body);
+      }
+
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+      }
+
+      button,
+      a,
+      select,
+      input,
+      textarea {
+        transition:
+          background var(--duration-150) var(--ease-default),
+          border-color var(--duration-150) var(--ease-default),
+          color var(--duration-150) var(--ease-default),
+          opacity var(--duration-150) var(--ease-default),
+          outline-color var(--duration-100) var(--ease-out);
+      }
+
+      button,
+      a,
+      select {
+        cursor: pointer;
+      }
+
+      button:disabled,
+      input:disabled,
+      textarea:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      :focus-visible {
+        outline: var(--focus-ring-width) solid var(--focus-ring-color);
+        outline-offset: var(--focus-ring-offset);
+      }
+
+      ::selection {
+        background: var(--selection-bg);
+        color: var(--selection-text);
+      }
+
+      ::-webkit-scrollbar {
+        width: var(--space-2);
+        height: var(--space-2);
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: var(--border-default);
+        border-radius: var(--radius-full);
+      }
+
+      ::-webkit-scrollbar-track {
+        background: var(--surface-sunken);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        *,
+        *::before,
+        *::after {
+          animation-duration: var(--duration-0) !important;
+          transition-duration: var(--duration-0) !important;
+        }
+      }
+
+      .skip-link {
+        position: fixed;
+        inset-block-start: var(--space-2);
+        inset-inline-start: var(--space-2);
+        z-index: var(--z-toast);
+        transform: translateY(calc(var(--space-12) * -1));
+        background: var(--surface-overlay);
+        border: var(--border-width-thin) solid var(--border-focus);
+        border-radius: var(--radius-md);
+        padding: var(--space-2) var(--space-3);
+        color: var(--text-heading);
+      }
+
+      .skip-link:focus {
+        transform: translateY(var(--space-0));
+      }
+
+      .app {
+        min-height: 100vh;
+        display: grid;
+        grid-template-rows: var(--header-height) 1fr;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding-inline: var(--space-4);
+        border-bottom: var(--border-width-thin) solid var(--border-subtle);
+        background: var(--surface-secondary);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: var(--space-0);
+      }
+
+      .brand-mark {
+        width: var(--icon-size-lg);
+        height: var(--icon-size-lg);
+        border: var(--border-width-thick) solid var(--interactive-default);
+        border-radius: var(--radius-md);
+        transform: rotate(45deg);
+        flex: 0 0 auto;
+      }
+
+      .brand-title {
+        color: var(--text-heading);
+        font: var(--type-panel-title);
+        white-space: nowrap;
+      }
+
+      .runtime {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        color: var(--text-secondary);
+        font: var(--type-caption);
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: var(--sidebar-width-expanded) minmax(var(--space-0), 1fr);
+        min-height: var(--space-0);
+      }
+
+      .sidebar {
+        background: var(--sidebar-bg);
+        border-right: var(--border-width-thin) solid var(--sidebar-border);
+        padding: var(--space-3);
+        overflow-y: auto;
+      }
+
+      .nav {
+        display: grid;
+        gap: var(--space-1);
+      }
+
+      .nav a {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: var(--density-nav-item-height);
+        padding-inline: var(--space-2);
+        border-radius: var(--radius-md);
+        color: var(--sidebar-fg);
+        text-decoration: none;
+        font: var(--type-body-small);
+      }
+
+      .nav a:hover {
+        background: var(--sidebar-hover);
+      }
+
+      .nav a[aria-current="page"] {
+        background: var(--surface-selected);
+        color: var(--text-heading);
+        box-shadow: inset var(--border-width-heavy) 0 0 var(--sidebar-active-indicator);
+      }
+
+      .icon {
+        width: var(--icon-size-md);
+        height: var(--icon-size-md);
+        stroke: currentColor;
+        stroke-width: var(--border-width-thick);
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex: 0 0 auto;
+      }
+
+      main {
+        overflow: auto;
+        min-width: var(--space-0);
+        padding: var(--padding-page);
+      }
+
+      .route {
+        max-width: calc(var(--space-12) * 30);
+        margin-inline: auto;
+        padding-block-end: var(--space-10);
+      }
+
+      .route + .route {
+        margin-block-start: var(--space-12);
+        border-top: var(--border-width-thin) solid var(--border-subtle);
+        padding-block-start: var(--space-8);
+      }
+
+      .route-header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: var(--space-4);
+        margin-block-end: var(--space-4);
+      }
+
+      .title-stack {
+        display: grid;
+        gap: var(--space-1);
+        min-width: var(--space-0);
+      }
+
+      h1,
+      h2,
+      h3,
+      p,
+      ul,
+      ol,
+      dl {
+        margin: var(--space-0);
+      }
+
+      h1 {
+        color: var(--text-heading);
+        font: var(--type-page-title);
+      }
+
+      h2 {
+        color: var(--text-heading);
+        font: var(--type-section-heading);
+      }
+
+      h3 {
+        color: var(--text-heading);
+        font: var(--type-panel-title);
+      }
+
+      .lede {
+        color: var(--text-secondary);
+        font: var(--type-body-small);
+        max-width: var(--text-measure-compact);
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-1);
+        min-height: var(--density-button-height);
+        border-radius: var(--radius-md);
+        border: var(--border-width-thin) solid transparent;
+        padding-inline: var(--space-3);
+        background: transparent;
+        color: var(--text-primary);
+        white-space: nowrap;
+      }
+
+      .btn:hover {
+        background: var(--surface-hover);
+      }
+
+      .btn-primary {
+        background: var(--interactive-default);
+        color: var(--text-on-accent);
+      }
+
+      .btn-primary:hover {
+        background: var(--interactive-hover);
+      }
+
+      .btn-secondary {
+        background: var(--surface-tertiary);
+        border-color: var(--border-default);
+      }
+
+      .btn-ghost {
+        color: var(--text-secondary);
+      }
+
+      .btn-danger {
+        color: var(--text-danger);
+        background: var(--danger-3);
+        border-color: var(--border-danger);
+      }
+
+      .icon-btn {
+        width: var(--density-button-height);
+        padding-inline: var(--space-0);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        min-height: var(--space-5);
+        padding-inline: var(--space-1-5);
+        border-radius: var(--radius-sm);
+        border: var(--border-width-thin) solid var(--border-subtle);
+        background: var(--surface-tertiary);
+        color: var(--text-secondary);
+        font: var(--type-badge);
+        white-space: nowrap;
+      }
+
+      .badge-accent {
+        background: var(--accent-3);
+        border-color: var(--border-accent);
+        color: var(--text-accent);
+      }
+
+      .badge-success {
+        background: var(--success-3);
+        border-color: var(--border-success);
+        color: var(--text-success);
+      }
+
+      .badge-warning {
+        background: var(--warning-3);
+        border-color: var(--border-warning);
+        color: var(--text-warning);
+      }
+
+      .badge-danger {
+        background: var(--danger-3);
+        border-color: var(--border-danger);
+        color: var(--text-danger);
+      }
+
+      .badge-info {
+        background: var(--info-3);
+        border-color: var(--border-info);
+        color: var(--text-info);
+      }
+
+      .badge-uncertain {
+        background: var(--uncertain-3);
+        border-color: var(--border-uncertain);
+        color: var(--text-uncertain);
+      }
+
+      .usage-voice {
+        background: var(--usage-voice-bg);
+        color: var(--usage-voice-fg);
+      }
+
+      .usage-signal {
+        background: var(--usage-signal-bg);
+        color: var(--usage-signal-fg);
+      }
+
+      .usage-generation {
+        background: var(--usage-generation-bg);
+        color: var(--usage-generation-fg);
+      }
+
+      .usage-unused {
+        background: var(--usage-unused-bg);
+        color: var(--usage-unused-fg);
+      }
+
+      .dot {
+        width: var(--space-1-5);
+        height: var(--space-1-5);
+        border-radius: var(--radius-full);
+        background: currentColor;
+        flex: 0 0 auto;
+      }
+
+      .field {
+        display: grid;
+        gap: var(--space-1);
+      }
+
+      .label {
+        color: var(--text-secondary);
+        font: var(--type-label);
+      }
+
+      .input,
+      .textarea,
+      .select {
+        width: 100%;
+        min-height: var(--density-input-height);
+        background: var(--surface-sunken);
+        color: var(--text-primary);
+        border: var(--border-width-thin) solid var(--border-default);
+        border-radius: var(--radius-md);
+        padding: var(--space-2) var(--space-3);
+      }
+
+      .input:hover,
+      .textarea:hover,
+      .select:hover {
+        border-color: var(--border-hover);
+      }
+
+      .textarea {
+        min-height: calc(var(--space-12) * 3);
+        resize: vertical;
+        line-height: var(--line-height-relaxed);
+      }
+
+      .hint-row {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-2);
+        color: var(--text-muted);
+        font: var(--type-caption);
+      }
+
+      .mono {
+        font-family: var(--font-mono);
+      }
+
+      .panel {
+        background: var(--elevation-panel-surface);
+        border: var(--border-width-thin) solid var(--elevation-border-default);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+      }
+
+      .panel-head {
+        min-height: var(--control-height-md);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+        border-bottom: var(--border-width-thin) solid var(--border-subtle);
+        background: var(--surface-secondary);
+      }
+
+      .panel-body {
+        padding: var(--padding-panel-default);
+      }
+
+      .stack {
+        display: grid;
+        gap: var(--space-3);
+      }
+
+      .compact-stack {
+        display: grid;
+        gap: var(--space-2);
+      }
+
+      .writer-layout {
+        display: grid;
+        grid-template-columns: minmax(var(--space-0), 1fr) var(--inspector-width);
+        gap: var(--space-3);
+        align-items: start;
+      }
+
+      .idea-panel {
+        grid-column: 1 / -1;
+      }
+
+      .candidate-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(calc(var(--space-12) * 4), 1fr));
+        gap: var(--space-3);
+      }
+
+      .candidate {
+        display: grid;
+        gap: var(--space-3);
+        align-content: start;
+        background: var(--candidate-bg);
+        border: var(--border-width-thin) solid var(--candidate-border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-3);
+        min-width: var(--space-0);
+      }
+
+      .candidate[data-selected="true"] {
+        border-color: var(--candidate-selected-border);
+        outline: var(--border-width-thick) solid var(--candidate-selected-outline);
+        outline-offset: var(--space-neg-0-5);
+        background: var(--candidate-selected-bg);
+      }
+
+      .candidate-head {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: var(--space-2);
+      }
+
+      .rank {
+        color: var(--text-heading);
+        font: var(--type-data);
+        text-align: end;
+      }
+
+      .post-text {
+        color: var(--text-heading);
+        font: var(--type-post);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .score {
+        display: grid;
+        gap: var(--space-1);
+      }
+
+      .score-row {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-2);
+        color: var(--text-secondary);
+        font: var(--type-caption);
+      }
+
+      .score-track {
+        height: var(--space-1);
+        border-radius: var(--radius-full);
+        background: var(--surface-sunken);
+        border: var(--border-width-thin) solid var(--border-subtle);
+        overflow: hidden;
+      }
+
+      .score-fill {
+        height: 100%;
+        width: var(--score-width);
+        background: var(--score-color);
+      }
+
+      .reason-list {
+        display: grid;
+        gap: var(--space-1);
+        padding-inline-start: var(--space-4);
+        color: var(--text-secondary);
+        font: var(--type-body-small);
+      }
+
+      .judge-panel {
+        position: sticky;
+        top: var(--space-4);
+      }
+
+      .judge-box {
+        display: grid;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        border: var(--border-width-thin) solid var(--judge-border);
+        border-radius: var(--radius-lg);
+        background: var(--judge-bg);
+        color: var(--judge-fg);
+      }
+
+      .judge-box[data-state="unavailable"] {
+        border-color: var(--border-uncertain);
+        background: var(--judge-unavailable-bg);
+        color: var(--judge-unavailable-fg);
+      }
+
+      .alert {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        border-radius: var(--radius-lg);
+        border: var(--border-width-thin) solid var(--border-warning);
+        background: var(--warning-3);
+        color: var(--text-warning);
+        font: var(--type-body-small);
+      }
+
+      .alert-danger {
+        border-color: var(--border-danger);
+        background: var(--danger-3);
+        color: var(--text-danger);
+      }
+
+      .tabs {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+        border-bottom: var(--border-width-thin) solid var(--border-subtle);
+        margin-block-end: var(--space-3);
+      }
+
+      .tab {
+        min-height: var(--density-button-height);
+        border: var(--border-width-thin) solid transparent;
+        border-bottom-width: var(--border-width-thick);
+        border-radius: var(--radius-md) var(--radius-md) var(--radius-none) var(--radius-none);
+        padding-inline: var(--space-3);
+        background: transparent;
+        color: var(--text-secondary);
+      }
+
+      .tab[aria-selected="true"] {
+        color: var(--text-accent);
+        border-bottom-color: var(--border-accent);
+      }
+
+      .library-toolbar {
+        display: grid;
+        grid-template-columns: minmax(calc(var(--space-12) * 6), 1fr) auto;
+        gap: var(--space-3);
+        align-items: end;
+      }
+
+      .library-search {
+        flex: 1;
+      }
+
+      .table-wrap {
+        overflow: auto;
+        border: var(--border-width-thin) solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+      }
+
+      table {
+        width: 100%;
+        min-width: calc(var(--space-12) * 18);
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        height: var(--density-row-height);
+        padding: var(--padding-table-cell-block) var(--padding-table-cell-inline);
+        border-bottom: var(--border-width-thin) solid var(--post-row-border);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        position: sticky;
+        top: var(--space-0);
+        z-index: var(--z-sticky);
+        background: var(--surface-secondary);
+        color: var(--text-muted);
+        font: var(--type-label);
+      }
+
+      td {
+        color: var(--text-primary);
+        font: var(--type-body-small);
+      }
+
+      tbody tr:hover {
+        background: var(--post-row-hover-bg);
+      }
+
+      .post-cell {
+        max-width: var(--text-measure-compact);
+        color: var(--text-heading);
+      }
+
+      .settings-layout,
+      .voice-layout {
+        display: grid;
+        grid-template-columns: minmax(var(--space-0), 1fr) minmax(calc(var(--space-12) * 6), calc(var(--space-12) * 8));
+        gap: var(--space-3);
+        align-items: start;
+      }
+
+      .trait-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(var(--space-0), 1fr));
+        gap: var(--space-3);
+      }
+
+      .trait {
+        display: grid;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        border: var(--border-width-thin) solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        background: var(--surface-secondary);
+      }
+
+      .settings-field {
+        display: grid;
+        grid-template-columns: calc(var(--space-12) * 4) minmax(var(--space-0), 1fr);
+        gap: var(--space-4);
+        padding-block: var(--space-3);
+        border-bottom: var(--border-width-thin) solid var(--border-subtle);
+      }
+
+      .settings-field:last-child {
+        border-bottom: var(--border-width-0);
+      }
+
+      .save-bar {
+        position: sticky;
+        bottom: var(--space-0);
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        border-top: var(--border-width-thin) solid var(--border-subtle);
+        background: var(--surface-secondary);
+      }
+
+      .empty-state {
+        display: grid;
+        justify-items: start;
+        gap: var(--space-3);
+        padding: var(--space-6);
+        border: var(--border-width-thin) dashed var(--border-default);
+        border-radius: var(--radius-lg);
+        background: var(--surface-secondary);
+      }
+
+      .skeleton {
+        height: var(--density-row-height);
+        border-radius: var(--radius-md);
+        background: var(--surface-tertiary);
+        opacity: 0.7;
+      }
+
+      @media (max-width: 1199px) {
+        .shell {
+          grid-template-columns: var(--sidebar-width-collapsed) minmax(var(--space-0), 1fr);
+        }
+
+        .nav span {
+          position: absolute;
+          width: var(--space-px);
+          height: var(--space-px);
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+        }
+
+        .writer-layout,
+        .settings-layout,
+        .voice-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .judge-panel {
+          position: static;
+        }
+
+        .candidate-grid {
+          grid-template-columns: repeat(2, minmax(calc(var(--space-12) * 4), 1fr));
+        }
+      }
+
+      @media (max-width: 767px) {
+        .topbar {
+          align-items: start;
+          flex-direction: column;
+          padding-block: var(--space-2);
+        }
+
+        .app {
+          grid-template-rows: auto 1fr;
+        }
+
+        .shell {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          display: none;
+        }
+
+        main {
+          padding: var(--space-3);
+        }
+
+        .route-header,
+        .library-toolbar {
+          grid-template-columns: 1fr;
+          display: grid;
+          align-items: start;
+        }
+
+        .candidate-grid,
+        .trait-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .settings-field {
+          grid-template-columns: 1fr;
+          gap: var(--space-1);
+        }
+
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div class="brand-title">X Builder</div>
+        </div>
+        <div class="runtime" aria-label="Runtime status">
+          <span class="badge badge-success"><span class="dot" aria-hidden="true"></span> Engine ready</span>
+          <span class="badge badge-uncertain"><span class="dot" aria-hidden="true"></span> Codex partial</span>
+          <span class="badge">Storage local</span>
+          <span class="mono">Last run 4 min ago</span>
+        </div>
+      </header>
+
+      <div class="shell">
+        <aside class="sidebar">
+          <nav class="nav" aria-label="Primary">
+            <a aria-current="page" href="#writer">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11-4-4L4 16v4Z" /><path d="m13 7 4 4" /></svg>
+              <span>Writer</span>
+            </a>
+            <a href="#voice">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18" /><path d="M6 8v8" /><path d="M18 8v8" /></svg>
+              <span>Voice</span>
+            </a>
+            <a href="#library">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z" /><path d="M8 8h8" /><path d="M8 12h8" /><path d="M8 16h5" /></svg>
+              <span>Post Library</span>
+            </a>
+            <a href="#settings">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" /><path d="M3 12h2" /><path d="M19 12h2" /><path d="M12 3v2" /><path d="M12 19v2" /></svg>
+              <span>Settings</span>
+            </a>
+          </nav>
+        </aside>
+
+        <main id="main">
+          <section class="route" id="writer" aria-labelledby="writer-title">
+            <div class="route-header">
+              <div class="title-stack">
+                <h1 id="writer-title">Writer</h1>
+                <p class="lede">Generate one option per format, choose a direction, then expand the chosen format into stronger variants.</p>
+              </div>
+              <div class="toolbar">
+                <button class="btn btn-secondary">Open evidence</button>
+                <button class="btn btn-primary">Generate candidates</button>
+              </div>
+            </div>
+
+            <div class="writer-layout">
+              <section class="panel idea-panel" aria-labelledby="idea-title">
+                <div class="panel-head">
+                  <h2 id="idea-title">Idea and Controls</h2>
+                  <span class="badge badge-accent">First pass</span>
+                </div>
+                <div class="panel-body stack">
+                  <label class="field">
+                    <span class="label">Raw idea</span>
+                    <textarea class="textarea">I think founder content gets easier when the writing system remembers what worked, what sounded fake, and what still has not been used.</textarea>
+                  </label>
+                  <div class="hint-row">
+                    <span>Voice profile: 42 posts, 18 accepted traits</span>
+                    <span class="mono">156 chars</span>
+                  </div>
+                  <div class="library-toolbar">
+                    <label class="field">
+                      <span class="label">Generation mode</span>
+                      <select class="select">
+                        <option>One of each format</option>
+                      </select>
+                    </label>
+                    <div class="toolbar">
+                      <button class="btn btn-secondary">Reset</button>
+                      <button class="btn btn-primary">Generate</button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel" aria-labelledby="candidates-title">
+                <div class="panel-head">
+                  <h2 id="candidates-title">Candidates</h2>
+                  <span class="badge badge-accent">Heuristic rank, not prediction.</span>
+                </div>
+                <div class="panel-body stack" aria-live="polite">
+                  <div class="tabs" role="tablist" aria-label="Writer result views">
+                    <button class="tab" role="tab" aria-selected="true">Candidates</button>
+                    <button class="tab" role="tab" aria-selected="false">Judge</button>
+                    <button class="tab" role="tab" aria-selected="false">Evidence</button>
+                  </div>
+                  <div class="candidate-grid">
+                    <article class="candidate" data-selected="true">
+                      <div class="candidate-head">
+                        <span class="badge badge-accent">Lesson/framework</span>
+                        <span class="rank">#1 / 88</span>
+                      </div>
+                      <p class="post-text">Founder content does not need more prompts.
+
+It needs memory:
+1. what sounded like you
+2. what created real replies
+3. what got ignored
+4. what you still have not used</p>
+                      <div class="score">
+                        <div class="score-row"><span>Useful reach</span><span class="mono">88 / strong</span></div>
+                        <div class="score-track"><div class="score-fill" style="--score-width: 88%; --score-color: var(--score-strong)"></div></div>
+                      </div>
+                      <ul class="reason-list">
+                        <li>Clear frame with practical value.</li>
+                        <li>Voice match is high.</li>
+                        <li>Risk: needs a sharper ending.</li>
+                      </ul>
+                      <div class="toolbar">
+                        <button class="btn btn-secondary">Selected</button>
+                        <button class="btn btn-ghost">Copy</button>
+                        <button class="btn btn-ghost">Save</button>
+                        <span class="badge badge-success">Saved</span>
+                      </div>
+                    </article>
+
+                    <article class="candidate">
+                      <div class="candidate-head">
+                        <span class="badge">Founder truth</span>
+                        <span class="rank">#2 / 82</span>
+                      </div>
+                      <p class="post-text">The problem with most AI writing tools is not output quality. It is that they forget your taste the moment the tab closes.</p>
+                      <div class="score">
+                        <div class="score-row"><span>Profile clicks</span><span class="mono">82 / good</span></div>
+                        <div class="score-track"><div class="score-fill" style="--score-width: 82%; --score-color: var(--score-good)"></div></div>
+                      </div>
+                      <ul class="reason-list">
+                        <li>Strong opinion.</li>
+                        <li>Easy to quote.</li>
+                        <li>Risk: lower save value.</li>
+                      </ul>
+                      <div class="toolbar">
+                        <button class="btn btn-secondary">Select</button>
+                        <button class="btn btn-ghost">Copy</button>
+                      </div>
+                    </article>
+
+                    <article class="candidate">
+                      <div class="candidate-head">
+                        <span class="badge badge-warning">Debate/question</span>
+                        <span class="rank">#3 / 74</span>
+                      </div>
+                      <p class="post-text">Should founder content be judged by reach, replies, or whether it makes your next post less random?</p>
+                      <div class="score">
+                        <div class="score-row"><span>Reply pull</span><span class="mono">74 / usable</span></div>
+                        <div class="score-track"><div class="score-fill" style="--score-width: 74%; --score-color: var(--score-usable)"></div></div>
+                      </div>
+                      <ul class="reason-list">
+                        <li>Invites opinions.</li>
+                        <li>Clear founder context.</li>
+                        <li>Risk: abstract without example.</li>
+                      </ul>
+                      <div class="toolbar">
+                        <button class="btn btn-secondary">Select</button>
+                        <button class="btn btn-ghost">Copy</button>
+                      </div>
+                    </article>
+                  </div>
+                </div>
+              </section>
+
+              <aside class="panel judge-panel" aria-labelledby="judge-title">
+                <div class="panel-head">
+                  <h2 id="judge-title">Codex judge</h2>
+                  <span class="badge badge-uncertain">Partial</span>
+                </div>
+                <div class="panel-body stack">
+                  <div class="judge-box">
+                    <div class="hint-row"><strong>Recommendation</strong><span class="mono">0.77</span></div>
+                    <p>Use the framework candidate. It has the best balance of save value, voice fit, and replayable founder logic.</p>
+                  </div>
+                  <div class="judge-box" data-state="unavailable" role="status" aria-live="polite">
+                    <strong>Unavailable state</strong>
+                    <p>Codex judge unavailable. Deterministic scoring still ran.</p>
+                    <button class="btn btn-secondary">Retry judge</button>
+                  </div>
+                  <dl class="compact-stack">
+                    <div class="hint-row"><dt>Adapter</dt><dd class="mono">codex-cli</dd></div>
+                    <div class="hint-row"><dt>Last run</dt><dd class="mono">4 min ago</dd></div>
+                    <div class="hint-row"><dt>Raw output</dt><dd>Collapsed</dd></div>
+                  </dl>
+                </div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="route" id="voice" aria-labelledby="voice-title">
+            <div class="route-header">
+              <div class="title-stack">
+                <h1 id="voice-title">Voice</h1>
+                <p class="lede">Inspect extracted writing traits, keep what sounds true, and block phrases that make posts feel generic.</p>
+              </div>
+              <div class="toolbar">
+                <button class="btn btn-secondary">Import examples</button>
+                <button class="btn btn-primary">Extract voice profile</button>
+              </div>
+            </div>
+
+            <div class="voice-layout">
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Accepted Traits</h2>
+                  <span class="badge badge-success">18 accepted</span>
+                </div>
+                <div class="panel-body stack">
+                  <div class="alert">
+                    <span class="dot" aria-hidden="true"></span>
+                    <p>Low evidence on debate posts. Add more high-reply examples before making debate style stricter.</p>
+                  </div>
+                  <div class="trait-grid">
+                    <article class="trait">
+                      <span class="badge usage-voice">Voice</span>
+                      <h3>Skeptical founder claim</h3>
+                      <p>Starts from a practical disagreement, then explains the operational lesson.</p>
+                      <span class="mono">source posts: 11</span>
+                    </article>
+                    <article class="trait">
+                      <span class="badge usage-voice">Voice</span>
+                      <h3>Short setup, concrete list</h3>
+                      <p>Uses short opening lines, then numbered points when the idea needs structure.</p>
+                      <span class="mono">source posts: 9</span>
+                    </article>
+                    <article class="trait">
+                      <span class="badge usage-signal">Avoid</span>
+                      <h3>No fake certainty</h3>
+                      <p>Avoids "guaranteed," "secret," and generic growth-hack phrasing.</p>
+                      <span class="mono">manual override</span>
+                    </article>
+                    <article class="trait">
+                      <span class="badge usage-generation">Generator</span>
+                      <h3>Build in public, not diary</h3>
+                      <p>Posts can mention the product, but only when the lesson stands without product context.</p>
+                      <span class="mono">confidence 0.81</span>
+                    </article>
+                  </div>
+                </div>
+              </section>
+
+              <aside class="panel">
+                <div class="panel-head">
+                  <h2>Freshness</h2>
+                  <span class="badge badge-warning">Stale signals</span>
+                </div>
+                <div class="panel-body stack">
+                  <dl class="compact-stack">
+                    <div class="hint-row"><dt>Known posts</dt><dd class="mono">42</dd></div>
+                    <div class="hint-row"><dt>Accepted traits</dt><dd class="mono">18</dd></div>
+                    <div class="hint-row"><dt>Manual overrides</dt><dd class="mono">6</dd></div>
+                    <div class="hint-row"><dt>Last extracted</dt><dd class="mono">2 days ago</dd></div>
+                  </dl>
+                  <div class="empty-state">
+                    <h3>Loading state</h3>
+                    <div class="skeleton"></div>
+                    <div class="skeleton"></div>
+                    <p class="lede">Section skeletons replace traits while extraction runs.</p>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="route" id="library" aria-labelledby="library-title">
+            <div class="route-header">
+              <div class="title-stack">
+                <h1 id="library-title">Post Library</h1>
+                <p class="lede">The product memory surface: known posts, unused signals, voice examples, source metrics, and import repairs.</p>
+              </div>
+              <button class="btn btn-primary">Import posts</button>
+            </div>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Known Posts</h2>
+                <span class="badge">42 rows</span>
+              </div>
+              <div class="panel-body stack">
+                <div class="library-toolbar">
+                  <div class="toolbar">
+                    <label class="field library-search">
+                      <span class="label">Search known posts</span>
+                      <input class="input" value="writing system memory" />
+                    </label>
+                    <label class="field">
+                      <span class="label">Usage</span>
+                      <select class="select">
+                        <option>All usage states</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="toolbar">
+                    <button class="btn btn-secondary">Bulk tag</button>
+                    <button class="btn btn-secondary">Export</button>
+                  </div>
+                </div>
+
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Post</th>
+                        <th>Format</th>
+                        <th>Usage</th>
+                        <th>Source</th>
+                        <th>Metrics</th>
+                        <th>Freshness</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="post-cell">The biggest unlock in founder content is not posting daily. It is knowing which ideas deserve another draft.</td>
+                        <td>Founder truth</td>
+                        <td><span class="badge usage-voice">Voice</span></td>
+                        <td><span class="badge">MANUAL</span></td>
+                        <td class="mono">replies 18 / saves 41</td>
+                        <td><span class="badge badge-success">Fresh</span></td>
+                        <td><button class="btn btn-ghost">Mark used</button></td>
+                      </tr>
+                      <tr>
+                        <td class="post-cell">A good post has a job. A bad post has a vibe.</td>
+                        <td>One-liner</td>
+                        <td><span class="badge usage-signal">Signal</span></td>
+                        <td><span class="badge">X API</span></td>
+                        <td class="mono">replies 53 / saves 29</td>
+                        <td><span class="badge badge-warning">Stale</span></td>
+                        <td><button class="btn btn-ghost">Exclude</button></td>
+                      </tr>
+                      <tr>
+                        <td class="post-cell">If a writing tool cannot remember what worked, it is just a prompt box with nicer furniture.</td>
+                        <td>Debate</td>
+                        <td><span class="badge usage-unused">Unused</span></td>
+                        <td><span class="badge">MANUAL</span></td>
+                        <td class="mono">missing</td>
+                        <td><span class="badge badge-uncertain">No metrics</span></td>
+                        <td><button class="btn btn-ghost">Use signal</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="alert">
+                  <span class="dot" aria-hidden="true"></span>
+                  <p>Partial import: 2 valid rows can be saved, 1 duplicate needs review, 1 row is missing post text.</p>
+                </div>
+              </div>
+            </section>
+          </section>
+
+          <section class="route" id="settings" aria-labelledby="settings-title">
+            <div class="route-header">
+              <div class="title-stack">
+                <h1 id="settings-title">Settings</h1>
+                <p class="lede">Local engine, Codex adapter, storage, and writer defaults. Nothing routes app LLM calls through a ChatGPT subscription silently.</p>
+              </div>
+              <button class="btn btn-primary">Save settings</button>
+            </div>
+
+            <div class="settings-layout">
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Codex Adapter</h2>
+                  <span class="badge badge-uncertain">Partial</span>
+                </div>
+                <div class="panel-body">
+                  <div class="settings-field">
+                    <div>
+                      <div class="label">Writer</div>
+                      <p class="lede">Local command used for generation.</p>
+                    </div>
+                    <input class="input mono" value="codex --profile writer" />
+                  </div>
+                  <div class="settings-field">
+                    <div>
+                      <div class="label">Judge</div>
+                      <p class="lede">Local command used for critique.</p>
+                    </div>
+                    <input class="input mono" value="codex --profile judge" />
+                  </div>
+                  <div class="settings-field">
+                    <div>
+                      <div class="label">Fallback</div>
+                      <p class="lede">Deterministic engine always runs.</p>
+                    </div>
+                    <span class="badge badge-success">Enabled</span>
+                  </div>
+                  <div class="settings-field">
+                    <div>
+                      <div class="label">Storage path</div>
+                      <p class="lede">Local persistence for posts, voice, and signals.</p>
+                    </div>
+                    <input class="input mono" value="./data/x-builder.sqlite" />
+                  </div>
+                </div>
+                <div class="save-bar">
+                  <button class="btn btn-secondary">Test adapter</button>
+                  <button class="btn btn-primary">Save</button>
+                </div>
+              </section>
+
+              <aside class="panel">
+                <div class="panel-head">
+                  <h2>System State</h2>
+                  <span class="badge badge-warning">Review</span>
+                </div>
+                <div class="panel-body stack">
+                  <div class="alert alert-danger" role="alert">
+                    <span class="dot" aria-hidden="true"></span>
+                    <p>Judge command timed out. Writer and deterministic scoring are still available.</p>
+                  </div>
+                  <dl class="compact-stack">
+                    <div class="hint-row"><dt>Engine</dt><dd class="mono">ready</dd></div>
+                    <div class="hint-row"><dt>Codex writer</dt><dd class="mono">ready</dd></div>
+                    <div class="hint-row"><dt>Codex judge</dt><dd class="mono">timeout</dd></div>
+                    <div class="hint-row"><dt>Storage</dt><dd class="mono">writable</dd></div>
+                  </dl>
+                </div>
+              </aside>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+  </body>
+</html>

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Candidate Deterministic Summary - Mockup</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --surface-primary: hsl(210 28% 7%);
+      --surface-panel: hsl(209 25% 10%);
+      --surface-raised: hsl(208 22% 13%);
+      --text-heading: hsl(207 26% 94%);
+      --text-primary: hsl(207 16% 78%);
+      --text-secondary: hsl(207 12% 64%);
+      --text-warning: hsl(42 92% 78%);
+      --text-danger: hsl(4 86% 78%);
+      --border-default: hsl(207 13% 32%);
+      --border-accent: hsl(203 76% 44%);
+      --success: hsl(150 58% 47%);
+      --warning: hsl(42 88% 56%);
+      --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      display: grid;
+      min-height: 100vh;
+      place-items: center;
+      margin: 0;
+      padding: 16px;
+      background: var(--surface-primary);
+      color: var(--text-primary);
+      font: 14px/1.429 var(--font-body);
+    }
+    article {
+      width: min(560px, 100%);
+      display: grid;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid var(--border-accent);
+      border-radius: 6px;
+      outline: 1px solid var(--border-accent);
+      background: var(--surface-panel);
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .badge {
+      padding: 2px 7px;
+      border: 1px solid var(--border-default);
+      border-radius: 999px;
+      color: var(--text-secondary);
+      font: 11px/1.2 var(--font-mono);
+    }
+    .badge.info { border-color: hsl(215 66% 44%); color: hsl(215 92% 78%); }
+    .badge.warn { border-color: hsl(42 76% 40%); color: var(--text-warning); }
+    .post {
+      margin: 0;
+      color: var(--text-heading);
+      font-size: 16px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .score {
+      display: grid;
+      gap: 6px;
+    }
+    .score-top {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-secondary);
+      font: 12px/1.2 var(--font-mono);
+    }
+    .bar {
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: hsl(207 15% 25%);
+    }
+    .bar span {
+      display: block;
+      width: 66%;
+      height: 100%;
+      background: var(--success);
+    }
+    .helper {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+    .counts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 8px;
+      border-radius: 4px;
+      background: var(--surface-raised);
+      color: var(--text-secondary);
+    }
+    .counts b { color: var(--text-heading); }
+    .nudge {
+      margin: 0;
+      color: var(--text-danger);
+    }
+    button {
+      min-height: 32px;
+      padding: 7px 12px;
+      border: 1px solid var(--border-default);
+      border-radius: 4px;
+      background: var(--surface-raised);
+      color: var(--text-primary);
+      cursor: pointer;
+      font: inherit;
+    }
+    button:focus-visible {
+      outline: 2px solid hsl(203 89% 53%);
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+<body>
+  <article aria-label="Selected candidate deterministic summary">
+    <div class="row">
+      <span class="badge info">Insight share</span>
+      <span class="badge">Selected</span>
+    </div>
+    <p class="post">Specificity creates trust.
+
+Show proof from launch week, not a roadmap people have to believe.</p>
+    <section class="score" aria-label="Heuristic score">
+      <div class="score-top">
+        <span>Voice score</span>
+        <span>66 / Ship it</span>
+      </div>
+      <div class="bar"><span></span></div>
+      <p class="helper">Heuristic rank, not prediction.</p>
+    </section>
+    <div class="counts">
+      <span><b>4</b> flagged</span>
+      <span><b>1</b> nudge</span>
+      <span><b>16</b> on point</span>
+    </div>
+    <p class="nudge">Light on engagement signal. Add a hook, question, milestone, or audience opener.</p>
+    <div class="row">
+      <span class="badge warn">160-372 impressions, medium confidence</span>
+      <button>Details</button>
+    </div>
+  </article>
+</body>
+</html>

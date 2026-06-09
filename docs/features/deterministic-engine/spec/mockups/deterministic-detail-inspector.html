@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deterministic Detail Inspector - Mockup</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --surface-primary: hsl(210 28% 7%);
+      --surface-panel: hsl(209 25% 10%);
+      --surface-raised: hsl(208 22% 13%);
+      --text-heading: hsl(207 26% 94%);
+      --text-primary: hsl(207 16% 78%);
+      --text-secondary: hsl(207 12% 64%);
+      --text-warning: hsl(42 92% 78%);
+      --text-danger: hsl(4 86% 78%);
+      --text-success: hsl(150 66% 75%);
+      --border-default: hsl(207 13% 32%);
+      --border-subtle: hsl(207 15% 25%);
+      --success: hsl(150 58% 47%);
+      --warning: hsl(42 88% 56%);
+      --danger: hsl(4 76% 58%);
+      --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--surface-primary);
+      color: var(--text-primary);
+      font: 14px/1.429 var(--font-body);
+    }
+    .frame {
+      width: min(420px, 100%);
+      min-height: 100vh;
+      margin-left: auto;
+      padding: 12px;
+      border-left: 1px solid var(--border-default);
+      background: var(--surface-panel);
+    }
+    .inspector {
+      display: grid;
+      gap: 12px;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    h1, h2, h3 { margin: 0; color: var(--text-heading); }
+    h1 { font-size: 18px; }
+    h2 { font-size: 16px; }
+    h3 { font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
+    p { margin: 0; }
+    button {
+      min-height: 32px;
+      padding: 7px 10px;
+      border: 1px solid var(--border-default);
+      border-radius: 4px;
+      background: var(--surface-raised);
+      color: var(--text-primary);
+      cursor: pointer;
+      font: inherit;
+    }
+    button:focus-visible {
+      outline: 2px solid hsl(203 89% 53%);
+      outline-offset: 2px;
+    }
+    .badge {
+      padding: 2px 7px;
+      border: 1px solid var(--border-default);
+      border-radius: 999px;
+      color: var(--text-secondary);
+      font: 11px/1.2 var(--font-mono);
+    }
+    .badge.success { border-color: hsl(150 48% 38%); color: var(--text-success); }
+    .badge.warn { border-color: hsl(42 76% 40%); color: var(--text-warning); }
+    .card {
+      display: grid;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      background: var(--surface-raised);
+    }
+    .score-pill {
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: var(--success);
+      color: hsl(210 32% 5%);
+      font-weight: 700;
+    }
+    .danger-box {
+      padding: 10px;
+      border-radius: 8px;
+      background: hsl(4 48% 16%);
+      color: var(--text-danger);
+    }
+    .bar-wrap {
+      display: grid;
+      gap: 4px;
+    }
+    .bar {
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: hsl(207 15% 25%);
+    }
+    .bar span {
+      display: block;
+      width: 66%;
+      height: 100%;
+      background: var(--success);
+    }
+    .counts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: var(--text-secondary);
+    }
+    .section {
+      display: grid;
+      gap: 8px;
+    }
+    .check {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+    }
+    .icon {
+      display: inline-grid;
+      width: 20px;
+      height: 20px;
+      place-items: center;
+      border-radius: 999px;
+      background: hsl(4 48% 16%);
+      color: var(--text-danger);
+      font: 12px/1 var(--font-mono);
+    }
+    .icon.ok { background: hsl(150 42% 15%); color: var(--text-success); }
+    .prediction strong {
+      color: var(--text-warning);
+      font: 700 32px/1.1 var(--font-mono);
+    }
+    .muted { color: var(--text-secondary); }
+    .kv {
+      display: grid;
+      gap: 8px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-default);
+    }
+    .kv div {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .mono { font-family: var(--font-mono); }
+  </style>
+</head>
+<body>
+  <aside class="frame" aria-label="Deterministic detail inspector">
+    <div class="inspector">
+      <header class="row">
+        <div>
+          <h1>Deterministic details</h1>
+          <p class="muted">Selected candidate: Insight share</p>
+        </div>
+        <button aria-label="Close deterministic details">Close</button>
+      </header>
+
+      <div class="row">
+        <span class="badge">HEURISTIC</span>
+        <span class="badge warn">Heuristic rank, not prediction.</span>
+      </div>
+
+      <section class="card" aria-labelledby="coach-title">
+        <div class="row">
+          <h2 id="coach-title">Post Coach</h2>
+          <span class="score-pill">66 Ship it</span>
+        </div>
+        <div class="danger-box">Light on engagement signal. No clear engagement hook. Add a prefix, end on a question, share a milestone moment, or call out an audience.</div>
+        <p><b>Signals, not verdicts.</b> These checks flag patterns worth weighing. The goal is the post, not the score.</p>
+        <div class="bar-wrap">
+          <div class="row muted"><span>Target 60</span><span class="mono">66</span></div>
+          <div class="bar"><span></span></div>
+        </div>
+        <div class="counts"><span>4 flagged</span><span>1 nudge</span><span>16 on point</span></div>
+        <section class="section">
+          <h3>Worth a look</h3>
+          <div class="check"><span class="icon">x</span><span>Hook opener missing. Try a lowercase prefix, audience name, or question.</span></div>
+          <div class="check"><span class="icon">x</span><span>No tension. Add a contradiction, reversal, or comparison.</span></div>
+          <div class="check"><span class="icon">x</span><span>Not yet quotable. Tighten to 12 words or end on a punchline.</span></div>
+        </section>
+        <section class="section">
+          <h3>On point</h3>
+          <div class="check"><span class="icon ok">ok</span><span>Has enough substance.</span></div>
+          <div class="check"><span class="icon ok">ok</span><span>No AI-tell phrases.</span></div>
+          <div class="check"><span class="icon ok">ok</span><span>Concrete specifics.</span></div>
+        </section>
+      </section>
+
+      <section class="card prediction" aria-labelledby="prediction-title">
+        <div class="row">
+          <h2 id="prediction-title">Engagement Prediction</h2>
+          <span class="badge warn">Medium</span>
+        </div>
+        <strong>160 - 372</strong>
+        <p class="muted">Predicted, not measured. Estimate for manual account size and the signals below.</p>
+        <div class="kv">
+          <div><span>Manual followers</span><span class="mono">1,000</span></div>
+          <div><span>Voice score 66</span><span class="mono">x0.70</span></div>
+          <div><span>Insight format</span><span class="mono">x0.95</span></div>
+        </div>
+      </section>
+    </div>
+  </aside>
+</body>
+</html>

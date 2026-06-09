@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manual Scoring Context Panel - Mockup</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --surface-primary: hsl(210 28% 7%);
+      --surface-panel: hsl(209 25% 10%);
+      --surface-raised: hsl(208 22% 13%);
+      --surface-sunken: hsl(210 32% 5%);
+      --text-heading: hsl(207 26% 94%);
+      --text-primary: hsl(207 16% 78%);
+      --text-secondary: hsl(207 12% 64%);
+      --text-warning: hsl(42 92% 78%);
+      --border-default: hsl(207 13% 32%);
+      --border-warning: hsl(42 76% 40%);
+      --accent: hsl(203 89% 53%);
+      --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      display: grid;
+      min-height: 100vh;
+      place-items: center;
+      margin: 0;
+      background: var(--surface-primary);
+      color: var(--text-primary);
+      font: 14px/1.429 var(--font-body);
+    }
+    .panel {
+      width: min(420px, calc(100vw - 32px));
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid var(--border-default);
+      border-radius: 6px;
+      background: var(--surface-panel);
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    h1 {
+      margin: 0;
+      color: var(--text-heading);
+      font-size: 16px;
+      line-height: 1.333;
+    }
+    p {
+      margin: 0;
+      color: var(--text-secondary);
+    }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--text-heading);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    input {
+      width: 100%;
+      height: 32px;
+      padding: 6px 8px;
+      border: 1px solid var(--border-default);
+      border-radius: 4px;
+      background: var(--surface-sunken);
+      color: var(--text-primary);
+      font: inherit;
+    }
+    input:focus-visible, button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .input-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+    button {
+      min-height: 32px;
+      padding: 7px 12px;
+      border: 1px solid var(--border-default);
+      border-radius: 4px;
+      background: var(--surface-raised);
+      color: var(--text-primary);
+      cursor: pointer;
+      font: inherit;
+    }
+    .primary {
+      border-color: hsl(203 82% 50%);
+      background: var(--accent);
+      color: hsl(210 32% 5%);
+      font-weight: 600;
+    }
+    .ghost { background: transparent; }
+    .badge {
+      padding: 2px 7px;
+      border: 1px solid hsl(215 66% 44%);
+      border-radius: 999px;
+      color: hsl(215 92% 78%);
+      font: 11px/1.2 var(--font-mono);
+    }
+    .alert {
+      padding: 10px;
+      border: 1px solid var(--border-warning);
+      border-radius: 4px;
+      background: hsl(42 62% 15% / .45);
+      color: var(--text-warning);
+    }
+    .kv {
+      display: grid;
+      gap: 8px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-default);
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+    .kv div {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .mono { font-family: var(--font-mono); color: var(--text-primary); }
+    @media (max-width: 420px) {
+      .input-row { grid-template-columns: 1fr; }
+      .row { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <section class="panel" aria-labelledby="context-title">
+    <div class="row">
+      <h1 id="context-title">Manual account context</h1>
+      <span class="badge">MANUAL</span>
+    </div>
+    <p>No X integration yet. Add your current follower count to estimate impressions; Post Coach still works without it.</p>
+    <form>
+      <label for="followers">Followers</label>
+      <div class="input-row">
+        <input id="followers" value="1000" inputmode="numeric" aria-describedby="followers-help">
+        <button class="primary" type="submit">Apply</button>
+      </div>
+      <p id="followers-help">Used only for heuristic impression range scaling.</p>
+    </form>
+    <div class="alert">Prediction ranges are disabled until followers are supplied for this run.</div>
+    <div class="row">
+      <button class="ghost">Continue without prediction</button>
+      <button>Use Settings default</button>
+    </div>
+    <div class="kv" aria-label="Applied context">
+      <div><span>Source</span><span class="mono">Manual</span></div>
+      <div><span>Current run</span><span class="mono">1,000 followers</span></div>
+      <div><span>AI rating</span><span class="mono">Not used day one</span></div>
+    </div>
+  </section>
+</body>
+</html>
