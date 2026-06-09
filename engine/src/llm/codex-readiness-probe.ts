@@ -15,14 +15,6 @@ export type CodexReadinessProbeOptions = {
   executionTimeoutMs?: number;
 };
 
-type CallTrackedCheck = (() => Promise<SubsystemStatus>) & {
-  _isMockFunction: true;
-  getMockName: () => string;
-  mock: {
-    calls: unknown[][];
-  };
-};
-
 type CodexReadinessDetails = {
   adapter: typeof adapter;
   command: typeof command;
@@ -36,27 +28,14 @@ export class CodexReadinessProbe {
   private readonly runner: ProcessRunner;
   private readonly workspaceRoot: string;
   private readonly executionTimeoutMs: number;
-  readonly check: CallTrackedCheck;
 
   constructor(options: CodexReadinessProbeOptions) {
     this.runner = options.runner;
     this.workspaceRoot = options.workspaceRoot;
     this.executionTimeoutMs = options.executionTimeoutMs ?? defaultExecutionTimeoutMs;
-    const calls: unknown[][] = [];
-
-    this.check = Object.assign(async (): Promise<SubsystemStatus> => {
-      calls.push([]);
-      return await this.runCheck();
-    }, {
-      _isMockFunction: true as const,
-      getMockName: () => "CodexReadinessProbe.check",
-      mock: {
-        calls,
-      },
-    });
   }
 
-  private async runCheck(): Promise<SubsystemStatus> {
+  async check(): Promise<SubsystemStatus> {
     const result = await this.runner.run(command, ["--version"], {
       cwd: this.workspaceRoot,
       timeoutMs: this.executionTimeoutMs,
