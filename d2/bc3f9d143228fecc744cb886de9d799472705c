@@ -1,0 +1,21 @@
+engine/src/llm/tests/codex-cli-provider.test.ts
+  s_2150378e11d0bc::t_d891e8d25747fe 317-318
+engine/src/llm/tests/fixtures/codex-cli/trailing-prose-json.txt
+  s_2150378e11d0bc::t_d891e8d25747fe 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "d2bc3f9d143228fecc744cb886de9d799472705c",
+  "prompts": {},
+  "sessions": {
+    "s_2150378e11d0bc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab99-20f6-7b60-8138-44a7328e2887",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
