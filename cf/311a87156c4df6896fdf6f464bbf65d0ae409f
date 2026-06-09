@@ -1,0 +1,23 @@
+engine/src/llm/process-runner.ts
+  s_2150378e11d0bc::t_c7c9e15c6444ad 73-76,90,100-109,208-210
+  s_2150378e11d0bc::t_c5b6b7db82ba46 1-72,77-89,91-99,110-159,178-207,211-260,264-318
+  s_2150378e11d0bc::t_d0f6ce60545a18 160-177,261-263
+engine/src/index.ts
+  s_2150378e11d0bc::t_fd1b035167ef40 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "cf311a87156c4df6896fdf6f464bbf65d0ae409f",
+  "prompts": {},
+  "sessions": {
+    "s_2150378e11d0bc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab99-20f6-7b60-8138-44a7328e2887",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
