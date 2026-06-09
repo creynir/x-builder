@@ -1,0 +1,47 @@
+docs/features/codex-adapter/tickets/CAD-004-codex-readiness-probe-integration.md
+  s_48823493b4e0a8::t_97e6b3beb957e0 1-32,34-45,47-62,64-76
+  s_48823493b4e0a8::t_3aa6c2e83ac314 33,46,63
+docs/features/codex-adapter/tickets/README.md
+  s_48823493b4e0a8::t_3aa6c2e83ac314 19-21
+  s_48823493b4e0a8::t_97e6b3beb957e0 1-18
+docs/features/codex-adapter/tickets/CAD-001-provider-neutral-llm-contract-and-service-boundary.md
+  s_48823493b4e0a8::t_97e6b3beb957e0 1-91
+engine/src/llm/process-runner.ts
+  s_2150378e11d0bc::t_0851145d9821c5 268-280,283-286,288-291,293-303,309,311,320,332-333,338-341,343-363,365,370-371,374-375,379-383,404-407,451,456
+  s_2150378e11d0bc::t_217d2c8dfa5747 99-100,207-229,231-241,246-251,259-260,263-267,304-308,310,313-319,321-326,328-331,334-337,366-369,372,376-377,384-403,408-450,452-455,457-480
+docs/features/codex-adapter/tickets/CAD-005-backend-contract-integration-coverage.md
+  s_48823493b4e0a8::t_3aa6c2e83ac314 34,54
+  s_48823493b4e0a8::t_97e6b3beb957e0 1-33,35-53,55-70
+docs/features/codex-adapter/tickets/CAD-003-codex-cli-provider-implementation.md
+  s_48823493b4e0a8::t_97e6b3beb957e0 1-18,20-21,23-30,32-36,49-50,52-69,71,74-84,86-93
+  s_48823493b4e0a8::t_3aa6c2e83ac314 19,22,31,37-48,51,70,72-73,85
+docs/features/codex-adapter/tickets/CAD-006-e2e-shell-readiness-smoke.md
+  s_48823493b4e0a8::t_97e6b3beb957e0 1-63
+docs/features/codex-adapter/tickets/CAD-002-safe-process-execution-boundary.md
+  s_48823493b4e0a8::t_97e6b3beb957e0 1-40,58-76,79-95
+  s_48823493b4e0a8::t_3aa6c2e83ac314 41-57,77-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "ba6e6fcaacb4b4c8724738191a11546cc46aa67a",
+  "prompts": {},
+  "sessions": {
+    "s_2150378e11d0bc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab99-20f6-7b60-8138-44a7328e2887",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    },
+    "s_48823493b4e0a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab84-f758-79f0-a7c5-aa688ca608e1",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
