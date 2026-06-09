@@ -1,0 +1,43 @@
+engine/src/deterministic/tests/format-history.test.ts
+  s_4cbda645920fe5::t_ccc020b5356169 1-54
+engine/src/deterministic/tests/analyzer.test.ts
+  s_4cbda645920fe5::t_ccc020b5356169 5-21
+engine/src/deterministic/tests/format-classifier.test.ts
+  s_4cbda645920fe5::t_ccc020b5356169 1-12
+engine/src/deterministic/tests/test-helpers.ts
+  s_4cbda645920fe5::t_ccc020b5356169 1-26
+engine/src/deterministic/tests/engagement-readiness.test.ts
+  s_4cbda645920fe5::t_ccc020b5356169 1-22
+engine/src/deterministic/tests/quality-signal-checks.test.ts
+  s_4cbda645920fe5::t_ccc020b5356169 3-15,18,146-147,149-151,153-154
+engine/src/deterministic/tests/post-coach-model.test.ts
+  s_4cbda645920fe5::t_ccc020b5356169 1-74,85-115
+  s_4cbda645920fe5::t_7caf152c8c163c 75-84,116
+engine/src/deterministic/tests/prediction-estimator.test.ts
+  s_4cbda645920fe5::t_ccc020b5356169 1-61
+engine/src/deterministic/tests/text-metrics.test.ts
+  s_4cbda645920fe5::t_ccc020b5356169 1-13,15-22
+  s_4cbda645920fe5::t_7caf152c8c163c 14,23
+engine/src/deterministic/tests/voice-score.test.ts
+  s_4cbda645920fe5::t_ccc020b5356169 1-120
+engine/src/deterministic/tests/learning-model.test.ts
+  s_4cbda645920fe5::t_ccc020b5356169 1-29
+engine/src/deterministic/tests/score-aggregator.test.ts
+  s_4cbda645920fe5::t_ccc020b5356169 1-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "fc52783b9ec3246741a714aa4dbd9e845e283954",
+  "prompts": {},
+  "sessions": {
+    "s_4cbda645920fe5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab75-00c2-7f01-aa48-2c93cdce0506",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
