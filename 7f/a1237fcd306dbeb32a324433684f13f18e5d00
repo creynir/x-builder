@@ -1,0 +1,27 @@
+engine/src/llm/tests/fixtures/codex-cli/invalid-json.txt
+  s_2150378e11d0bc::t_9f7538403defe7 1
+engine/src/llm/tests/fixtures/codex-cli/mixed-prose-json.txt
+  s_2150378e11d0bc::t_9f7538403defe7 1-5
+engine/src/llm/tests/codex-cli-provider.test.ts
+  s_2150378e11d0bc::t_9f7538403defe7 1-499
+engine/src/llm/tests/fixtures/codex-cli/final-stdout.json
+  s_2150378e11d0bc::t_9f7538403defe7 1-4
+engine/src/llm/tests/fixtures/codex-cli/jsonl-events.txt
+  s_2150378e11d0bc::t_9f7538403defe7 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "7fa1237fcd306dbeb32a324433684f13f18e5d00",
+  "prompts": {},
+  "sessions": {
+    "s_2150378e11d0bc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab99-20f6-7b60-8138-44a7328e2887",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
