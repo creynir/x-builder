@@ -1,0 +1,19 @@
+engine/src/server/tests/status.test.ts
+  s_2150378e11d0bc::t_f7ad6c8c6e924e 4,396,438,453-513,576,581-582,592-623
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "2243386e0d13533eb044f892da677eb0aee972ab",
+  "prompts": {},
+  "sessions": {
+    "s_2150378e11d0bc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab99-20f6-7b60-8138-44a7328e2887",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
