@@ -1,0 +1,3 @@
+{"type":"session.started","session_id":"test-session"}
+{"type":"message","role":"assistant","content":"{\"draft\":\"Event stream JSON is out of scope\",\"confidence\":0.42}"}
+{"type":"session.completed"}

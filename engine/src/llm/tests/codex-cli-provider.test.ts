@@ -1,0 +1,499 @@
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
+
+import { defaultProcessEnvAllowlist } from "../process-runner.js";
+import type {
+  LlmProvider,
+  NormalizedStructuredLlmRequest,
+  StructuredLlmProviderResult,
+} from "../structured-llm-service.js";
+
+type DraftOutput = {
+  draft: string;
+  confidence: number;
+};
+
+type CapturedRunOptions = {
+  cwd: string;
+  timeoutMs: number;
+  maxStdoutBytes: number;
+  maxStderrBytes: number;
+  stdin?: string;
+  env?: Record<string, string>;
+  envAllowlist?: readonly string[];
+};
+
+type CapturedRun = {
+  command: string;
+  args: readonly string[];
+  options: CapturedRunOptions;
+};
+
+type FakeProcessResult = {
+  status: "success" | "failed";
+  code?: string;
+  retryable?: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+  durationMs: number;
+  stdoutBytes: number;
+  stderrBytes: number;
+  timedOut?: boolean;
+  stream?: "stdout" | "stderr";
+  message?: string;
+  details?: Record<string, unknown>;
+};
+
+type FakeProcessRunner = {
+  run: ReturnType<typeof vi.fn>;
+  calls: CapturedRun[];
+};
+
+type CodexCliProviderConstructor = new (options: {
+  runner: FakeProcessRunner;
+  workspaceRoot: string;
+}) => LlmProvider<DraftOutput>;
+
+const testDir = dirname(fileURLToPath(import.meta.url));
+const fixturesDir = join(testDir, "fixtures", "codex-cli");
+const workspaceRoot = "/tmp/x-builder-codex-cli-provider-workspace";
+const requestSuppliedCwd = "/tmp/request-supplied-cwd-must-not-win";
+
+const draftOutputSchema = z.object({
+  draft: z.string(),
+  confidence: z.number().min(0).max(1),
+});
+
+const outputJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["draft", "confidence"],
+  properties: {
+    draft: { type: "string" },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+  },
+} as const;
+
+async function loadCodexCliProvider(): Promise<CodexCliProviderConstructor> {
+  const modulePath = "../codex-cli-provider.js";
+  const module = (await import(modulePath)) as {
+    CodexCliProvider: CodexCliProviderConstructor;
+  };
+
+  return module.CodexCliProvider;
+}
+
+async function readFixture(name: string): Promise<string> {
+  return readFile(join(fixturesDir, name), "utf8");
+}
+
+async function createProvider(runner: FakeProcessRunner): Promise<LlmProvider<DraftOutput>> {
+  const CodexCliProvider = await loadCodexCliProvider();
+
+  return new CodexCliProvider({
+    runner,
+    workspaceRoot,
+  });
+}
+
+function byteLength(value: string): number {
+  return Buffer.byteLength(value, "utf8");
+}
+
+function successProcessResult(stdout: string): FakeProcessResult {
+  return {
+    status: "success",
+    stdout,
+    stderr: "",
+    exitCode: 0,
+    signal: null,
+    durationMs: 21,
+    stdoutBytes: byteLength(stdout),
+    stderrBytes: 0,
+  };
+}
+
+function failedProcessResult(
+  code: string,
+  overrides: Partial<FakeProcessResult> = {},
+): FakeProcessResult {
+  const stdout = overrides.stdout ?? "";
+  const stderr = overrides.stderr ?? "";
+
+  return {
+    status: "failed",
+    code,
+    retryable: false,
+    stdout,
+    stderr,
+    exitCode: null,
+    signal: null,
+    durationMs: 35,
+    stdoutBytes: byteLength(stdout),
+    stderrBytes: byteLength(stderr),
+    message: "Process failed safely.",
+    ...overrides,
+  };
+}
+
+function fakeRunner(
+  result:
+    | FakeProcessResult
+    | ((call: CapturedRun) => FakeProcessResult | Promise<FakeProcessResult>),
+): FakeProcessRunner {
+  const calls: CapturedRun[] = [];
+  const run = vi.fn(async (command: string, args: readonly string[], options: CapturedRunOptions) => {
+    const call: CapturedRun = {
+      command,
+      args: [...args],
+      options,
+    };
+
+    calls.push(call);
+
+    return typeof result === "function" ? result(call) : result;
+  });
+
+  return {
+    run,
+    calls,
+  };
+}
+
+function structuredRequest(
+  overrides: Partial<NormalizedStructuredLlmRequest<DraftOutput>> = {},
+): NormalizedStructuredLlmRequest<DraftOutput> {
+  return {
+    provider: "codex-cli",
+    purpose: "writer_first_pass",
+    instructions: "Return a structured draft quality summary.",
+    turns: [
+      {
+        role: "system",
+        content: "You evaluate draft quality.",
+      },
+      {
+        role: "user",
+        content: "Score this draft for concrete evidence.",
+      },
+    ],
+    structuredOutput: {
+      name: "draft_quality",
+      schema: outputJsonSchema,
+      strict: true,
+      parser: (value: unknown) => draftOutputSchema.parse(value),
+    },
+    options: {
+      timeoutMs: 12_345,
+      outputByteLimit: 98_765,
+      attempts: 1,
+    },
+    metadata: {
+      cwd: requestSuppliedCwd,
+    },
+    ...overrides,
+  };
+}
+
+function valueAfter(args: readonly string[], flag: string): string {
+  const index = args.indexOf(flag);
+
+  expect(index).toBeGreaterThanOrEqual(0);
+  expect(args[index + 1]).toEqual(expect.any(String));
+
+  return args[index + 1] as string;
+}
+
+function expectSafeFailure(result: StructuredLlmProviderResult<DraftOutput>, forbiddenText: readonly string[]): void {
+  expect(result.status).toBe("failed");
+
+  const publicFailureText = JSON.stringify(result);
+
+  for (const value of forbiddenText) {
+    expect(publicFailureText).not.toContain(value);
+  }
+  expect(publicFailureText).not.toContain('"stack"');
+  expect(publicFailureText).not.toMatch(/\bError:\s/);
+  expect(publicFailureText).not.toMatch(/\bat\s+\S+\s+\(/);
+}
+
+describe("codex cli provider", () => {
+  it("returns typed structured output and runs codex with the read-only structured-output command", async () => {
+    const stdout = `\n${await readFixture("final-stdout.json")}\n`;
+    let schemaFileContent: unknown;
+    const runner = fakeRunner(async (call) => {
+      schemaFileContent = JSON.parse(await readFile(valueAfter(call.args, "--output-schema"), "utf8"));
+
+      return successProcessResult(stdout);
+    });
+    const provider = await createProvider(runner);
+
+    const result = await provider.generateStructured(structuredRequest());
+
+    expect(result).toMatchObject({
+      status: "success",
+      provider: "codex-cli",
+      output: {
+        draft: "Specific proof beats generic claims.",
+        confidence: 0.91,
+      },
+      requestId: expect.any(String),
+      durationMs: expect.any(Number),
+      completedAt: expect.any(String),
+    });
+    expect(runner.run).toHaveBeenCalledOnce();
+
+    const call = runner.calls[0] as CapturedRun;
+    expect(call.command).toBe("codex");
+    expect(call.args[0]).toBe("exec");
+    expect(call.args).toContain("--ephemeral");
+    expect(valueAfter(call.args, "--sandbox")).toBe("read-only");
+    expect(valueAfter(call.args, "--cd")).toBe(workspaceRoot);
+    expect(valueAfter(call.args, "--color")).toBe("never");
+    expect(call.args.at(-1)).toBe("-");
+    expect(schemaFileContent).toEqual(outputJsonSchema);
+    expect(call.options).toMatchObject({
+      cwd: workspaceRoot,
+      timeoutMs: 12_345,
+      maxStdoutBytes: 98_765,
+      envAllowlist: [...defaultProcessEnvAllowlist],
+    });
+    expect(call.options).not.toHaveProperty("env");
+    expect(call.options.stdin).toEqual(expect.any(String));
+    expect(call.options.stdin).toContain("draft_quality");
+    expect(call.options.stdin).toMatch(/single\s+JSON\s+object/i);
+    expect(call.options.stdin).toContain('"confidence"');
+  });
+
+  it("keeps request-supplied cwd-like metadata out of cwd and command arguments", async () => {
+    const runner = fakeRunner(successProcessResult(await readFixture("final-stdout.json")));
+    const provider = await createProvider(runner);
+
+    await provider.generateStructured(structuredRequest());
+
+    const call = runner.calls[0] as CapturedRun;
+    expect(call.options.cwd).toBe(workspaceRoot);
+    expect(valueAfter(call.args, "--cd")).toBe(workspaceRoot);
+    expect(call.args).not.toContain(requestSuppliedCwd);
+  });
+
+  it("passes shell metacharacters through stdin prompt text without building a shell command string", async () => {
+    const unsafePrompt = "Summarize this; rm -rf / && echo HACKED | $(touch owned)";
+    const runner = fakeRunner(successProcessResult(await readFixture("final-stdout.json")));
+    const provider = await createProvider(runner);
+
+    await provider.generateStructured(
+      structuredRequest({
+        turns: [
+          {
+            role: "system",
+            content: "You evaluate draft quality.",
+          },
+          {
+            role: "user",
+            content: unsafePrompt,
+          },
+        ],
+      }),
+    );
+
+    const call = runner.calls[0] as CapturedRun;
+    expect(Array.isArray(call.args)).toBe(true);
+    expect(call.command).toBe("codex");
+    expect(call.command).not.toContain(unsafePrompt);
+    expect(call.args).not.toContain(unsafePrompt);
+    expect(call.args.join(" ")).not.toContain(unsafePrompt);
+    expect(call.options.stdin).toContain(unsafePrompt);
+  });
+
+  it.each([
+    ["invalid JSON", "invalid-json.txt"],
+    ["prose mixed with JSON", "mixed-prose-json.txt"],
+    ["JSONL event stream", "jsonl-events.txt"],
+  ])("returns invalid_provider_response for %s stdout", async (_caseName, fixtureName) => {
+    const stdout = await readFixture(fixtureName);
+    const runner = fakeRunner(successProcessResult(stdout));
+    const provider = await createProvider(runner);
+
+    const result = await provider.generateStructured(structuredRequest());
+
+    expect(result).toMatchObject({
+      status: "failed",
+      provider: "codex-cli",
+      code: "invalid_provider_response",
+      retryable: false,
+      message: expect.any(String),
+    });
+    expectSafeFailure(result, [stdout.trim()]);
+  });
+
+  it("returns invalid_provider_response when stdout contains more than one JSON value", async () => {
+    const stdout = '{"draft":"first","confidence":0.4}\n{"draft":"second","confidence":0.5}';
+    const runner = fakeRunner(successProcessResult(stdout));
+    const provider = await createProvider(runner);
+
+    const result = await provider.generateStructured(structuredRequest());
+
+    expect(result).toMatchObject({
+      status: "failed",
+      provider: "codex-cli",
+      code: "invalid_provider_response",
+      retryable: false,
+    });
+    expectSafeFailure(result, [stdout]);
+  });
+
+  it("returns structured_output_invalid when parsed JSON fails the caller output parser", async () => {
+    const stdout = JSON.stringify({
+      draft: "Confidence is the wrong type.",
+      confidence: "high",
+    });
+    const runner = fakeRunner(successProcessResult(stdout));
+    const provider = await createProvider(runner);
+
+    const result = await provider.generateStructured(structuredRequest());
+
+    expect(result).toMatchObject({
+      status: "failed",
+      provider: "codex-cli",
+      code: "structured_output_invalid",
+      retryable: false,
+      message: expect.any(String),
+    });
+    expectSafeFailure(result, [stdout, "Expected number"]);
+  });
+
+  it("maps timeout results to retryable request_timeout failures", async () => {
+    const runner = fakeRunner(
+      failedProcessResult("request_timeout", {
+        retryable: true,
+        timedOut: true,
+        durationMs: 12_345,
+      }),
+    );
+    const provider = await createProvider(runner);
+
+    const result = await provider.generateStructured(structuredRequest());
+
+    expect(result).toMatchObject({
+      status: "failed",
+      provider: "codex-cli",
+      code: "request_timeout",
+      retryable: true,
+      message: expect.any(String),
+      details: expect.objectContaining({
+        provider: "codex-cli",
+        durationMs: 12_345,
+        stdoutBytes: 0,
+        stderrBytes: 0,
+      }),
+    });
+  });
+
+  it("maps output limit failures to output_too_large", async () => {
+    const stdout = "truncated structured output";
+    const runner = fakeRunner(
+      failedProcessResult("output_too_large", {
+        stdout,
+        stdoutBytes: 2_000_001,
+        stream: "stdout",
+      }),
+    );
+    const provider = await createProvider(runner);
+
+    const result = await provider.generateStructured(structuredRequest());
+
+    expect(result).toMatchObject({
+      status: "failed",
+      provider: "codex-cli",
+      code: "output_too_large",
+      retryable: false,
+      details: expect.objectContaining({
+        provider: "codex-cli",
+        stdoutBytes: 2_000_001,
+        stream: "stdout",
+      }),
+    });
+    expectSafeFailure(result, [stdout]);
+  });
+
+  it("maps process start failures to process_failed without leaking process internals", async () => {
+    const path = "/Users/nataly/.codex/auth.json";
+    const runner = fakeRunner(
+      failedProcessResult("process_failed", {
+        details: {
+          path,
+          stack: "Error: spawn failed\n    at internal",
+        },
+      }),
+    );
+    const provider = await createProvider(runner);
+
+    const result = await provider.generateStructured(structuredRequest());
+
+    expect(result).toMatchObject({
+      status: "failed",
+      provider: "codex-cli",
+      code: "process_failed",
+      retryable: false,
+    });
+    expectSafeFailure(result, [path, "spawn failed"]);
+  });
+
+  it("maps non-zero exits without exposing raw stderr, prompt text, auth paths, or stack traces", async () => {
+    const promptSentinel = "PROMPT_SENTINEL_DO_NOT_LEAK";
+    const stderrSentinel = "STDERR_SENTINEL_DO_NOT_LEAK";
+    const authPath = "/Users/nataly/.codex/auth.json";
+    const stderr = [
+      `fatal: ${stderrSentinel}`,
+      `auth file: ${authPath}`,
+      "Error: sensitive stack",
+      "    at runCodex (/tmp/internal.ts:1:1)",
+    ].join("\n");
+    const runner = fakeRunner(
+      failedProcessResult("nonzero_exit", {
+        stderr,
+        stderrBytes: byteLength(stderr),
+        exitCode: 17,
+      }),
+    );
+    const provider = await createProvider(runner);
+
+    const result = await provider.generateStructured(
+      structuredRequest({
+        instructions: promptSentinel,
+        turns: [
+          {
+            role: "system",
+            content: promptSentinel,
+          },
+          {
+            role: "user",
+            content: promptSentinel,
+          },
+        ],
+      }),
+    );
+
+    expect(result).toMatchObject({
+      status: "failed",
+      provider: "codex-cli",
+      code: "nonzero_exit",
+      retryable: false,
+      message: expect.any(String),
+      details: expect.objectContaining({
+        provider: "codex-cli",
+        exitCode: 17,
+        signal: null,
+        stderrBytes: byteLength(stderr),
+      }),
+    });
+    expectSafeFailure(result, [promptSentinel, stderrSentinel, authPath, "sensitive stack"]);
+  });
+});
