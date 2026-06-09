@@ -1,0 +1,26 @@
+engine/src/llm/process-runner.ts
+  s_2150378e11d0bc::t_7e994fefad4975 28,471-479,490
+engine/src/index.ts
+  s_2150378e11d0bc::t_44197c1bc79490 6
+engine/src/llm/codex-cli-provider.ts
+  s_2150378e11d0bc::t_2fb1ac4c8612e4 1-19,21-24,26-30,32-36,38-139,145-153,155-203,210-275,280-281,297-346
+  s_2150378e11d0bc::t_86a25262cd7640 20,25,31,37,140-144,204-209
+  s_2150378e11d0bc::t_e7a45166d3e778 154,276-279
+  s_2150378e11d0bc::t_127f2e7bf807e4 282-296
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "2e0ce782ab625122210bdca8c6107931aed13196",
+  "prompts": {},
+  "sessions": {
+    "s_2150378e11d0bc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab99-20f6-7b60-8138-44a7328e2887",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
