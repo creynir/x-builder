@@ -25,6 +25,8 @@ import {
 import { z } from "zod";
 
 import { DeterministicAnalysisService } from "../deterministic/deterministic-analysis-service.js";
+import { CodexReadinessProbe } from "../llm/codex-readiness-probe.js";
+import { NodeProcessRunner } from "../llm/process-runner.js";
 import {
   JsonFileAppSettingsRepository,
   type AppSettingsRepository,
@@ -226,13 +228,11 @@ const defaultReadinessDependencies: ReadinessDependencies = {
   },
   codex: {
     check: () =>
-      subsystem("unconfigured", "Codex judge", {
-        message: "Codex judge is not configured for automatic readiness checks.",
-        retryable: true,
-        details: {
-          judgeExecuted: false,
-        },
-      }),
+      new CodexReadinessProbe({
+        runner: new NodeProcessRunner(),
+        workspaceRoot: process.cwd(),
+        executionTimeoutMs: readinessTimeoutMsDefault,
+      }).check(),
   },
   storage: {
     check: async () => {
