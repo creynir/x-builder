@@ -14,6 +14,8 @@ import {
   appStatusSchema,
   generateIdeaRequestSchema,
   generateIdeaResponseSchema,
+  judgeDraftRequestSchema,
+  judgeDraftResponseSchema,
   subsystemStatusSchema,
   type ApiError,
   type AppSettings,
@@ -26,8 +28,11 @@ import {
 import { z } from "zod";
 
 import { DeterministicAnalysisService } from "../deterministic/deterministic-analysis-service.js";
+import { CodexCliProvider } from "../llm/codex-cli-provider.js";
 import { CodexReadinessProbe } from "../llm/codex-readiness-probe.js";
+import { JudgeDraftService, type JudgeDraft } from "../llm/judge-draft-service.js";
 import { NodeProcessRunner, type ProcessRunner } from "../llm/process-runner.js";
+import { StructuredLlmService } from "../llm/structured-llm-service.js";
 import {
   JsonFileAppSettingsRepository,
   type AppSettingsRepository,
@@ -66,6 +71,7 @@ export interface BuildServerOptions {
   readinessService?: ReadinessService;
   readinessTimeoutMs?: number;
   settingsRepository?: AppSettingsRepository;
+  judgeDraftService?: JudgeDraft;
 }
 
 export type EngineRuntimeConfig = {
@@ -128,6 +134,15 @@ const deterministicAnalysisError = (): ApiError =>
     scope: "deterministic",
     retryable: true,
     status: 500,
+  });
+
+const judgeFailedError = (retryable: boolean): ApiError =>
+  normalize({
+    code: "judge_failed",
+    message: "The Codex judge could not score this draft. Try again.",
+    scope: "judge",
+    retryable,
+    status: retryable ? 503 : 500,
   });
 
 const statusUnavailableError = (): ApiError =>
@@ -438,6 +453,24 @@ const configureCors = (
   });
 };
 
+export type CreateDefaultJudgeDraftServiceOptions = {
+  startupCwd?: string;
+  runner?: ProcessRunner;
+};
+
+export const createDefaultJudgeDraftService = (
+  options: CreateDefaultJudgeDraftServiceOptions = {},
+): JudgeDraft => {
+  const workspaceRoot = resolveWorkspaceRoot(options.startupCwd ?? process.cwd());
+  // With no resolvable workspace root the provider list is empty, so the judge
+  // request resolves to a provider_unconfigured failure rather than throwing.
+  const providers = workspaceRoot
+    ? [new CodexCliProvider({ runner: options.runner ?? new NodeProcessRunner(), workspaceRoot })]
+    : [];
+
+  return new JudgeDraftService(new StructuredLlmService({ providers }));
+};
+
 export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false });
   configureCors(app, options.allowedCorsOrigins ?? defaultCorsAllowedOrigins);
@@ -454,6 +487,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       options.readinessDependencies ?? createDefaultReadinessDependencies(),
       options.readinessTimeoutMs ?? readinessTimeoutMsDefault,
     );
+  const judgeDraftService = options.judgeDraftService ?? createDefaultJudgeDraftService();
 
   app.setNotFoundHandler((_request, reply) => {
     const apiError = notFoundError();
@@ -533,6 +567,17 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     }
 
     return reply.send(parseResponseContract(analyzePostsResponseSchema, result));
+  });
+
+  app.post("/drafts/judge", async (request, reply) => {
+    const input = judgeDraftRequestSchema.parse(request.body);
+    const outcome = await judgeDraftService.judge(input.text);
+
+    if (outcome.status === "failed") {
+      throw new NormalizedApiError(judgeFailedError(outcome.retryable));
+    }
+
+    return reply.send(parseResponseContract(judgeDraftResponseSchema, outcome.response));
   });
 
   return app;

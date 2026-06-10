@@ -77,3 +77,15 @@ expose it at `POST /drafts/judge` with safe, structured failure handling.
 - LJ-001 (shared contract).
 - Existing `StructuredLlmService`, `CodexCliProvider`, `NodeProcessRunner`,
   `resolveWorkspaceRoot`, and the route error-normalization helpers.
+
+## Status
+
+DONE via the full dem-pipeline: tickets first, tests-first (confirmed RED:
+missing module + route 404) → implement → quality-fixer → independent review gates
+(test / code / security / intent) → final validator. Intent + security PASS;
+test + code returned CONCERNS, fixed: aligned the codex output JSON Schema with the
+lenient `judgeVerdictSchema` parser (dropped `additionalProperties:false`); exported
+`createDefaultJudgeDraftService` with an injectable runner; added route coverage for
+the non-retryable -> 500 branch and the response-contract -> internal_error path,
+a provider_unconfigured/degraded-path unit test, and a user-turn role assertion.
+9 LJ-002 tests; full suite 369 green; typecheck clean; no regressions.
