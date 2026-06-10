@@ -46,3 +46,21 @@ across the client api boundary and an e2e screenshot of the verdict panel.
 ## Dependencies
 
 - LJ-001, LJ-002, LJ-003.
+
+## Status
+
+DONE. Added `e2e-tests/tests/judge-flow.spec.ts` (Playwright), which drives the real
+client UI and the real `EngineApiClient.judgeDraft` fetch path against a stubbed
+engine (page.route), covering both states:
+- codex ready -> type a draft -> click "Judge draft" -> the Codex Judge panel
+  renders the rating, headline, strengths, and improvements (screenshot:
+  /tmp/lj-judge-verdict.png).
+- codex unavailable -> the "Judge draft" button is disabled with the
+  "Codex judge is unavailable right now." hint (screenshot:
+  /tmp/lj-judge-unavailable.png), validating the live readiness gating end to end.
+
+Combined with LJ-002 route tests (engine side) and LJ-003 api-client tests (client
+side), the judge contract is validated across the HTTP boundary. Note: a full e2e
+against a real `codex` CLI is out of scope here (codex is unavailable in this
+environment); the engine is stubbed deterministically, matching the existing e2e
+suite's approach. 2 e2e tests pass; full unit suite 382 green.
