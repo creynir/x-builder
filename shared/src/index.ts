@@ -8,6 +8,11 @@ export {
   postCoachViewModelSchema,
 } from "./schemas/deterministic-analysis.js";
 export {
+  judgeDraftRequestSchema,
+  judgeDraftResponseSchema,
+  judgeVerdictSchema,
+} from "./schemas/judge.js";
+export {
   apiErrorSchema,
   appSettingsResponseSchema,
   appSettingsSchema,
@@ -28,6 +33,11 @@ export type {
   EngagementPrediction,
   PostCoachViewModel,
 } from "./schemas/deterministic-analysis.js";
+export type {
+  JudgeDraftRequest,
+  JudgeDraftResponse,
+  JudgeVerdict,
+} from "./schemas/judge.js";
 export type {
   ApiError,
   AppSettings,
