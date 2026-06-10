@@ -1,18 +1,23 @@
 import { describe, expect, it } from "vitest";
 
+// This suite locks the behavior of the canonical decomposed analyzer cluster.
+// The legacy post-analyzer monolith was removed; these aliases map the historical
+// names onto their decomposed equivalents so the behavioral coverage is retained.
+import { analyzeDraftText as analyzePost } from "../analyzer";
+import { classifyPostFormat as detectFormat } from "../format-classifier";
 import {
-  analyzePost,
-  createVarietyCheck,
-  derivePostCoachCard,
-  detectFormat,
-  getPostCoachBadge,
-  predictEngagement,
-  recordPostHistory,
-  runVoiceChecks,
-  streakForFormat,
-  type PostHistoryItem,
-  type VoiceCheck,
-} from "../post-analyzer";
+  appendPostFormatHistory as recordPostHistory,
+  buildFormatVarietyCheck as createVarietyCheck,
+  countRecentFormatStreak as streakForFormat,
+} from "../format-history";
+import {
+  buildPostCoachModel as derivePostCoachCard,
+  selectPostCoachBadge as getPostCoachBadge,
+} from "../post-coach-model";
+import { estimateEngagementRange as predictEngagement } from "../prediction-estimator";
+import type { PostHistoryEntry as PostHistoryItem } from "../types";
+import { evaluateDraftVoice as runVoiceChecks } from "../voice-score";
+import type { VoiceCheck } from "../voice-check";
 
 const enrichedTextCheckIds = [
   "quality_answerable_question",
@@ -100,6 +105,26 @@ describe("deterministic post analyzer", () => {
         }),
       ]),
     );
+  });
+
+  it("warns about X's expand cutoff for drafts at or beyond 15 raw lines", () => {
+    const fifteenLines = analyzePost(
+      Array.from({ length: 15 }, (_, index) => `Line ${index + 1}`).join("\n"),
+      { followers: 1000 },
+    );
+    const twentyLines = analyzePost(
+      Array.from({ length: 20 }, (_, index) => `Line ${index + 1}`).join("\n"),
+      { followers: 1000 },
+    );
+
+    expect(findCheck(fifteenLines.score.checks, "expand_zone")).toMatchObject({
+      status: "warn",
+    });
+    // Regression guard: drafts longer than 15 lines are even more hidden behind
+    // "show more" and must still warn (previously the check only fired at === 15).
+    expect(findCheck(twentyLines.score.checks, "expand_zone")).toMatchObject({
+      status: "warn",
+    });
   });
 
   it("exposes the enriched text-only checks through the canonical analyzer score", () => {
@@ -503,7 +528,7 @@ describe("deterministic post analyzer", () => {
 
     expect(signal).toMatchObject({
       signal_key: "zeitgeist",
-      multiplier: 1.4,
+      multiplier: 1.15,
     });
     expect(signal?.label).not.toMatch(bannedClaimPattern);
   });

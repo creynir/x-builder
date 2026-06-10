@@ -1,8 +1,8 @@
 import type {
-  Learning,
+  ScoreLearning,
   PostCoachViewModel,
-  PostScore,
-} from "./post-analyzer.js";
+  DeterministicPostScore,
+} from "./types.js";
 
 const emptyPostCoachMessage =
   "Start typing to see how the draft scores against static voice rules.";
@@ -41,12 +41,14 @@ const staticLearningText = (text: string): string => {
   return "This draft matched a deterministic voice rule.";
 };
 
-export const sanitizeLearning = (learning: Learning): Learning => ({
+export const sanitizeLearning = (learning: ScoreLearning): ScoreLearning => ({
   ...learning,
   text: `Static rule evidence: ${staticLearningText(learning.text)}`,
 });
 
-export const sanitizeScoreLearnings = (score: PostScore): PostScore => ({
+export const sanitizeScoreLearnings = (
+  score: DeterministicPostScore,
+): DeterministicPostScore => ({
   ...score,
   learnings: score.learnings.map(sanitizeLearning),
 });

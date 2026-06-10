@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
+  appSettingsResponseSchema,
   appSettingsSchema,
   type AppSettings,
 } from "@x-builder/shared";
@@ -30,12 +31,8 @@ export type JsonFileAppSettingsRepositoryOptions = {
 };
 
 const settingsFileName = "settings.json";
-const appSettingsRepositoryResponseSchema = z.object({
-  settings: appSettingsSchema,
-  source: z.enum(["persisted", "defaults"]),
-  updatedAt: z.string().datetime().optional(),
-});
-const persistedAppSettingsResponseSchema = appSettingsRepositoryResponseSchema.extend({
+// Reuse the shared wire contract so the repository response cannot drift from it.
+const persistedAppSettingsResponseSchema = appSettingsResponseSchema.extend({
   source: z.literal("persisted"),
   updatedAt: z.string().datetime(),
 });
@@ -60,18 +57,32 @@ export class JsonFileAppSettingsRepository implements AppSettingsRepository {
     });
   }
 
+  private defaultsResult(): AppSettingsLoadResult {
+    return appSettingsResponseSchema.parse({
+      settings: this.defaults(),
+      source: "defaults",
+    });
+  }
+
   async load(): Promise<AppSettingsLoadResult> {
     try {
       const contents = await readFile(this.settingsFilePath, "utf8");
       const persisted = JSON.parse(contents) as unknown;
 
-      return appSettingsRepositoryResponseSchema.parse(persisted);
+      return appSettingsResponseSchema.parse(persisted);
     } catch (error) {
       if (isNodeError(error) && error.code === "ENOENT") {
-        return appSettingsRepositoryResponseSchema.parse({
-          settings: this.defaults(),
-          source: "defaults",
-        });
+        return this.defaultsResult();
+      }
+
+      // A corrupt or schema-incompatible settings file is recoverable: fall back
+      // to defaults (logged) rather than bricking GET /settings with a 500.
+      if (error instanceof SyntaxError || error instanceof z.ZodError) {
+        console.error(
+          "[settings] settings.json is unreadable; falling back to defaults",
+          { path: this.settingsFilePath, error },
+        );
+        return this.defaultsResult();
       }
 
       throw error;

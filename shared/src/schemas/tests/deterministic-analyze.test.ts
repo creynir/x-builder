@@ -281,7 +281,7 @@ describe("deterministic analyze schemas", () => {
         id: "candidate-2",
         text: "Hot take: unclear drafts are usually missing one concrete tradeoff.",
         sourceFormat: "mini-framework",
-        reason: "analyzer_exception",
+        reason: "analysis_failed",
         message: "Deterministic analysis failed for this candidate.",
         retryable: true,
       }).success,
@@ -296,7 +296,7 @@ describe("deterministic analyze schemas", () => {
           status: "score_failed",
           id: "candidate-2",
           text: "Hot take: unclear drafts are usually missing one concrete tradeoff.",
-          reason: "analyzer_exception",
+          reason: "analysis_failed",
           message: "Deterministic analysis failed for this candidate.",
           retryable: true,
         },
@@ -333,6 +333,20 @@ describe("deterministic analyze schemas", () => {
         signals: [],
       }).success,
     ).toBe(false);
+  });
+
+  it("rejects an available prediction whose range is not ordered low <= midpoint <= high", () => {
+    expect(
+      engagementPredictionSchema.safeParse({
+        status: "available",
+        rangeLow: 420,
+        rangeHigh: 180,
+        midpoint: 999,
+        confidence: "medium",
+        signals: [],
+      }).success,
+    ).toBe(false);
+    expect(engagementPredictionSchema.safeParse(availablePrediction).success).toBe(true);
   });
 
   it("keeps writer source format separate from analyzer detected format", () => {

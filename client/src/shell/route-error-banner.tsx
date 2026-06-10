@@ -7,7 +7,7 @@ export type RouteErrorBannerProps = {
   error: ApiError | null;
   isRetrying?: boolean;
   onOpenSettings: () => void;
-  onRetry: () => Promise<void>;
+  onRetry: () => void;
 };
 
 function shouldShowSettingsAction(error: ApiError): boolean {

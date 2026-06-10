@@ -1,7 +1,8 @@
-import { constants } from "node:fs";
+import { constants, existsSync } from "node:fs";
 import { access } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -54,6 +55,7 @@ export type ReadinessService = {
 export type DefaultReadinessDependenciesOptions = {
   codexRunner?: ProcessRunner;
   startupCwd?: string;
+  settingsRoot?: string;
 };
 
 export interface BuildServerOptions {
@@ -155,14 +157,30 @@ const settingsPersistFailedError = (): ApiError =>
     status: 500,
   });
 
-const internalError = (): ApiError =>
+const internalError = (retryable = true): ApiError =>
   normalize({
     code: "internal_error",
     message: "The engine could not complete the request.",
     scope: "app",
-    retryable: true,
+    retryable,
     status: 500,
   });
+
+// Validate an outgoing response against its contract. A failure here means the
+// engine produced output that violates its own schema — a server bug, not a
+// transient or client-input failure — so it surfaces as a non-retryable
+// internal error rather than a retryable domain error.
+const parseResponseContract = <T>(schema: z.ZodType<T>, value: unknown): T => {
+  try {
+    return schema.parse(value);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new NormalizedApiError(internalError(false));
+    }
+
+    throw error;
+  }
+};
 
 const defaultGenerateCandidates: GenerateCandidates = ({ idea }) => ({
   candidates: [
@@ -185,7 +203,18 @@ const defaultGenerateCandidates: GenerateCandidates = ({ idea }) => ({
 });
 
 const readinessTimeoutMsDefault = 750;
-const packageVersion = "0.0.0";
+const packageVersion = ((): string => {
+  try {
+    const requireFromHere = createRequire(import.meta.url);
+    const enginePackage = requireFromHere("../../package.json") as {
+      version?: string;
+    };
+
+    return enginePackage.version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+})();
 const defaultSettingsRoot = join(homedir(), ".x-builder", "engine-settings");
 const defaultEngineHost = "127.0.0.1";
 const defaultEnginePort = 4173;
@@ -231,10 +260,30 @@ const unresolvedWorkspaceRootStatus = (): SubsystemStatus =>
     },
   });
 
+// Walk up from a path to the first directory that exists. Settings are written
+// with mkdir -p, so writability of the nearest existing ancestor determines
+// whether the engine can persist — the leaf dir need not exist yet.
+const nearestExistingDirectory = (path: string): string => {
+  let current = path;
+
+  while (!existsSync(current)) {
+    const parent = dirname(current);
+
+    if (parent === current) {
+      break;
+    }
+
+    current = parent;
+  }
+
+  return current;
+};
+
 export function createDefaultReadinessDependencies(
   options: DefaultReadinessDependenciesOptions = {},
 ): ReadinessDependencies {
   const startupCwd = options.startupCwd ?? process.cwd();
+  const settingsRoot = options.settingsRoot ?? defaultSettingsRoot;
   const workspaceRoot = resolveWorkspaceRoot(startupCwd);
   const codexProbe = workspaceRoot
     ? new CodexReadinessProbe({
@@ -259,12 +308,16 @@ export function createDefaultReadinessDependencies(
     },
     storage: {
       check: async () => {
-        await access(process.cwd(), constants.W_OK);
+        // Probe the directory the engine actually persists settings to, falling
+        // back to the nearest existing ancestor when the leaf dir has not been
+        // created yet (the repo creates it lazily on first write).
+        const target = nearestExistingDirectory(settingsRoot);
+        await access(target, constants.W_OK);
 
         return subsystem("ready", "Storage", {
           retryable: true,
           details: {
-            boundary: "working-directory",
+            boundary: target,
           },
         });
       },
@@ -432,49 +485,54 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   });
 
   app.get("/settings", async (_request, reply) => {
-    try {
-      const settingsResponse = appSettingsResponseSchema.parse(await settingsRepository.load());
+    let loaded: Awaited<ReturnType<typeof settingsRepository.load>>;
 
-      return reply.send(settingsResponse);
+    try {
+      loaded = await settingsRepository.load();
     } catch {
       throw new NormalizedApiError(settingsLoadFailedError());
     }
+
+    return reply.send(parseResponseContract(appSettingsResponseSchema, loaded));
   });
 
   app.patch("/settings", async (request, reply) => {
     const settings: AppSettings = appSettingsSchema.parse(request.body);
+    let saved: Awaited<ReturnType<typeof settingsRepository.save>>;
 
     try {
-      const settingsResponse = appSettingsResponseSchema.parse(await settingsRepository.save(settings));
-
-      return reply.send(settingsResponse);
+      saved = await settingsRepository.save(settings);
     } catch {
       throw new NormalizedApiError(settingsPersistFailedError());
     }
+
+    return reply.send(parseResponseContract(appSettingsResponseSchema, saved));
   });
 
   app.post("/ideas/generate", async (request, reply) => {
     const input = generateIdeaRequestSchema.parse(request.body);
+    let result: Awaited<ReturnType<typeof generateCandidates>>;
 
     try {
-      const result = generateIdeaResponseSchema.parse(await generateCandidates(input));
-
-      return reply.send(result);
+      result = await generateCandidates(input);
     } catch {
       throw new NormalizedApiError(generationError());
     }
+
+    return reply.send(parseResponseContract(generateIdeaResponseSchema, result));
   });
 
   app.post("/posts/analyze", async (request, reply) => {
     const input = analyzePostsRequestSchema.parse(request.body);
+    let result: Awaited<ReturnType<typeof analyzePosts>>;
 
     try {
-      const result = analyzePostsResponseSchema.parse(await analyzePosts(input));
-
-      return reply.send(result);
+      result = await analyzePosts(input);
     } catch {
       throw new NormalizedApiError(deterministicAnalysisError());
     }
+
+    return reply.send(parseResponseContract(analyzePostsResponseSchema, result));
   });
 
   return app;
@@ -485,10 +543,17 @@ export function createEngineRuntimeConfig(
 ): EngineRuntimeConfig {
   const rawPort = env.X_BUILDER_ENGINE_PORT;
   const port = rawPort === undefined ? defaultEnginePort : Number.parseInt(rawPort, 10);
+  const isValidPort = Number.isInteger(port) && port > 0;
+
+  if (rawPort !== undefined && !isValidPort) {
+    console.warn(
+      `[engine] ignoring invalid X_BUILDER_ENGINE_PORT="${rawPort}"; falling back to ${defaultEnginePort}.`,
+    );
+  }
 
   return {
     host: env.X_BUILDER_ENGINE_HOST ?? defaultEngineHost,
-    port: Number.isInteger(port) && port > 0 ? port : defaultEnginePort,
+    port: isValidPort ? port : defaultEnginePort,
   };
 }
 

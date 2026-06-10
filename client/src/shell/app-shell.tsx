@@ -1,5 +1,6 @@
 import {
   Component,
+  Fragment,
   useCallback,
   useEffect,
   useRef,
@@ -41,6 +42,7 @@ export type ShellHistory = {
   push?: (path: RouteConfig["path"]) => void;
   replace?: (path: RouteConfig["path"]) => void;
   subscribe?: (listener: () => void) => () => void;
+  dispose?: () => void;
 };
 
 export type RouteHeadingFocusTarget = {
@@ -165,10 +167,15 @@ export function createBrowserShellHistory(): ShellHistory {
     replace?.(path);
   };
 
-  window.addEventListener("popstate", () => {
+  const handlePopState = () => {
     history.location.pathname = window.location.pathname;
     history.notify();
-  });
+  };
+
+  window.addEventListener("popstate", handlePopState);
+  history.dispose = () => {
+    window.removeEventListener("popstate", handlePopState);
+  };
 
   return history;
 }
@@ -204,14 +211,6 @@ function headingTargetForRoute(route: RouteConfig): RouteHeadingFocusTarget {
     headingId: `route-heading-${route.id}`,
     headingText: route.title,
   };
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }
 
 function setHistoryPath(
@@ -532,6 +531,7 @@ type RouteErrorBoundaryState = {
   error: ApiError | null;
   routeId: RouteConfig["id"];
   retrying: boolean;
+  resetToken: number;
 };
 
 class RouteErrorBoundary extends Component<
@@ -542,6 +542,7 @@ class RouteErrorBoundary extends Component<
     error: null,
     routeId: this.props.routeId,
     retrying: false,
+    resetToken: 0,
   };
 
   static getDerivedStateFromProps(
@@ -553,6 +554,7 @@ class RouteErrorBoundary extends Component<
         error: null,
         routeId: props.routeId,
         retrying: false,
+        resetToken: state.resetToken,
       };
     }
 
@@ -566,12 +568,23 @@ class RouteErrorBoundary extends Component<
     };
   }
 
-  handleRetry = async (): Promise<void> => {
-    this.setState({
+  handleRetry = (): void => {
+    // Clear the captured error and bump resetToken so the children remount and
+    // the failed render is genuinely re-attempted.
+    this.setState((state) => ({
       error: null,
       retrying: true,
       routeId: this.props.routeId,
-    });
+      resetToken: state.resetToken + 1,
+    }));
+  };
+
+  componentDidUpdate(): void {
+    // Once a retry renders the children without throwing, drop the transient
+    // retrying flag so the boundary returns to its resting state.
+    if (this.state.error === null && this.state.retrying) {
+      this.setState({ retrying: false });
+    }
   }
 
   render(): ReactElement {
@@ -586,7 +599,9 @@ class RouteErrorBoundary extends Component<
       );
     }
 
-    return this.props.children;
+    return (
+      <Fragment key={this.state.resetToken}>{this.props.children}</Fragment>
+    );
   }
 }
 
@@ -723,12 +738,11 @@ function RouteBody({
 
 function RouteHeading({ target }: { target: RouteHeadingFocusTarget }): ReactElement {
   return (
-    <div
-      className="xb-page-header__copy"
-      dangerouslySetInnerHTML={{
-        __html: `<h1 class="xb-page-header__title" id="${target.headingId}" tabIndex="-1">${escapeHtml(target.headingText)}</h1>`,
-      }}
-    />
+    <div className="xb-page-header__copy">
+      <h1 className="xb-page-header__title" id={target.headingId} tabIndex={-1}>
+        {target.headingText}
+      </h1>
+    </div>
   );
 }
 

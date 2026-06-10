@@ -55,7 +55,7 @@ describe("prediction-estimator", () => {
 
     expect(signal).toMatchObject({
       signal_key: "zeitgeist",
-      multiplier: 1.4,
+      multiplier: 1.15,
     });
     expect(signal?.label).not.toMatch(bannedClaimPattern);
   });

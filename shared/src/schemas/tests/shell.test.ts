@@ -104,6 +104,15 @@ describe("shell schemas", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects a storage path containing parent-directory traversal segments", () => {
+    const result = appSettingsSchema.safeParse({
+      ...validSettings,
+      storagePath: "/var/data/../../etc/passwd",
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("rejects API errors with an unknown code", () => {
     const result = apiErrorSchema.safeParse({
       code: "quota_exceeded",

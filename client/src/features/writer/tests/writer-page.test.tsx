@@ -281,7 +281,7 @@ function scoreFailedAnalysisItem(
     id: candidate.id,
     text: candidate.text,
     sourceFormat: candidate.format,
-    reason: "analyzer_exception",
+    reason: "analysis_failed",
     message: "Deterministic analysis failed for this candidate.",
     retryable: true,
     ...overrides,

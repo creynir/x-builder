@@ -248,7 +248,7 @@ export function evaluateWritingChecks(input: {
     .filter((token) => hedgeWords.includes(token))
     .length;
   const rawLineCount = countRawLines(trimmedText);
-  const hitsExpandCutoff = !isEmpty && rawLineCount === 15;
+  const hitsExpandCutoff = !isEmpty && rawLineCount >= 15;
   const baselineChecks: VoiceCheck[] = [
     {
       id: "substance",

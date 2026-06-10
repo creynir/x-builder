@@ -579,7 +579,7 @@ export function ManualScoringContextPanel({
         readOnly={onFollowersChange === undefined && onFollowersDraftChange === undefined}
         type="number"
         data-focus-target={focusTarget}
-        value={value ?? context.followers ?? ""}
+        value={String(value ?? context.followers ?? "")}
       />
       {isStale ? (
         <p className="xb-manual-scoring-context__stale">Prediction needs refresh.</p>

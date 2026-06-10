@@ -2,7 +2,7 @@ import type { EngagementPrediction as ApiEngagementPrediction } from "@x-builder
 
 import type {
   EngagementPrediction as AnalyzerEngagementPrediction,
-} from "./post-analyzer.js";
+} from "./types.js";
 
 export const toEngagementPrediction = (input: {
   analyzerPrediction: AnalyzerEngagementPrediction | null;

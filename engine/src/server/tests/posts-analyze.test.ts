@@ -429,4 +429,34 @@ describe("posts analyze API", () => {
       await app.close();
     }
   });
+
+  it("reports a response-contract violation as a non-retryable internal error", async () => {
+    // The operation succeeds but returns output that violates the response
+    // schema (a server bug) — this must not be reported as a retryable domain
+    // failure.
+    const analyzePosts = vi.fn(
+      async () => ({ items: [{ status: "scored" }] }) as unknown as AnalyzePostsResponse,
+    );
+    const app = buildServerWithAnalyzePosts(analyzePosts, vi.fn());
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/posts/analyze",
+        payload: analyzeRequest(),
+      });
+
+      expect(response.statusCode).toBe(500);
+
+      const error = parseApiError(parseJsonPayload(response.body));
+
+      expect(error).toMatchObject({
+        code: "internal_error",
+        retryable: false,
+        status: 500,
+      });
+    } finally {
+      await app.close();
+    }
+  });
 });

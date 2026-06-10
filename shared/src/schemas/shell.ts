@@ -73,9 +73,18 @@ export const apiErrorSchema = z.object({
   requestId: z.string().optional(),
 });
 
+const storagePathSchema = z
+  .string()
+  .min(1)
+  .max(4096)
+  .refine(
+    (value) => !value.split(/[\\/]+/).includes(".."),
+    "Storage path must not contain parent-directory (..) segments.",
+  );
+
 export const appSettingsSchema = z.object({
   engineBaseUrl: localEngineUrlSchema,
-  storagePath: z.string().min(1).max(4096),
+  storagePath: storagePathSchema,
   codexCommandLabel: z.string().min(1).max(80).default("Codex judge"),
   runCodexJudgeAfterGeneration: z.boolean().default(false),
   showDeterministicDetails: z.boolean().default(true),

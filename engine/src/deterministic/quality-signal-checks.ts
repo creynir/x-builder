@@ -218,7 +218,7 @@ function evaluateMentionDensity(trimmedText: string, wordCount: number): VoiceCh
     kind: "quality",
     label: hasDenseMentions
       ? "Too many mentions - harder to read and scan"
-      : "Mention density is readable",
+      : "Mention use is restrained and readable",
     status: hasDenseMentions ? "warn" : "pass",
   };
 }

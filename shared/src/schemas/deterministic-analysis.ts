@@ -115,10 +115,18 @@ const disabledEngagementPredictionSchema = z.object({
   message: z.string().min(1).max(240),
 });
 
-export const engagementPredictionSchema = z.discriminatedUnion("status", [
-  availableEngagementPredictionSchema,
-  disabledEngagementPredictionSchema,
-]);
+export const engagementPredictionSchema = z
+  .discriminatedUnion("status", [
+    availableEngagementPredictionSchema,
+    disabledEngagementPredictionSchema,
+  ])
+  .refine(
+    (prediction) =>
+      prediction.status !== "available" ||
+      (prediction.rangeLow <= prediction.midpoint &&
+        prediction.midpoint <= prediction.rangeHigh),
+    "Engagement range must be ordered: rangeLow <= midpoint <= rangeHigh.",
+  );
 
 const analyzePostsRequestItemSchema = z.object({
   id: z.string().min(1).max(120),
@@ -157,7 +165,7 @@ const scoreFailedPostItemSchema = z.object({
   id: z.string().min(1).max(120),
   text: z.string().min(1).max(8_000),
   sourceFormat: deterministicSourceFormatSchema.optional(),
-  reason: z.string().min(1).max(120),
+  reason: z.enum(["analysis_failed"]),
   message: z.string().min(1).max(240),
   retryable: z.boolean(),
 });

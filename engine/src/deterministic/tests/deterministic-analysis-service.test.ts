@@ -7,7 +7,9 @@ import {
   type PostCoachViewModel,
 } from "@x-builder/shared";
 import { DeterministicAnalysisService } from "../deterministic-analysis-service";
-import { analyzePost, type AnalyzeResult } from "../post-analyzer";
+import { analyzerVersion } from "../deterministic-analysis-constants";
+import { analyzeDraftText as analyzePost } from "../analyzer";
+import type { AnalyzeResult } from "../types";
 
 const learningCaveat = "Static rule check. Imported performance data is not connected yet.";
 
@@ -91,7 +93,7 @@ function expectSharedScoredShape(item: ScoredPostItem): void {
     },
     heuristicLabel: "Heuristic rank, not prediction.",
     analyzedAt: expect.any(String),
-    analyzerVersion: expect.any(String),
+    analyzerVersion,
   });
   expect(Number.isNaN(Date.parse(item.analyzedAt))).toBe(false);
   expect(item.score.value).toBeGreaterThanOrEqual(0);

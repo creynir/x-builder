@@ -223,7 +223,7 @@ function createAnalyzePostsResponse(
       id: item.id,
       text: item.text,
       sourceFormat: item.sourceFormat,
-      reason: "shell_fixture",
+      reason: "analysis_failed",
       message: "Shell fixture does not score generated candidates.",
       retryable: true,
     })),
@@ -362,7 +362,7 @@ describe("AppShell route frame", () => {
       headingText: "Settings",
     });
     expect(html).toContain('id="route-heading-settings"');
-    expect(html).toContain('tabIndex="-1"');
+    expect(html).toContain('tabindex="-1"');
   });
 
   it("warns instead of mutating shell history when dirty Settings attempts to leave", async () => {

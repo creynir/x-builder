@@ -205,7 +205,7 @@ const mixedAnalysisResponse: AnalyzePostsResponse = {
       id: "candidate-2",
       text: analysisRequest.items[1]?.text ?? "",
       sourceFormat: "one-liner",
-      reason: "analyzer_exception",
+      reason: "analysis_failed",
       message: "Deterministic analysis failed for this candidate.",
       retryable: true,
     },
@@ -545,7 +545,7 @@ describe("EngineApiClient", () => {
         id: "candidate-2",
         text: analysisRequest.items[1]?.text,
         sourceFormat: "one-liner",
-        reason: "analyzer_exception",
+        reason: "analysis_failed",
         retryable: true,
       }),
     ]);

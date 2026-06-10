@@ -406,6 +406,17 @@ class ProcessLifecycle {
   };
 
   private readonly forceSettle = (): void => {
+    // The child did not emit "close" after SIGTERM + SIGKILL within the grace
+    // window. Before we abandon the wait and resolve, make a final best-effort
+    // kill and release its stdio so we do not leak file descriptors / a live
+    // process behind a resolved promise.
+    if (this.child.exitCode === null && this.child.signalCode === null) {
+      this.child.kill("SIGKILL");
+    }
+
+    this.child.stdout.destroy();
+    this.child.stderr.destroy();
+    this.child.stdin.destroy();
     this.settle();
   };
 

@@ -2,11 +2,11 @@ import type { PostCoachViewModel as ApiPostCoachViewModel } from "@x-builder/sha
 
 import { learningCaveat } from "./deterministic-analysis-constants.js";
 import { sanitizePostCoachViewModel } from "./learning-copy.js";
-import {
-  derivePostCoachCard,
-  type PostCoachScore,
-  type PostCoachViewModel as AnalyzerPostCoachViewModel,
-} from "./post-analyzer.js";
+import { buildPostCoachModel } from "./post-coach-model.js";
+import type {
+  PostCoachScore,
+  PostCoachViewModel as AnalyzerPostCoachViewModel,
+} from "./types.js";
 
 type PostCoachMode = "preview" | "expanded";
 
@@ -28,7 +28,7 @@ export const deriveApiPostCoach = (input: {
   text: string;
   mode: PostCoachMode;
 }): ApiPostCoachViewModel => {
-  const viewModel = derivePostCoachCard({
+  const viewModel = buildPostCoachModel({
     score: input.score,
     hasText: input.text.trim().length > 0,
     previewMode: input.mode === "preview",

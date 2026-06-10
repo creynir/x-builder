@@ -177,7 +177,7 @@ export function useAppStatus({
     status: null,
   });
 
-  async function refresh(): Promise<void> {
+  async function refresh(isActive: () => boolean = () => true): Promise<void> {
     setState((current) => ({
       ...current,
       error: null,
@@ -187,6 +187,11 @@ export function useAppStatus({
 
     try {
       const nextStatus = await apiClient.getStatus();
+      // Drop the result if this request was superseded (apiClient swapped) or
+      // the component unmounted while the fetch was in flight.
+      if (!isActive()) {
+        return;
+      }
       onStatusChange?.(nextStatus);
       setState({
         error: null,
@@ -195,6 +200,9 @@ export function useAppStatus({
         status: nextStatus,
       });
     } catch (error) {
+      if (!isActive()) {
+        return;
+      }
       const apiError = normalizeStatusError(error);
 
       setState((current) => ({
@@ -217,7 +225,11 @@ export function useAppStatus({
   }
 
   useEffect(() => {
-    void refresh();
+    let active = true;
+    void refresh(() => active);
+    return () => {
+      active = false;
+    };
   }, [apiClient]);
 
   return {

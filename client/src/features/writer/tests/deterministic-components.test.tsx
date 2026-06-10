@@ -253,7 +253,7 @@ function scoreFailedItem(
     id: "candidate-2",
     text: "Hot take: unclear drafts are usually missing one concrete tradeoff.",
     sourceFormat: "mini-framework",
-    reason: "analyzer_exception",
+    reason: "analysis_failed",
     message: "Deterministic analysis failed for this candidate.",
     retryable: true,
     ...overrides,

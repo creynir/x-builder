@@ -29,7 +29,7 @@ export const engagementPredictionWeights = {
   aiHighConfidenceSignalCount: 3,
   aiMediumConfidenceSignalCount: 1,
   timelyTermMaximumBonus: 0.4,
-  timelyTermBonusPerMatch: 15,
+  timelyTermBonusPerMatch: 0.15,
   tensionMultiplier: 1.25,
 } as const;
 

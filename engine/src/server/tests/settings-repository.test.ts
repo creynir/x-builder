@@ -1,8 +1,8 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { appSettingsResponseSchema, appSettingsSchema, type AppSettings } from "@x-builder/shared";
 
 type JsonFileAppSettingsRepositoryConstructor = new (options: { root: string }) => {
@@ -64,6 +64,47 @@ describe("JSON file app settings repository", () => {
       });
       expect(saveResponse.updatedAt).toEqual(expect.any(String));
       expect(loadResponse).toEqual(saveResponse);
+    });
+  });
+
+  it("recovers to defaults when the settings file contains invalid JSON", async () => {
+    await withTempRoot(async (root) => {
+      const JsonFileAppSettingsRepository = await loadJsonFileAppSettingsRepository();
+      await writeFile(join(root, "settings.json"), "{ this is not json", "utf8");
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+      try {
+        const repository = new JsonFileAppSettingsRepository({ root });
+        const response = appSettingsResponseSchema.parse(await repository.load());
+
+        expect(response.source).toBe("defaults");
+        expect(response.settings).toEqual(appSettingsSchema.parse(repository.defaults()));
+        expect(errorSpy).toHaveBeenCalledOnce();
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+  });
+
+  it("recovers to defaults when the settings file is valid JSON but violates the schema", async () => {
+    await withTempRoot(async (root) => {
+      const JsonFileAppSettingsRepository = await loadJsonFileAppSettingsRepository();
+      await writeFile(
+        join(root, "settings.json"),
+        JSON.stringify({ settings: { engineBaseUrl: "not-a-url" }, source: "persisted" }),
+        "utf8",
+      );
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+      try {
+        const repository = new JsonFileAppSettingsRepository({ root });
+        const response = appSettingsResponseSchema.parse(await repository.load());
+
+        expect(response.source).toBe("defaults");
+        expect(errorSpy).toHaveBeenCalledOnce();
+      } finally {
+        errorSpy.mockRestore();
+      }
     });
   });
 });

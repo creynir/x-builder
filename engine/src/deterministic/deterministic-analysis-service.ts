@@ -10,19 +10,19 @@ import {
   analyzerVersion,
   heuristicLabel,
 } from "./deterministic-analysis-constants.js";
+import { analyzeDraftText } from "./analyzer.js";
 import { sanitizeScoreLearnings } from "./learning-copy.js";
-import { analyzePost } from "./post-analyzer.js";
 import { deriveApiPostCoach } from "./post-coach-view-model.js";
 import { toEngagementPrediction } from "./prediction-view-model.js";
 
 const nowIso = (): string => new Date().toISOString();
-type AnalyzePost = typeof analyzePost;
+type AnalyzePost = typeof analyzeDraftText;
 
 export class DeterministicAnalysisService {
   private readonly analyzePost: AnalyzePost;
 
   constructor(options: { analyzePost?: AnalyzePost } = {}) {
-    this.analyzePost = options.analyzePost ?? analyzePost;
+    this.analyzePost = options.analyzePost ?? analyzeDraftText;
   }
 
   analyzePosts(request: AnalyzePostsRequest): AnalyzePostsResponse {
@@ -35,7 +35,11 @@ export class DeterministicAnalysisService {
         analysis = this.analyzePost(item.text, {
           followers: parsedRequest.scoringContext.followers,
         });
-      } catch {
+      } catch (error) {
+        console.error("[deterministic-analysis] failed to score candidate", {
+          id: item.id,
+          error,
+        });
         return {
           status: "score_failed",
           id: item.id,
