@@ -14,6 +14,7 @@ status: todo
 4. **Always pass `stdin: ""`** in the run options — verified: the process runner leaves the child's stdin pipe open when the stdin option is undefined, a real hang vector for `cursor-agent`; an empty string closes the pipe. This is a hard acceptance criterion, with the runner's SIGTERM→SIGKILL termination path as backstop.
 5. `CursorCliOutputParser` is the lenient tier: (1) whole stdout parses to an envelope object → extract the first present of `result` | `text` | `response` | `content` (object as-is; string → fence-strip → parse); (2) whole stdout parses directly to the schema-shaped object → use it; (3) fallback: scan the (already byte-bounded) stdout for the **last** balanced top-level `{...}` JSON object; (4) else `invalid_provider_response` (no JSON object found). Captured note: the real envelope carries the payload as a **JSON string in `result`** — tier 1, first candidate, string branch. Honor `is_error`/non-success `subtype` as `provider_reported_error` before extraction, mirroring the Claude parser.
 6. Add `cursorCliProcessEnvAllowlist` = base list plus `CURSOR_API_KEY` in the provider module.
+6a. Model flag: when `options.model` is present (sourced from the `cursorModel` setting via CAD-007's per-call resolution), the builder appends `--model <value>`; when absent, no model flag (provider default). Live-verified: `cursor-agent --list-models` returns the valid catalog (`auto`, `gpt-5.3-codex`, `gpt-5.2`, …) — model names differ from Codex/Claude, documented in CAD-016.
 7. Register in `judgeProviderRegistry`: `judgeLabel` from the shared catalog, readiness spec `{ command: "cursor-agent", adapter: "cursor-cli", label: judgeProviderLabels["cursor-cli"], sandbox: "ask-mode" }`.
 8. Create the `cursor-cli` fixture set (envelope success, direct schema-shaped stdout, prose-wrapped JSON, fenced string, no-JSON output, empty stdout) mirroring the codex fixture conventions.
 
@@ -33,7 +34,7 @@ The registry entry makes it reachable end-to-end: persisted `judgeProvider: "cur
 
 ## Scope Boundaries / Out of Scope
 
-Zero trace: **never invoke `cursor-agent status` or `cursor-agent about` anywhere in the readiness path** (the auth probe is a multi-second network round-trip that cannot fit the 750ms status window — version-only readiness is an architectural invariant asserted in CAD-014); no streaming (`--stream-partial-output` unused); no plain print mode without the ask+sandbox flags; no `--model` selection.
+Zero trace: **never invoke `cursor-agent status` or `cursor-agent about` anywhere in the readiness path** (the auth probe is a multi-second network round-trip that cannot fit the 750ms status window — version-only readiness is an architectural invariant asserted in CAD-014); no streaming (`--stream-partial-output` unused); no plain print mode without the ask+sandbox flags; no model-string validation (a bad name fails at judge time). (The `--model` flag IS in scope — driven by `options.model`, per CAD-007's plumbing.)
 
 ## Test Strategy & Fixture Ownership
 
@@ -52,6 +53,7 @@ Provider + parser + builder + allowlist + registry entry + shared prompt-envelop
 - Given prose-wrapped JSON stdout, Then the last-balanced-object scan succeeds.
 - Given output with no JSON anywhere, Then `invalid_provider_response` → generic judge_failed copy.
 - Given the builder output, Then the argv contains `--mode ask`, `--sandbox enabled`, `--trust`, `--workspace <root>` and the run options contain `stdin: ""`.
+- Given `options.model` is set, Then the argv contains `--model <value>`; given it is absent, Then no `--model` flag appears.
 - Given a runner hang, Then the SIGTERM/SIGKILL termination path yields a retryable `request_timeout`.
 - Given `judgeProvider: "cursor-cli"`, When `GET /status`, Then `cursor-agent --version` is probed and the slot label is "Cursor judge" — and no auth-status command is ever invoked.
 - Given a codex judge request before and after this ticket, Then the codex prompt envelope is byte-identical (snapshot).

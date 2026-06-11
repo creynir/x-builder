@@ -11,8 +11,9 @@ Ordering assumption: CAD-007 and CAD-008 have landed (`judgeProvider` exists in 
 - `SelectSettingsFieldName` — `Extract<keyof AppSettings, "judgeProvider">`, the third field-name union alongside the existing text and switch unions.
 - `renderSelectField` — settings-internal render helper mirroring `renderTextField`/`renderSwitch`: label association via the existing `fieldId` helper, a native `<select>`, options derived from the shared provider label catalog (closed provider-id enum → `{ value: id, label }`), helper line "Save, then run Test readiness to verify the provider.".
 - `updateSelectField` — same shape as `updateSwitchField` (clears error/success/pending-navigation state).
-- `settingsEqual` — add the `judgeProvider` comparison.
-- `defaultSettings` — add `judgeProvider` with the shared schema's default.
+- `settingsEqual` — add the `judgeProvider` comparison and the three model-key comparisons (`codexModel`, `claudeModel`, `cursorModel`).
+- `defaultSettings` — add `judgeProvider` (shared schema default) and the three model keys as empty strings (so `settingsEqual(draft, saved)` is stable on first load).
+- Per-provider **model inputs** — three optional text fields ("Codex model", "Claude model", "Cursor model") rendered via the existing `renderTextField`, with `TextSettingsFieldName` extended to include `codexModel`/`claudeModel`/`cursorModel`. Helper line: "Leave empty to use the provider's default." These are flat top-level `AppSettings` keys (shape A), so they ride the existing `updateTextField` `{ ...draft, [field]: value }` path with zero new plumbing. No app-side validation of the model string — a bad name is rejected by the CLI at judge time.
 - The settings route public driver gains `updateSelect(field, value)` mirroring `updateSwitch`.
 - foundation.css: extend the settings text-input selector group (and its `:focus-visible` twin) with `select`. No new tokens, no new visual language, no component library additions — a native select is the same pattern as the existing native text/checkbox controls and keeps the SSR-string test harness working.
 
@@ -33,7 +34,7 @@ Zero trace:
 - No removal of the dead Codex-era fields anywhere — CAD-007 owns all traces; this ticket does not touch field removal.
 - No per-provider readiness row, display, or "test connection" affordance — future scope, zero code. Selected-slot readiness items + Test readiness cover the need this epic.
 - No status-bar, writer-surface, or judge-panel changes.
-- No new shared schema definitions (consumed only); no provider config inputs (paths, flags, models); no auto-judge.
+- No new shared schema definitions (the `judgeProvider` enum and the three model keys are owned by CAD-007; consumed only here). No app-side model-string validation. No provider config inputs beyond the provider select and the three model text fields (no path/flag/sandbox config). No auto-judge.
 
 ## Test Strategy & Fixture Ownership
 
@@ -52,11 +53,14 @@ Select field saves via the existing PATCH flow; dirty guard covers it; the drive
 - Given a dirty provider change, When Save succeeds, Then the PATCH carries the new provider id, "Settings saved" shows, and the refreshed status is published (status bar reflects it without reload).
 - Given save fails, When the error renders, Then the draft selection is preserved and "Retry save" re-issues it.
 - Given a dirty provider change and an attempted navigation, When the unsaved-changes guard fires, Then Stay/Discard behave exactly as for existing fields.
-- Given the Settings page with the selector and status bar rendered, When scanned for the banned-jargon regex, Then zero matches.
+- Given the Settings page with the selector, the three model fields, and the status bar rendered, When scanned for the banned-jargon regex, Then zero matches ("Codex model"/"Claude model"/"Cursor model" and "Leave empty to use the provider's default." contain none of the banned tokens).
+- Given a model field is edited, When changed and then reverted to the saved value, Then dirty state clears via `settingsEqual`; When saved, Then the PATCH carries the model value.
+- Given an empty model field, When saved, Then the persisted value is empty/absent and the provider runs its default (no model flag downstream).
 
 ## Visual AC
 
 - Select styled identically to text inputs: `--density-input-height`, `--space-3` padding-inline, `--border-width-thin` + `--border-default`, `--radius-md`, `--surface-panel`, `--text-primary`; focus ring `--focus-ring-width/-color/-offset`.
+- The three model text fields use the existing text-input styling (no new visual treatment); grouped under the provider select, each with the "Leave empty to use the provider's default." helper.
 - Label: `--text-heading` + `--type-label`; helper: `--text-secondary` + `--type-caption` (existing helper class).
 - States: ideal (saved value selected), dirty (existing warning "Unsaved changes" badge), loading (form `aria-busy`, existing), error (existing danger Alert + retry), hover/active per native select with the existing focus tokens. No new tokens.
 
@@ -69,3 +73,4 @@ Select field saves via the existing PATCH flow; dirty guard covers it; the drive
 ## Pipeline Log
 
 - 2026-06-11 — Created by arch-recon (multi-provider epic extension; validated APPROVE_WITH_CONCERNS, cycle 2).
+- 2026-06-11 — Amended for per-provider model selection (validated delta): adds three optional model text fields (flat `codexModel`/`claudeModel`/`cursorModel` keys, shape A — reuse existing `renderTextField`/`updateTextField`, zero new UI plumbing) under the provider select; no app-side model validation.

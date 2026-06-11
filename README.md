@@ -25,6 +25,14 @@ Scores are heuristic ranks, not predictions. The product is built as an operator
 4. The deterministic analysis service scores drafts and generated candidates.
 5. Settings are stored locally under `~/.x-builder/engine-settings`.
 
+## Local persistence
+
+Engine settings live in a single JSON file (`~/.x-builder/engine-settings/settings.json`) — deliberately, not a database. This is a single-user, local-first workbench, so the settings are a handful of config values with one writer; a relational store's queries, indexes, and concurrent transactions would buy nothing here, while the file stays human-readable and hand-editable, carries zero extra dependencies, and evolves its shape for free (the Zod schema fills new fields and strips removed ones on read — no migrations).
+
+The write path is crash-safe: settings are written to a temporary file and atomically `rename`d into place, so an interrupted save can never leave a half-written file — you keep either the old contents or the new. An unreadable or invalid file logs a warning and falls back to schema defaults rather than crashing the engine.
+
+This applies to **configuration only**. Larger, growing datasets — an imported post library, X post metrics, feedback-loop history — are expected to use a proper queryable store when those features land; the file approach is intentionally scoped to settings.
+
 ## Requirements
 
 - Node.js 20 or newer

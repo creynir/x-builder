@@ -20,6 +20,7 @@ Each must be falsifiable — a facade implementation must fail the test:
 3. **No secret/output leakage**: no `details` payload on any failure path contains stdout, stderr, or environment variable values.
 4. **Version-only readiness**: the readiness path never invokes any CLI subcommand other than `--version` (in particular, never the cursor auth/status subcommands).
 5. **Label single-source**: every readiness label and registry `judgeLabel` is sourced from the shared catalog — no engine-declared label strings.
+6. **Model flag iff configured**: for each provider, the built argv contains the model flag (`-m` for codex, `--model` for claude/cursor) if and only if a non-empty model is configured for that provider in settings; with no configured model, no model flag is emitted and the provider runs its default.
 
 ## Modules Under Test
 
