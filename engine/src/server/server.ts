@@ -28,11 +28,11 @@ import {
 import { z } from "zod";
 
 import { DeterministicAnalysisService } from "../deterministic/deterministic-analysis-service.js";
-import { CodexReadinessProbe } from "../llm/codex-readiness-probe.js";
 import { JudgeDraftService, type JudgeDraft } from "../llm/judge-draft-service.js";
 import { judgeProviderRegistry } from "../llm/judge-provider-registry.js";
 import { createSettingsJudgeProviderResolver } from "../llm/judge-provider-resolver.js";
 import { NodeProcessRunner, type ProcessRunner } from "../llm/process-runner.js";
+import { SelectedJudgeReadinessProbe } from "../llm/selected-judge-readiness-probe.js";
 import { StructuredLlmService } from "../llm/structured-llm-service.js";
 import {
   JsonFileAppSettingsRepository,
@@ -50,7 +50,7 @@ export type ReadinessProbe = {
 
 export type ReadinessDependencies = {
   deterministic: ReadinessProbe;
-  codex: ReadinessProbe;
+  llm: ReadinessProbe;
   storage: ReadinessProbe;
 };
 
@@ -267,15 +267,6 @@ const failedProbeStatus = (label: string): SubsystemStatus =>
     retryable: true,
   });
 
-const unresolvedWorkspaceRootStatus = (): SubsystemStatus =>
-  subsystem("unavailable", "Codex judge", {
-    message: "Workspace root could not be resolved.",
-    retryable: true,
-    details: {
-      reason: "workspace_root_unresolved",
-    },
-  });
-
 // Walk up from a path to the first directory that exists. Settings are written
 // with mkdir -p, so writability of the nearest existing ancestor determines
 // whether the engine can persist — the leaf dir need not exist yet.
@@ -301,13 +292,17 @@ export function createDefaultReadinessDependencies(
   const startupCwd = options.startupCwd ?? process.cwd();
   const settingsRoot = options.settingsRoot ?? defaultSettingsRoot;
   const workspaceRoot = resolveWorkspaceRoot(startupCwd);
-  const codexProbe = workspaceRoot
-    ? new CodexReadinessProbe({
-        runner: options.codexRunner ?? new NodeProcessRunner(),
-        workspaceRoot,
-        executionTimeoutMs: readinessTimeoutMsDefault,
-      })
-    : null;
+  // The selected-provider probe resolves the active provider from the same
+  // settings repository the judge path uses, then runs that provider's readiness
+  // spec from the registry against the startup-resolved workspace root.
+  const settingsRepository = new JsonFileAppSettingsRepository({ root: settingsRoot });
+  const selectedJudgeProbe = new SelectedJudgeReadinessProbe({
+    resolveProvider: createSettingsJudgeProviderResolver(settingsRepository),
+    registry: judgeProviderRegistry,
+    resolveWorkspaceRoot: () => workspaceRoot,
+    runner: options.codexRunner ?? new NodeProcessRunner(),
+    executionTimeoutMs: readinessTimeoutMsDefault,
+  });
 
   return {
     deterministic: {
@@ -319,8 +314,8 @@ export function createDefaultReadinessDependencies(
           },
         }),
     },
-    codex: {
-      check: () => (codexProbe ? codexProbe.check() : unresolvedWorkspaceRootStatus()),
+    llm: {
+      check: () => selectedJudgeProbe.check(),
     },
     storage: {
       check: async () => {
@@ -343,21 +338,23 @@ export function createDefaultReadinessDependencies(
 
 const probeLabels: Record<keyof ReadinessDependencies, string> = {
   deterministic: "Deterministic scorer",
-  codex: "Codex judge",
+  // Provider-agnostic fallback label for the selected-judge slot: a probe
+  // timeout or crash cannot name a provider, so the slot reads "Judge".
+  llm: "Judge",
   storage: "Storage",
 };
 
 const overallFromSubsystems = (
   engine: SubsystemStatus,
   deterministic: SubsystemStatus,
-  codex: SubsystemStatus,
+  llm: SubsystemStatus,
   storage: SubsystemStatus,
 ): AppStatus["overall"] => {
   if (engine.state !== "ready") {
     return "unavailable";
   }
 
-  return [deterministic, codex, storage].every((status) => status.state === "ready")
+  return [deterministic, llm, storage].every((status) => status.state === "ready")
     ? "ready"
     : "partial";
 };
@@ -391,20 +388,20 @@ class DefaultReadinessService implements ReadinessService {
       },
     });
 
-    const [deterministic, codex, storage] = await Promise.all([
+    const [deterministic, llm, storage] = await Promise.all([
       this.checkProbe("deterministic"),
-      this.checkProbe("codex"),
+      this.checkProbe("llm"),
       this.checkProbe("storage"),
     ]);
     const generatedAt = nowIso();
 
     return appStatusSchema.parse({
-      overall: overallFromSubsystems(engine, deterministic, codex, storage),
+      overall: overallFromSubsystems(engine, deterministic, llm, storage),
       version: packageVersion,
       generatedAt,
       engine,
       deterministic,
-      codex,
+      llm,
       storage,
       lastRun: {
         state: "none",

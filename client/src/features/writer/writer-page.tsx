@@ -45,7 +45,7 @@ export type { WriterApiClient } from "./writer-workflow";
 
 export type WriterPageProps = {
   apiClient: WriterApiClient;
-  codexReady?: boolean;
+  judgeReady?: boolean;
   onOpenSettings: () => void;
 };
 
@@ -99,7 +99,7 @@ function candidateLabel(candidate: WriterCandidate): string {
 }
 
 type WriterPageViewProps = WriterPageModel & {
-  codexReady: boolean;
+  judgeReady: boolean;
   onApplyFollowers: () => void;
   onCloseDetails: () => void;
   onFocusFollowers: () => void;
@@ -266,18 +266,18 @@ const judgeScoreRows: Array<{ key: keyof JudgeScores; label: string }> = [
 ];
 
 export function JudgePanel({
-  codexReady,
+  judgeReady,
   draftReady,
   judge,
   onJudge,
 }: {
-  codexReady: boolean;
+  judgeReady: boolean;
   draftReady: boolean;
   judge: JudgeState;
   onJudge: () => void;
 }): ReactElement {
   const isLoading = judge.status === "loading";
-  const disabled = !codexReady || !draftReady || isLoading;
+  const disabled = !judgeReady || !draftReady || isLoading;
 
   return (
     <section aria-label="Codex judge" className="xb-judge-panel">
@@ -287,7 +287,7 @@ export function JudgePanel({
           {isLoading ? "Judging…" : judge.status === "failed" ? "Retry judge" : "Judge draft"}
         </Button>
       </div>
-      {codexReady ? null : (
+      {judgeReady ? null : (
         <p className="xb-judge-panel__hint">Codex judge is unavailable right now.</p>
       )}
       {judge.status === "loading" ? (
@@ -347,7 +347,7 @@ function WriterPageView({
   analysisByCandidateId,
   appliedFollowers,
   candidates,
-  codexReady,
+  judgeReady,
   detail,
   fieldError,
   followerDraft,
@@ -493,7 +493,7 @@ function WriterPageView({
           </section>
         </div>
         <JudgePanel
-          codexReady={codexReady}
+          judgeReady={judgeReady}
           draftReady={idea.trim().length > 0}
           judge={judge}
           onJudge={onJudge}
@@ -542,7 +542,7 @@ function WriterPageView({
 
 export function WriterPage({
   apiClient,
-  codexReady = true,
+  judgeReady = true,
   onOpenSettings,
 }: WriterPageProps): ReactElement {
   const [model, setModel] = useState(createInitialModel);
@@ -700,7 +700,7 @@ export function WriterPage({
   return (
     <WriterPageView
       {...model}
-      codexReady={codexReady}
+      judgeReady={judgeReady}
       onApplyFollowers={applyFollowers}
       onCloseDetails={closeDetailInspector}
       onFocusFollowers={focusFollowers}
@@ -724,7 +724,7 @@ function renderDriverPage(
   return renderToStaticMarkup(
     <WriterPageView
       {...model}
-      codexReady
+      judgeReady
       onApplyFollowers={() => undefined}
       onCloseDetails={() => undefined}
       onFocusFollowers={() => undefined}

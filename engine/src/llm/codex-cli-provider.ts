@@ -8,7 +8,6 @@ import type {
   KnownLlmProviderErrorCode,
   LlmProvider,
   LlmProviderId,
-  LlmProviderReadiness,
   NormalizedStructuredLlmRequest,
   StructuredLlmProviderResult,
 } from "./structured-llm-service.js";
@@ -128,15 +127,6 @@ export class CodexCliProvider<TProviderOutput = unknown> implements LlmProvider<
     this.runner = options.runner;
     this.workspaceRoot = options.workspaceRoot;
     this.commandBuilder = options.commandBuilder ?? new CodexCommandBuilder();
-  }
-
-  checkReadiness(): LlmProviderReadiness {
-    return {
-      state: "ready",
-      label: "Codex CLI",
-      retryable: false,
-      checkedAt: nowIso(),
-    };
   }
 
   async generateStructured<TOutput>(

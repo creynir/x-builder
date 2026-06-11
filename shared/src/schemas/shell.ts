@@ -41,7 +41,7 @@ export const appStatusSchema = z.object({
   generatedAt: z.string().datetime(),
   engine: subsystemStatusSchema,
   deterministic: subsystemStatusSchema,
-  codex: subsystemStatusSchema,
+  llm: subsystemStatusSchema,
   storage: subsystemStatusSchema,
   lastRun: z.object({
     state: z.enum(["none", "completed", "failed", "unknown"]),

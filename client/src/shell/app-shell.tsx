@@ -443,7 +443,7 @@ function hasWriterApiClient(
 }
 
 function DefaultRouteBody({
-  codexReady = true,
+  judgeReady = true,
   onOpenSettings,
   settingsApiClient,
   writerApiClient,
@@ -456,7 +456,7 @@ function DefaultRouteBody({
   pendingSettingsNavigationPath,
   route,
 }: ShellRouteComponentProps & {
-  codexReady?: boolean;
+  judgeReady?: boolean;
   onOpenSettings: () => void;
   settingsApiClient: SettingsRouteApiClient;
   writerApiClient: WriterApiClient;
@@ -472,7 +472,7 @@ function DefaultRouteBody({
     return (
       <WriterPage
         apiClient={writerApiClient}
-        codexReady={codexReady}
+        judgeReady={judgeReady}
         onOpenSettings={onOpenSettings}
       />
     );
@@ -640,14 +640,14 @@ function renderStaticRouteBody(
   pendingSettingsNavigationPath: RouteConfig["path"] | null,
   route: RouteConfig,
   RouteComponent: ((props: ShellRouteComponentProps) => ReactElement) | null,
-  codexReady = true,
+  judgeReady = true,
 ): ReactElement {
   // React error boundaries do not catch server-render failures.
   try {
     if (RouteComponent === null) {
       return (
         <DefaultRouteBody
-          codexReady={codexReady}
+          judgeReady={judgeReady}
           onOpenSettings={onOpenSettings}
           settingsApiClient={settingsApiClient}
           writerApiClient={writerApiClient}
@@ -676,7 +676,7 @@ function renderStaticRouteBody(
 }
 
 function RouteBody({
-  codexReady = true,
+  judgeReady = true,
   settingsApiClient,
   writerApiClient,
   onDirtySettingsChange,
@@ -690,7 +690,7 @@ function RouteBody({
   route,
   routeComponents,
 }: {
-  codexReady?: boolean;
+  judgeReady?: boolean;
   settingsApiClient: SettingsRouteApiClient;
   writerApiClient: WriterApiClient;
   onDirtySettingsChange: (dirty: boolean) => void;
@@ -720,14 +720,14 @@ function RouteBody({
       pendingSettingsNavigationPath,
       route,
       RouteComponent,
-      codexReady,
+      judgeReady,
     );
   }
 
   const routeElement =
     RouteComponent === null ? (
       <DefaultRouteBody
-        codexReady={codexReady}
+        judgeReady={judgeReady}
         onOpenSettings={onOpenSettings}
         settingsApiClient={settingsApiClient}
         writerApiClient={writerApiClient}
@@ -914,7 +914,7 @@ export function AppShell({
         </header>
         <section aria-labelledby={headingTarget.headingId} className="xb-shell__route-outlet">
           <RouteBody
-            codexReady={appStatus.status?.codex.state === "ready"}
+            judgeReady={appStatus.status?.llm.state === "ready"}
             settingsApiClient={settingsApiClient}
             writerApiClient={writerApiClient}
             onDirtySettingsChange={setIsSettingsDirty}

@@ -75,15 +75,6 @@ export type NormalizedStructuredLlmRequest<TOutput> = Omit<StructuredLlmRequest<
   options: NormalizedStructuredLlmExecutionOptions;
 };
 
-export type LlmProviderReadiness = {
-  state: "ready" | "unavailable" | "unconfigured";
-  label: string;
-  retryable: boolean;
-  message?: string;
-  details?: Record<string, unknown>;
-  checkedAt: string;
-};
-
 export type StructuredLlmUsage = {
   inputTokens?: number;
   outputTokens?: number;
@@ -118,7 +109,6 @@ export type StructuredLlmProviderResult<TOutput> =
 
 export interface LlmProvider<TProviderOutput> {
   id: LlmProviderId;
-  checkReadiness(): Promise<LlmProviderReadiness> | LlmProviderReadiness;
   generateStructured<TOutput>(
     request: NormalizedStructuredLlmRequest<TOutput>,
   ): Promise<StructuredLlmProviderResult<TProviderOutput>> | StructuredLlmProviderResult<TProviderOutput>;

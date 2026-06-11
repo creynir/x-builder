@@ -345,7 +345,7 @@ function orderedSwitches(settings: AppSettings) {
 }
 
 function readinessItems(status: AppStatus): SubsystemStatus[] {
-  return [status.engine, status.storage, status.codex, status.deterministic];
+  return [status.engine, status.storage, status.llm, status.deterministic];
 }
 
 function SettingsRouteView({

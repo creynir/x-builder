@@ -1,42 +1,56 @@
-import { subsystemStatusSchema, type SubsystemStatus } from "@x-builder/shared";
+import {
+  subsystemStatusSchema,
+  type JudgeProviderId,
+  type SubsystemStatus,
+} from "@x-builder/shared";
 
 import type { ProcessRunner, ProcessRunResult } from "./process-runner.js";
 
-const command = "codex";
-const adapter = "codex-cli";
-const sandbox = "read-only";
 const defaultExecutionTimeoutMs = 750;
 const outputByteLimit = 512;
 const maxVersionLength = 80;
 
-export type CodexReadinessProbeOptions = {
+// The per-provider readiness contract the parameterized probe consumes. A spec
+// fully describes how to run a provider's cheap `<command> --version` check and
+// the surfaces (label/adapter/sandbox) the resulting status carries.
+export type ProviderReadinessSpec = {
+  command: string;
+  adapter: JudgeProviderId;
+  label: string;
+  sandbox: string;
+};
+
+export type CliReadinessProbeOptions = {
+  spec: ProviderReadinessSpec;
   runner: ProcessRunner;
   workspaceRoot: string;
   executionTimeoutMs?: number;
 };
 
-type CodexReadinessDetails = {
-  adapter: typeof adapter;
-  command: typeof command;
+type CliReadinessDetails = {
+  adapter: JudgeProviderId;
+  command: string;
   commandAvailable: boolean;
-  sandbox: typeof sandbox;
+  sandbox: string;
   executionTimeoutMs: number;
   version?: string;
 };
 
-export class CodexReadinessProbe {
+export class CliReadinessProbe {
+  private readonly spec: ProviderReadinessSpec;
   private readonly runner: ProcessRunner;
   private readonly workspaceRoot: string;
   private readonly executionTimeoutMs: number;
 
-  constructor(options: CodexReadinessProbeOptions) {
+  constructor(options: CliReadinessProbeOptions) {
+    this.spec = options.spec;
     this.runner = options.runner;
     this.workspaceRoot = options.workspaceRoot;
     this.executionTimeoutMs = options.executionTimeoutMs ?? defaultExecutionTimeoutMs;
   }
 
   async check(): Promise<SubsystemStatus> {
-    const result = await this.runner.run(command, ["--version"], {
+    const result = await this.runner.run(this.spec.command, ["--version"], {
       cwd: this.workspaceRoot,
       timeoutMs: this.executionTimeoutMs,
       maxStdoutBytes: outputByteLimit,
@@ -54,7 +68,7 @@ export class CodexReadinessProbe {
   private readyStatus(result: ProcessRunResult): SubsystemStatus {
     const version = versionFromStdout(result.stdout);
 
-    return subsystem("ready", {
+    return this.subsystem("ready", {
       retryable: false,
       details: {
         ...this.details(true),
@@ -67,38 +81,40 @@ export class CodexReadinessProbe {
     const timedOut = result.timedOut === true || result.code === "request_timeout";
     const commandAvailable = result.code !== "process_failed";
 
-    return subsystem("unavailable", {
+    return this.subsystem("unavailable", {
       message: timedOut
-        ? "Codex version check timed out."
+        ? `${this.spec.command} version check timed out.`
         : commandAvailable
-          ? "Codex version check failed."
-          : "Codex command is not available.",
+          ? `${this.spec.command} version check failed.`
+          : `${this.spec.command} command is not available.`,
       retryable: true,
       details: this.details(commandAvailable),
     });
   }
 
-  private details(commandAvailable: boolean): CodexReadinessDetails {
+  private details(commandAvailable: boolean): CliReadinessDetails {
     return {
-      adapter,
-      command,
+      adapter: this.spec.adapter,
+      command: this.spec.command,
       commandAvailable,
-      sandbox,
+      sandbox: this.spec.sandbox,
       executionTimeoutMs: this.executionTimeoutMs,
     };
   }
-}
 
-const subsystem = (
-  state: SubsystemStatus["state"],
-  overrides: Pick<SubsystemStatus, "retryable" | "details"> & Partial<Pick<SubsystemStatus, "message">>,
-): SubsystemStatus =>
-  subsystemStatusSchema.parse({
-    state,
-    label: "Codex judge",
-    checkedAt: new Date().toISOString(),
-    ...overrides,
-  });
+  private subsystem(
+    state: SubsystemStatus["state"],
+    overrides: Pick<SubsystemStatus, "retryable" | "details"> &
+      Partial<Pick<SubsystemStatus, "message">>,
+  ): SubsystemStatus {
+    return subsystemStatusSchema.parse({
+      state,
+      label: this.spec.label,
+      checkedAt: new Date().toISOString(),
+      ...overrides,
+    });
+  }
+}
 
 const versionFromStdout = (stdout: string): string | undefined => {
   const line = stdout

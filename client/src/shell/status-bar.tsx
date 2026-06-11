@@ -46,7 +46,7 @@ type AppStatusState = Omit<AppStatusSnapshot, "publish" | "refresh">;
 const checkingItems: StatusItem[] = [
   { label: "Engine", state: "checking" },
   { label: "Deterministic scorer", state: "checking" },
-  { label: "Codex judge", state: "checking" },
+  { label: "Judge", state: "checking" },
   { label: "Storage", state: "checking" },
 ];
 
@@ -106,7 +106,7 @@ function statusItems(snapshot: AppStatusSnapshot): StatusItem[] {
   return [
     snapshot.status.engine,
     snapshot.status.deterministic,
-    snapshot.status.codex,
+    snapshot.status.llm,
     snapshot.status.storage,
   ];
 }
