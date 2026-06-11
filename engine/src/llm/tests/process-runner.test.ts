@@ -216,7 +216,7 @@ describe("node process runner", () => {
     });
   });
 
-  it("passes only allowlisted parent environment variables to the child process", async () => {
+  it("passes only the explicitly allowlisted parent environment variables to the child process", async () => {
     await withTempRuntimeRoot(async (runtimeRoot) => {
       vi.stubEnv("CODEX_HOME", "/tmp/x-builder-codex-home");
       vi.stubEnv("OPENAI_API_KEY", "openai-secret");
@@ -226,6 +226,10 @@ describe("node process runner", () => {
 
       try {
         const runner = await createRunner();
+        // Pin the env-copy MECHANIC against an explicit allowlist (the path every
+        // real caller takes), not the runner's default fallback: an allowlisted
+        // name present in the parent crosses into the child; a present name that
+        // is NOT on the allowlist does not.
         const result = await runner.run(
           process.execPath,
           nodeScript(
@@ -244,6 +248,7 @@ describe("node process runner", () => {
           {
             cwd: runtimeRoot,
             ...defaultRunOptions,
+            envAllowlist: ["PATH", "CODEX_HOME"],
           },
         );
 

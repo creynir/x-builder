@@ -5,12 +5,31 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { defaultProcessEnvAllowlist } from "../process-runner.js";
 import type {
   LlmProvider,
   NormalizedStructuredLlmRequest,
   StructuredLlmProviderResult,
 } from "../structured-llm-service.js";
+
+// The exact, concrete set of parent environment variable names the codex
+// generation run must pass through to the child process today. Pinned here as
+// literals (NOT imported from the source constant) so the assertion survives a
+// rename/relocation of the underlying allowlist while still failing if the
+// effective env set ever gains or loses a variable.
+const expectedCodexRunEnvAllowlist = [
+  "PATH",
+  "HOME",
+  "CODEX_HOME",
+  "CODEX_SQLITE_HOME",
+  "CODEX_API_KEY",
+  "CODEX_ACCESS_TOKEN",
+  "CODEX_CA_CERTIFICATE",
+  "SSL_CERT_FILE",
+  "RUST_LOG",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+] as const;
 
 type DraftOutput = {
   draft: string;
@@ -276,8 +295,23 @@ describe("codex cli provider", () => {
       cwd: workspaceRoot,
       timeoutMs: 12_345,
       maxStdoutBytes: 98_765,
-      envAllowlist: [...defaultProcessEnvAllowlist],
     });
+    // Invariant 4: the codex run supplies an explicit, defined allowlist rather
+    // than relying on the runner's fallback.
+    expect(call.options.envAllowlist).toBeDefined();
+    expect(Array.isArray(call.options.envAllowlist)).toBe(true);
+    // Invariant 1: the effective child-env variable SET is exactly these 12
+    // concrete names. The runner copies the allowlisted names that exist in
+    // process.env into a name->value map, so membership — not iteration order —
+    // is the observed behavior; a correct reordering of the allowlist must stay
+    // green while dropping/adding any variable must turn red. Asserting the
+    // concrete literals (not the source constant) also keeps a rename/relocation
+    // of the underlying allowlist green.
+    expect(new Set(call.options.envAllowlist)).toEqual(new Set(expectedCodexRunEnvAllowlist));
+    // No duplicates: the allowlist carries each name once, so the set size equals
+    // the captured array length (a duplicate would inflate the array without
+    // changing the set).
+    expect((call.options.envAllowlist ?? []).length).toBe(expectedCodexRunEnvAllowlist.length);
     expect(call.options).not.toHaveProperty("env");
     expect(call.options.stdin).toEqual(expect.any(String));
     expect(call.options.stdin).toContain("draft_quality");
