@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { defaultProcessEnvAllowlist } from "./process-runner.js";
+import { baseProcessEnvAllowlist } from "./process-runner.js";
 import type { ProcessRunner, ProcessRunResult } from "./process-runner.js";
 import type {
   KnownLlmProviderErrorCode,
@@ -15,6 +15,19 @@ import type {
 const providerId = "codex-cli";
 
 const maxSchemaFileNameLength = 80;
+
+// The codex CLI run inherits the provider-agnostic base allowlist plus the
+// codex-specific environment variables it needs at exec time. Composing from
+// the base keeps the shared names in one place so they cannot drift.
+export const codexCliProcessEnvAllowlist = [
+  ...baseProcessEnvAllowlist,
+  "CODEX_HOME",
+  "CODEX_SQLITE_HOME",
+  "CODEX_API_KEY",
+  "CODEX_ACCESS_TOKEN",
+  "CODEX_CA_CERTIFICATE",
+  "RUST_LOG",
+] as const;
 
 export type CodexCommandBuilderOptions = {
   workspaceRoot: string;
@@ -147,7 +160,7 @@ export class CodexCliProvider<TProviderOutput = unknown> implements LlmProvider<
           maxStdoutBytes: request.options.outputByteLimit,
           maxStderrBytes: request.options.outputByteLimit,
           stdin: buildPrompt(request),
-          envAllowlist: [...defaultProcessEnvAllowlist],
+          envAllowlist: [...codexCliProcessEnvAllowlist],
         });
 
         if (result.status === "failed") {

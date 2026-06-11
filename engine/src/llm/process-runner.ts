@@ -3,22 +3,9 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
 import type { KnownLlmProviderErrorCode } from "./structured-llm-service.js";
 
-export const defaultProcessEnvAllowlist = [
-  "PATH",
-  "HOME",
-  "CODEX_HOME",
-  "CODEX_SQLITE_HOME",
-  "CODEX_API_KEY",
-  "CODEX_ACCESS_TOKEN",
-  "CODEX_CA_CERTIFICATE",
-  "SSL_CERT_FILE",
-  "RUST_LOG",
-  "TMPDIR",
-  "TMP",
-  "TEMP",
-] as const;
+export const baseProcessEnvAllowlist = ["PATH", "HOME", "TMPDIR", "TMP", "TEMP", "SSL_CERT_FILE"] as const;
 
-export type ProcessEnvAllowlistName = (typeof defaultProcessEnvAllowlist)[number] | (string & Record<never, never>);
+export type ProcessEnvAllowlistName = (typeof baseProcessEnvAllowlist)[number] | (string & Record<never, never>);
 
 export type ProcessRunOptions = {
   cwd: string;
@@ -116,7 +103,7 @@ const buildChildEnv = (options: ProcessRunOptions): NodeJS.ProcessEnv => {
   }
 
   const env: NodeJS.ProcessEnv = {};
-  const allowlist = options.envAllowlist ?? defaultProcessEnvAllowlist;
+  const allowlist = options.envAllowlist ?? baseProcessEnvAllowlist;
 
   for (const name of allowlist) {
     const value = process.env[name];
