@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # CAD-009: [RFR] Relocate Provider Env Allowlists Out of the Neutral Process Runner
@@ -57,3 +57,4 @@ A future caller omitting `envAllowlist` gets the narrow base list rather than co
 ## Pipeline Log
 
 - 2026-06-11 — Created by arch-recon (multi-provider epic extension; validated APPROVE_WITH_CONCERNS, cycle 2).
+- 2026-06-11 — RGB [RFR] pipeline DONE (rgb-tdd): Red-RFR pinning `a233435` → Blue(RFR pinning) REJECT (2 survivability couplings: a pre-existing fallback-content test + an order-coupled codex assertion; Blue empirically simulated the refactor to prove both go red) → Red-RFR fix `561cc2d` (mechanic pinned via explicit allowlist; codex pin → set-membership) → Blue(RFR pinning) APPROVE (re-simulated: all green post-refactor) → pre-Green pinning gate 246/246 → Green refactor `d7fbcc4` → post-Green gates (pinning 246/246, no test files in station, gates.py all clean) → Blue(Green, RFR lane)+Yellow(facade) APPROVE. `defaultProcessEnvAllowlist` → narrowed `baseProcessEnvAllowlist` (6 names); new `codexCliProcessEnvAllowlist` (= base + 6 codex vars, same 12-name effective set) in the codex provider module; no compat re-export; readiness probe `["PATH"]` and `/status`+`/drafts/judge` untouched. 1 rejection cycle (pinning station). Enables per-provider allowlists for CAD-010/011.
