@@ -20,11 +20,11 @@ const appShellModulePath = "../app-shell";
 type SettingsFieldName = keyof AppSettings;
 type TextSettingsFieldName = Extract<
   SettingsFieldName,
-  "codexCommandLabel" | "engineBaseUrl" | "storagePath"
+  "engineBaseUrl" | "storagePath"
 >;
 type SwitchSettingsFieldName = Extract<
   SettingsFieldName,
-  "runCodexJudgeAfterGeneration" | "showDeterministicDetails"
+  "showDeterministicDetails"
 >;
 
 type SettingsApiClient = {
@@ -113,9 +113,8 @@ function expectChecked(html: string, label: string, checked: boolean) {
 
 function createDefaultSettings(): AppSettings {
   return {
-    codexCommandLabel: "Codex judge",
     engineBaseUrl: "http://127.0.0.1:4173",
-    runCodexJudgeAfterGeneration: false,
+    judgeProvider: "codex-cli",
     showDeterministicDetails: true,
     storagePath: "/tmp/x-builder-test-storage",
   };
@@ -123,9 +122,8 @@ function createDefaultSettings(): AppSettings {
 
 function createSavedSettings(): AppSettings {
   return {
-    codexCommandLabel: "Local judge",
     engineBaseUrl: "http://localhost:5123",
-    runCodexJudgeAfterGeneration: true,
+    judgeProvider: "codex-cli",
     showDeterministicDetails: false,
     storagePath: "/tmp/x-builder-saved-storage",
   };
@@ -239,12 +237,7 @@ describe("SettingsRoute public behavior", () => {
     expect(html).toMatch(/<button\b[^>]*disabled=""[^>]*>Save settings/);
     expectInputValue(html, "Engine URL", defaultSettings.engineBaseUrl);
     expectInputValue(html, "Storage path", defaultSettings.storagePath);
-    expectInputValue(html, "Codex command label", defaultSettings.codexCommandLabel);
-    expectChecked(
-      html,
-      "Run Codex judge after generation",
-      defaultSettings.runCodexJudgeAfterGeneration,
-    );
+    expect(text).not.toContain("Codex command label");
     expectChecked(
       html,
       "Show deterministic details",
@@ -343,11 +336,6 @@ describe("SettingsRoute public behavior", () => {
     await driver.load();
     driver.updateField("engineBaseUrl", savedSettings.engineBaseUrl);
     driver.updateField("storagePath", savedSettings.storagePath);
-    driver.updateField("codexCommandLabel", savedSettings.codexCommandLabel);
-    driver.updateSwitch(
-      "runCodexJudgeAfterGeneration",
-      savedSettings.runCodexJudgeAfterGeneration,
-    );
     const dirtyHtml = driver.updateSwitch(
       "showDeterministicDetails",
       savedSettings.showDeterministicDetails,
@@ -624,8 +612,8 @@ describe("SettingsRoute rendering", () => {
     expect(text).toContain("Back to Studio");
     expect(text).toContain("Engine URL");
     expect(text).toContain("Storage path");
-    expect(text).toContain("Codex command label");
-    expect(text).toContain("Run Codex judge after generation");
+    expect(text).not.toContain("Codex command label");
+    expect(text).not.toContain("Run Codex judge after generation");
     expect(text).toContain("Show deterministic details");
     expect(text).toContain("Save settings");
     expect(text).toContain("Test readiness");

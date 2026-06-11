@@ -85,9 +85,8 @@ async function stubEngine(
     }
     await fulfillJson(route, 200, {
       settings: {
-        codexCommandLabel: "Codex judge",
         engineBaseUrl,
-        runCodexJudgeAfterGeneration: false,
+        judgeProvider: "codex-cli",
         showDeterministicDetails: true,
         storagePath: "~/.x-builder/e2e",
       },

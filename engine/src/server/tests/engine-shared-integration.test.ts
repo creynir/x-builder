@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   apiErrorSchema,
   appSettingsResponseSchema,
+  appSettingsSchema,
   appStatusSchema,
   generateIdeaResponseSchema,
   type AppSettings,
@@ -58,13 +59,12 @@ const withTempRoot = async <T>(run: (root: string) => Promise<T>): Promise<T> =>
   }
 };
 
-const patchedSettings: AppSettings = {
+const patchedSettings: AppSettings = appSettingsSchema.parse({
   engineBaseUrl: "http://localhost:5199",
   storagePath: "/tmp/x-builder-integration-storage",
-  codexCommandLabel: "Local Codex judge",
-  runCodexJudgeAfterGeneration: true,
+  judgeProvider: "codex-cli",
   showDeterministicDetails: false,
-};
+});
 
 describe("engine and shared schema integration", () => {
   it("uses the local engine bind address and port for the runtime entrypoint", () => {

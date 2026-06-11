@@ -69,8 +69,8 @@ const codexReadinessExecutionTimeoutMs = 321;
 const settingsWithCodexJudgeEnabled: AppSettings = appSettingsSchema.parse({
   engineBaseUrl: "http://127.0.0.1:4173",
   storagePath: "/tmp/x-builder-settings-storage",
-  codexCommandLabel: "Local Codex judge",
-  runCodexJudgeAfterGeneration: true,
+  judgeProvider: "codex-cli",
+  codexModel: "gpt-5.2-codex",
   showDeterministicDetails: true,
 });
 

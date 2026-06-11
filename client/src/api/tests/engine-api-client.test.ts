@@ -63,8 +63,7 @@ const statusResponse: AppStatus = {
 const settings: AppSettings = {
   engineBaseUrl: "http://127.0.0.1:4173",
   storagePath: "/tmp/x-builder-client-test-storage",
-  codexCommandLabel: "Codex judge",
-  runCodexJudgeAfterGeneration: false,
+  judgeProvider: "codex-cli",
   showDeterministicDetails: true,
 };
 

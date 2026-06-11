@@ -27,13 +27,13 @@ const withTempRoot = async <T>(run: (root: string) => Promise<T>): Promise<T> =>
   }
 };
 
-const savedSettings: AppSettings = {
+const savedSettings: AppSettings = appSettingsSchema.parse({
   engineBaseUrl: "http://localhost:5050",
   storagePath: "/tmp/x-builder-saved-settings",
-  codexCommandLabel: "Local Codex",
-  runCodexJudgeAfterGeneration: true,
+  judgeProvider: "claude-cli",
+  codexModel: "gpt-5.2-codex",
   showDeterministicDetails: false,
-};
+});
 
 describe("JSON file app settings repository", () => {
   it("loads schema-valid defaults from an empty isolated root", async () => {
@@ -83,6 +83,48 @@ describe("JSON file app settings repository", () => {
       } finally {
         errorSpy.mockRestore();
       }
+    });
+  });
+
+  it("loads a pre-epic persisted file by stripping the removed keys and defaulting judgeProvider", async () => {
+    await withTempRoot(async (root) => {
+      const JsonFileAppSettingsRepository = await loadJsonFileAppSettingsRepository();
+      await writeFile(
+        join(root, "settings.json"),
+        JSON.stringify({
+          settings: {
+            engineBaseUrl: "http://127.0.0.1:4173",
+            storagePath: "/tmp/x-builder-legacy",
+            codexCommandLabel: "Codex judge",
+            runCodexJudgeAfterGeneration: true,
+            showDeterministicDetails: true,
+          },
+          source: "persisted",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        }),
+        "utf8",
+      );
+
+      const repository = new JsonFileAppSettingsRepository({ root });
+      const response = appSettingsResponseSchema.parse(await repository.load());
+
+      expect(response.source).toBe("persisted");
+      expect(response.settings).not.toHaveProperty("codexCommandLabel");
+      expect(response.settings).not.toHaveProperty("runCodexJudgeAfterGeneration");
+      expect(response.settings.judgeProvider).toBe("codex-cli");
+    });
+  });
+
+  it("defaults expose judgeProvider codex-cli with no removed keys present", async () => {
+    await withTempRoot(async (root) => {
+      const JsonFileAppSettingsRepository = await loadJsonFileAppSettingsRepository();
+      const repository = new JsonFileAppSettingsRepository({ root });
+
+      const defaults = appSettingsSchema.parse(repository.defaults());
+
+      expect(defaults.judgeProvider).toBe("codex-cli");
+      expect(defaults).not.toHaveProperty("codexCommandLabel");
+      expect(defaults).not.toHaveProperty("runCodexJudgeAfterGeneration");
     });
   });
 

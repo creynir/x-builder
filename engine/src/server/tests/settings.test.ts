@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   apiErrorSchema,
   appSettingsResponseSchema,
+  appSettingsSchema,
   type AppSettings,
   type AppSettingsResponse,
 } from "@x-builder/shared";
@@ -17,21 +18,20 @@ type BuildServerSettingsOptions = Parameters<typeof buildServer>[0] & {
   settingsRepository?: AppSettingsRepositoryFake;
 };
 
-const defaultSettings: AppSettings = {
+const defaultSettings: AppSettings = appSettingsSchema.parse({
   engineBaseUrl: "http://127.0.0.1:4173",
   storagePath: "/tmp/x-builder-test-storage",
-  codexCommandLabel: "Codex judge",
-  runCodexJudgeAfterGeneration: false,
+  judgeProvider: "codex-cli",
   showDeterministicDetails: true,
-};
+});
 
-const patchedSettings: AppSettings = {
+const patchedSettings: AppSettings = appSettingsSchema.parse({
   engineBaseUrl: "http://localhost:5123",
   storagePath: "/tmp/x-builder-persisted-storage",
-  codexCommandLabel: "Local judge",
-  runCodexJudgeAfterGeneration: true,
+  judgeProvider: "claude-cli",
+  codexModel: "gpt-5.2-codex",
   showDeterministicDetails: false,
-};
+});
 
 const parseJsonPayload = (payload: string): unknown => JSON.parse(payload);
 
@@ -73,6 +73,69 @@ describe("engine settings API", () => {
         settings: defaultSettings,
         source: "defaults",
       });
+      expect(settingsResponse.settings.judgeProvider).toBe("codex-cli");
+      expect(settingsResponse.settings).not.toHaveProperty("codexCommandLabel");
+      expect(settingsResponse.settings).not.toHaveProperty("runCodexJudgeAfterGeneration");
+      expect(response.body).not.toContain("codexCommandLabel");
+      expect(response.body).not.toContain("runCodexJudgeAfterGeneration");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects a PATCH with an unsupported judge provider id with a field error on judgeProvider", async () => {
+    const repository = settingsRepository();
+    const app = await buildServerWithSettingsRepository(repository);
+
+    try {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/settings",
+        payload: {
+          ...patchedSettings,
+          judgeProvider: "gpt-cli",
+        },
+      });
+
+      const error = apiErrorSchema.parse(parseJsonPayload(response.body));
+
+      expect(response.statusCode).toBe(400);
+      expect(repository.save).not.toHaveBeenCalled();
+      expect(error).toMatchObject({
+        code: "validation_failed",
+        retryable: false,
+        status: 400,
+      });
+      expect(error.fieldErrors?.judgeProvider).toEqual(
+        expect.arrayContaining([expect.any(String)]),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("strips removed legacy keys from a stale client PATCH body and persists the cleaned settings", async () => {
+    const repository = settingsRepository();
+    const app = await buildServerWithSettingsRepository(repository);
+
+    try {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/settings",
+        payload: {
+          ...patchedSettings,
+          codexCommandLabel: "Stale label",
+          runCodexJudgeAfterGeneration: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(repository.save).toHaveBeenCalledOnce();
+      expect(repository.save).toHaveBeenCalledWith(patchedSettings);
+      const savedArgument = vi.mocked(repository.save).mock.calls[0]![0];
+      expect(savedArgument).not.toHaveProperty("codexCommandLabel");
+      expect(savedArgument).not.toHaveProperty("runCodexJudgeAfterGeneration");
+      expect(response.body).not.toContain("Stale label");
     } finally {
       await app.close();
     }

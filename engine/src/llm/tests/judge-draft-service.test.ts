@@ -154,4 +154,43 @@ describe("JudgeDraftService", () => {
       expect(outcome.code).toBe("provider_unconfigured");
     }
   });
+
+  it("resolves the provider id from a resolver function per call", async () => {
+    const generateStructured = vi.fn(
+      async (request: StructuredLlmRequest<JudgeVerdict>) => ({
+        ...successResult,
+        provider: request.provider,
+      }),
+    );
+    const resolveProvider = vi.fn(() => "claude-cli");
+    const service = new JudgeDraftService({ generateStructured }, resolveProvider);
+
+    const outcome = await service.judge("My draft worth judging.");
+
+    expect(resolveProvider).toHaveBeenCalledOnce();
+    expect(generateStructured.mock.calls[0]![0].provider).toBe("claude-cli");
+    expect(outcome).toMatchObject({
+      status: "judged",
+      response: { model: "claude-cli" },
+    });
+  });
+
+  it("re-runs an async resolver function on every judge call (no caching)", async () => {
+    const generateStructured = vi.fn(
+      async (request: StructuredLlmRequest<JudgeVerdict>) => ({
+        ...successResult,
+        provider: request.provider,
+      }),
+    );
+    const providers = ["codex-cli", "cursor-cli"];
+    const resolveProvider = vi.fn(async () => providers.shift() ?? "codex-cli");
+    const service = new JudgeDraftService({ generateStructured }, resolveProvider);
+
+    await service.judge("first draft");
+    await service.judge("second draft");
+
+    expect(resolveProvider).toHaveBeenCalledTimes(2);
+    expect(generateStructured.mock.calls[0]![0].provider).toBe("codex-cli");
+    expect(generateStructured.mock.calls[1]![0].provider).toBe("cursor-cli");
+  });
 });

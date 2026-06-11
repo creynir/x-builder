@@ -60,6 +60,20 @@ type CodexCliProviderConstructor = new (options: {
   workspaceRoot: string;
 }) => LlmProvider<DraftOutput>;
 
+type CodexCommandBuilderInstance = {
+  build: (options: { workspaceRoot: string; schemaFile: string; model?: string }) => readonly string[];
+};
+
+type CodexCommandBuilderConstructor = new () => CodexCommandBuilderInstance;
+
+async function loadCodexCommandBuilder(): Promise<CodexCommandBuilderConstructor> {
+  const module = (await import("../codex-cli-provider.js")) as {
+    CodexCommandBuilder: CodexCommandBuilderConstructor;
+  };
+
+  return module.CodexCommandBuilder;
+}
+
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(testDir, "fixtures", "codex-cli");
 const workspaceRoot = "/tmp/x-builder-codex-cli-provider-workspace";
@@ -496,5 +510,87 @@ describe("codex cli provider", () => {
       }),
     });
     expectSafeFailure(result, [promptSentinel, stderrSentinel, authPath, "sensitive stack"]);
+  });
+
+  it("builds codex argv with no -m flag when the request carries no model", async () => {
+    const runner = fakeRunner(successProcessResult(await readFixture("final-stdout.json")));
+    const provider = await createProvider(runner);
+
+    await provider.generateStructured(structuredRequest());
+
+    const call = runner.calls[0] as CapturedRun;
+    expect(call.args).not.toContain("-m");
+  });
+
+  it("appends -m <model> to codex argv when the request carries a model", async () => {
+    const runner = fakeRunner(successProcessResult(await readFixture("final-stdout.json")));
+    const provider = await createProvider(runner);
+
+    await provider.generateStructured(
+      structuredRequest({
+        options: {
+          timeoutMs: 12_345,
+          outputByteLimit: 98_765,
+          attempts: 1,
+          model: "gpt-5.2-codex",
+        } as NormalizedStructuredLlmRequest<DraftOutput>["options"],
+      }),
+    );
+
+    const call = runner.calls[0] as CapturedRun;
+    expect(valueAfter(call.args, "-m")).toBe("gpt-5.2-codex");
+  });
+});
+
+describe("codex command builder", () => {
+  const builderOptions = {
+    workspaceRoot,
+    schemaFile: "/tmp/x-builder-codex-schema/draft_quality.json",
+  };
+
+  // Pin the exact argv the builder produces with no model so a regression in the
+  // base command is caught alongside the new model flag.
+  const baselineArgv = [
+    "exec",
+    "--ephemeral",
+    "--sandbox",
+    "read-only",
+    "--cd",
+    workspaceRoot,
+    "--output-schema",
+    builderOptions.schemaFile,
+    "--color",
+    "never",
+    "-",
+  ];
+
+  it("produces argv byte-identical to today's codex command when no model is set", async () => {
+    const CodexCommandBuilder = await loadCodexCommandBuilder();
+    const builder = new CodexCommandBuilder();
+
+    const args = builder.build(builderOptions);
+
+    expect([...args]).toEqual(baselineArgv);
+    expect(args).not.toContain("-m");
+  });
+
+  it("produces the same argv when the model is an empty string (treated as absent)", async () => {
+    const CodexCommandBuilder = await loadCodexCommandBuilder();
+    const builder = new CodexCommandBuilder();
+
+    const args = builder.build({ ...builderOptions, model: "" });
+
+    expect([...args]).toEqual(baselineArgv);
+    expect(args).not.toContain("-m");
+  });
+
+  it("appends -m <model> exactly once when a model is set", async () => {
+    const CodexCommandBuilder = await loadCodexCommandBuilder();
+    const builder = new CodexCommandBuilder();
+
+    const args = builder.build({ ...builderOptions, model: "gpt-5.2-codex" });
+
+    expect(valueAfter(args, "-m")).toBe("gpt-5.2-codex");
+    expect(args.filter((arg) => arg === "-m")).toHaveLength(1);
   });
 });

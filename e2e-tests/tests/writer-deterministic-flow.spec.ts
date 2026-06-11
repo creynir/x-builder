@@ -89,9 +89,8 @@ function readyStatus() {
 function settingsResponse() {
   return {
     settings: {
-      codexCommandLabel: "Codex judge",
       engineBaseUrl,
-      runCodexJudgeAfterGeneration: false,
+      judgeProvider: "codex-cli",
       showDeterministicDetails: true,
       storagePath: "~/.x-builder/e2e",
     },

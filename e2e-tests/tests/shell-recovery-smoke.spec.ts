@@ -61,9 +61,8 @@ function codexUnavailableStatus() {
 function settingsResponse() {
   return {
     settings: {
-      codexCommandLabel: "Codex judge",
       engineBaseUrl: engineBaseUrl,
-      runCodexJudgeAfterGeneration: false,
+      judgeProvider: "codex-cli",
       showDeterministicDetails: true,
       storagePath: "~/.x-builder/e2e",
     },
@@ -305,7 +304,8 @@ test("opens Settings from partial readiness without exposing raw judge controls"
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   await expect(page.getByLabel("Engine URL")).toBeVisible();
   await expect(page.getByLabel("Storage path")).toBeVisible();
-  await expect(page.getByLabel("Codex command label")).toBeVisible();
+  await expect(page.getByLabel("Codex command label")).toHaveCount(0);
+  await expect(page.getByText("Codex command label")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Test readiness" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Test readiness" }).click();
