@@ -113,7 +113,7 @@ async function stubEngine(
   });
 }
 
-test("judges a pasted draft and renders the Codex verdict panel", async ({ page }) => {
+test("judges a pasted draft and renders the verdict panel with provider attribution", async ({ page }) => {
   await stubEngine(page, { codexState: "ready" });
   await page.goto("/writer");
   await expect(page.getByRole("heading", { level: 1, name: "Studio" })).toBeVisible();
@@ -126,18 +126,20 @@ test("judges a pasted draft and renders the Codex verdict panel", async ({ page 
   await expect(judgeButton).toBeEnabled();
   await judgeButton.click();
 
-  const judgePanel = page.getByRole("region", { name: "Codex judge" });
+  const judgePanel = page.getByRole("region", { name: "Draft judge" });
   await expect(judgePanel.getByText("Slight rework")).toBeVisible();
   await expect(judgePanel.getByText("Confidence: medium")).toBeVisible();
   await expect(judgePanel.getByText("Overall")).toBeVisible();
   await expect(judgePanel.getByText("Strong hook, weak closer.")).toBeVisible();
   await expect(judgePanel.getByText("Opens with a concrete claim")).toBeVisible();
   await expect(judgePanel.getByText("Trim the middle paragraph")).toBeVisible();
+  // The stubbed response model "codex-cli" maps through the shared catalog to "Codex judge".
+  await expect(judgePanel.getByText("Judged by Codex judge")).toBeVisible();
 
   await page.screenshot({ path: "/tmp/lj-judge-verdict.png", fullPage: true });
 });
 
-test("disables the judge button with a hint when codex is unavailable", async ({ page }) => {
+test("disables the judge button with a neutral hint when the provider is unavailable", async ({ page }) => {
   await stubEngine(page, { codexState: "unavailable" });
   await page.goto("/writer");
   await expect(page.getByRole("heading", { level: 1, name: "Studio" })).toBeVisible();
@@ -145,7 +147,9 @@ test("disables the judge button with a hint when codex is unavailable", async ({
   await page.getByRole("textbox", { name: "Draft" }).fill("A draft that cannot be judged right now.");
 
   await expect(page.getByRole("button", { name: "Judge draft" })).toBeDisabled();
-  await expect(page.getByText("Codex judge is unavailable right now.")).toBeVisible();
+  await expect(
+    page.getByText("The judge is unavailable right now. Check the provider in Settings."),
+  ).toBeVisible();
 
   await page.screenshot({ path: "/tmp/lj-judge-unavailable.png", fullPage: true });
 });

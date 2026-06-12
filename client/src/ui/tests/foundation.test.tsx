@@ -328,7 +328,7 @@ describe("PageHeader", () => {
     const html = renderToStaticMarkup(
       <PageHeader
         title="Settings"
-        description="Repair local engine, Codex, and storage readiness."
+        description="Repair local engine, judge, and storage readiness."
         backAction={<Button variant="ghost">Back to Writer</Button>}
         actions={<Button variant="primary">Save settings</Button>}
       />,
@@ -337,7 +337,7 @@ describe("PageHeader", () => {
     expect(countOpeningTags(html, "h1")).toBe(1);
     expect(html).toContain(">Settings</h1>");
     expect(textContent(html)).toContain(
-      "Repair local engine, Codex, and storage readiness.",
+      "Repair local engine, judge, and storage readiness.",
     );
     expect(textContent(html)).toContain("Back to Writer");
     expect(textContent(html)).toContain("Save settings");
