@@ -7,7 +7,9 @@ status: todo
 ## Implementation Details
 
 Render the 5 new judge dimensions in `JudgePanel`, after the existing 8 score rows
-(unchanged).
+(unchanged). Note: `JudgePanel` and `judgeScoreRows` both live in `writer-page.tsx` (the
+exported `JudgePanel` component + the `judgeScoreRows` constant) — there is no standalone
+`JudgePanel` file; extend them in place.
 
 1. **`judgeAuxiliaryRows`** (new constant alongside `judgeScoreRows`) — the three plain
    0-100 numeric dims: `answerEffort` ("Answer effort"), `strangerAnswerability`

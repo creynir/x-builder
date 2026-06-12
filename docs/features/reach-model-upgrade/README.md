@@ -27,14 +27,21 @@ are **unchanged**). The static quality multiplier is compressed to 0.6–1.3.
 are added to the `available` variant of `engagementPredictionSchema`; the legacy fields are
 **derived** so every existing consumer keeps working:
 `rangeLow = stallRange.low`, `rangeHigh = escapeRange.high`, `midpoint = predictedMidImpressions`.
-The existing `.refine(rangeLow <= midpoint <= rangeHigh)` stays valid because
-`stallRange.low = 0.3·base ≤ mid ≤ 12·base = escapeRange.high`. Spreads are computed in
-**log space**. `one_liner` and `goal_share` remain valid `detectedPostFormatSchema` members
-for one release (the classifier stops emitting them); removed next release.
+The existing `.refine(rangeLow <= midpoint <= rangeHigh)` and `reachRangeSchema(low <= high)`
+are kept valid **by construction, not by coincidence** — the `mid/base` multiplier product is
+NOT bounded ≥ 0.3 (e.g. `insight_share 0.3 × low quality 0.6 × repeat 0.2 = 0.036`), so the
+band floor and combined high are derived to bracket the honest midpoint without ever clamping
+it up (see Two-regime reach below). Spreads are computed in **log space**. `one_liner` and
+`goal_share` remain valid `detectedPostFormatSchema` members for one release (the classifier
+stops emitting them); removed next release.
 
 **Two-regime reach.** `base = trailingMedianImpressions ?? clamp(0.4·followers, …)`;
-`mid = base · formatMult · qualityMult · linkMult · repeatMult · statusMult`;
-`stallRange = [0.3·base, 1.2·mid]`, `escapeRange = [3·base, 12·base]`,
+`mid = max(1, base · formatMult · qualityMult · linkMult · repeatMult · statusMult)`;
+`midpoint = round(mid)` (honest — never clamped up). Bands are derived to bracket the
+midpoint for every multiplier product and every `// CALIBRATE` value:
+`stallRange = [min(round(0.3·base), midpoint), max(stallLow, round(1.2·mid))]`,
+`escapeRange = [round(3·base), max(round(12·base), midpoint)]`,
+`rangeLow = stallRange.low`, `rangeHigh = escapeRange.high`.
 `escapeProbability` (pEscape) from the per-format table, adjusted; `expectedReplies`
 from per-format reply rates. **pEscape vs midpoint discipline:** answer-effort and
 trending-topic adjustments move **pEscape / expectedReplies only — never the midpoint**.

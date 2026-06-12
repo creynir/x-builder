@@ -38,6 +38,14 @@ Greenfield judge→reach bridge (the old 0-10 `aiRating` path was deleted in RMU
    → `qualityBasis="judge"`. Pre- and post-judge reach are **different scales** — no code
    here diffs them.
 
+## Security Note
+
+`accountProfile` is user-authored free text that flows into the judge LLM prompt — a
+prompt-injection / PII surface. Mitigations already in the design: validated (`.trim().max(600)`),
+inserted only inside the existing structured-prompt envelope, never interpolated into a
+shell command or SQL, and stored locally. Low risk for a local single-user tool; flag it for
+the security review at epic close (RMU-019/Crimson) rather than adding bespoke sanitization here.
+
 ## Data Models
 
 Consumes RMU-001 `judgeScoresSchema` (+5 dims), `judgeDraftRequestSchema.accountProfile`,

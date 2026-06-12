@@ -8,7 +8,13 @@ status: todo
 
 Rebuild `classifyPostFormat` (`format-classifier.ts`) as a corrected first-match-wins
 cascade. Fixes the confirmed bugs: `connect` matched only 4 literal fragments;
-"drop your startup link" wrongly landed in `one_liner`; `goal_share` was unreachable.
+"drop your startup link" wrongly landed in `one_liner`. Note: `goal_share` is **reachable
+today** for phrase-trigger posts (a live test asserts it for "My goal is to ship 3
+experiments by end of June") — the real gap is that **numeric milestone posts** ("I hit 10k
+followers in 73 days") never match its trigger phrases. The new `milestone` class
+(rename/extend of `goal_share`) must catch **both** the phrase form and the numeric form, so
+Red rewrites the existing `goal_share` assertion to expect `milestone` (not a bogus
+"was-unreachable" regression).
 
 New cascade order (first match wins; concepts, not final regexes — write robust detectors):
 
