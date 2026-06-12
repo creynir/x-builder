@@ -1,0 +1,13 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "result": "{\"draft\":\"Specific proof beats generic claims.\",\"confidence\":0.91}",
+  "num_turns": 1,
+  "session_id": "66666666-7777-8888-9999-000000000000",
+  "usage": {
+    "input_tokens": 640,
+    "output_tokens": 190
+  },
+  "permission_denials": []
+}

@@ -1,0 +1,14 @@
+{
+  "type": "result",
+  "subtype": "error_during_execution",
+  "is_error": true,
+  "result": "",
+  "num_turns": 1,
+  "session_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "usage": {
+    "input_tokens": 51,
+    "output_tokens": 0
+  },
+  "permission_denials": [],
+  "structured_output": null
+}

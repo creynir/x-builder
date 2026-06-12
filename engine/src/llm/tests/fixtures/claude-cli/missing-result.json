@@ -1,0 +1,12 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "num_turns": 1,
+  "session_id": "deadbeef-0000-1111-2222-333333333333",
+  "usage": {
+    "input_tokens": 88,
+    "output_tokens": 0
+  },
+  "permission_denials": []
+}

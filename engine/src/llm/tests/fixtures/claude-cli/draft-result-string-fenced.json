@@ -1,0 +1,13 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "result": "```json\n{\"draft\":\"Specific proof beats generic claims.\",\"confidence\":0.91}\n```",
+  "num_turns": 1,
+  "session_id": "12121212-3434-5656-7878-909090909090",
+  "usage": {
+    "input_tokens": 641,
+    "output_tokens": 191
+  },
+  "permission_denials": []
+}

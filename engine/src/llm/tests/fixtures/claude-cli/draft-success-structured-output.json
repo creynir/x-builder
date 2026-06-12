@@ -1,0 +1,25 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "result": "",
+  "num_turns": 1,
+  "session_id": "11111111-2222-3333-4444-555555555555",
+  "usage": {
+    "input_tokens": 642,
+    "output_tokens": 188,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0
+  },
+  "modelUsage": {
+    "claude-opus-4-8": {
+      "inputTokens": 642,
+      "outputTokens": 188
+    }
+  },
+  "permission_denials": [],
+  "structured_output": {
+    "draft": "Specific proof beats generic claims.",
+    "confidence": 0.91
+  }
+}
