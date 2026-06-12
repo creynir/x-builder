@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # CAD-012: Settings Judge Provider Selection
@@ -74,3 +74,5 @@ Select field saves via the existing PATCH flow; dirty guard covers it; the drive
 
 - 2026-06-11 — Created by arch-recon (multi-provider epic extension; validated APPROVE_WITH_CONCERNS, cycle 2).
 - 2026-06-11 — Amended for per-provider model selection (validated delta): adds three optional model text fields (flat `codexModel`/`claudeModel`/`cursorModel` keys, shape A — reuse existing `renderTextField`/`updateTextField`, zero new UI plumbing) under the provider select; no app-side model validation.
+- 2026-06-12 — RGB pipeline DONE (rgb-tdd): Red tests `bec2e13` → Blue(Red) APPROVE → Green impl `f5a9742` → gates.py all clean (ui-tokens CLEAN) → Blue(Green)+Yellow APPROVE_WITH_CONCERNS. `renderSelectField` (native `<select>`, options from `judgeProviderIdSchema.options`×`judgeProviderLabels` + raw-id fallback), `updateSelectField`, `SelectSettingsFieldName`, `TextSettingsFieldName` += 3 model keys, `settingsEqual`/`defaultSettings` model keys, three model text fields via existing `renderTextField`, driver `updateSelect`, select placed after Storage path + model fields under it, `foundation.css` select selector extension (existing tokens only). Client suite 164/164, typecheck+lint clean. 0 rejection cycles.
+  - **CONCERN (recorded for post-epic triage):** Green introduced `renderFieldHelper` using `dangerouslySetInnerHTML` for the static helper copy ("Save, then run Test readiness…" / "Leave empty to use the provider's default."). Both Blue and Yellow independently flagged it: it violates no AC/DoD and changes NO runtime behavior (the content is a provably static developer-authored literal — no user input/injection path; a real browser renders the apostrophe identically whether escaped to `&#x27;` or not). It exists ONLY because Red's SSR `textContent` assertion helper strips tags without HTML-decoding, so a plain text node fails `toContain("provider's default.")`. Recommended fix at triage: decode HTML entities in the Red harness's `textContent` helper (or drop the apostrophe-substring coupling), then revert `renderFieldHelper` to a plain `<span>{text}</span>` matching the file's existing plain-text helper convention. No security/test-integrity defect; safe to ship as-is if accepted.
