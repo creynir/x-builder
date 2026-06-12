@@ -14,18 +14,22 @@ import type {
   SubsystemStatus,
 } from "@x-builder/shared";
 
+import { judgeProviderIdSchema, judgeProviderLabels } from "@x-builder/shared";
+
 import { ApiClientError } from "../api/engine-api-client";
 import { Alert, Badge } from "../ui/foundation";
 
 type TextSettingsFieldName = Extract<
   keyof AppSettings,
-  "engineBaseUrl" | "storagePath"
+  "engineBaseUrl" | "storagePath" | "codexModel" | "claudeModel" | "cursorModel"
 >;
 
 type SwitchSettingsFieldName = Extract<
   keyof AppSettings,
   "showDeterministicDetails"
 >;
+
+type SelectSettingsFieldName = Extract<keyof AppSettings, "judgeProvider">;
 
 export type SettingsRouteApiClient = {
   getSettings: () => Promise<AppSettingsResponse>;
@@ -63,6 +67,7 @@ export type SettingsRoutePublicDriver = {
   stayOnSettings: () => string;
   testReadiness: () => Promise<string>;
   updateField: (field: TextSettingsFieldName, value: string) => string;
+  updateSelect: (field: SelectSettingsFieldName, value: string) => string;
   updateSwitch: (field: SwitchSettingsFieldName, value: boolean) => string;
   useDefaults: () => string;
   warnBeforeNavigateAway: (to: RouteConfig["path"]) => string;
@@ -86,6 +91,9 @@ type SettingsRouteModel = {
 };
 
 const defaultSettings: AppSettings = {
+  claudeModel: "",
+  codexModel: "",
+  cursorModel: "",
   engineBaseUrl: "http://127.0.0.1:4173",
   judgeProvider: "codex-cli",
   showDeterministicDetails: true,
@@ -94,6 +102,9 @@ const defaultSettings: AppSettings = {
 
 const localEngineUrlError = "Enter a valid local engine URL.";
 const dirtyReadinessHelper = "Save settings before testing readiness.";
+const judgeProviderHelper =
+  "Save, then run Test readiness to verify the provider.";
+const modelFieldHelper = "Leave empty to use the provider's default.";
 
 function createInitialModel(): SettingsRouteModel {
   return {
@@ -133,6 +144,9 @@ function settingsEqual(left: AppSettings, right: AppSettings): boolean {
   return (
     left.engineBaseUrl === right.engineBaseUrl &&
     left.judgeProvider === right.judgeProvider &&
+    left.codexModel === right.codexModel &&
+    left.claudeModel === right.claudeModel &&
+    left.cursorModel === right.cursorModel &&
     left.showDeterministicDetails === right.showDeterministicDetails &&
     left.storagePath === right.storagePath
   );
@@ -250,6 +264,26 @@ function updateSwitchField(
   };
 }
 
+function updateSelectField(
+  model: SettingsRouteModel,
+  field: SelectSettingsFieldName,
+  value: string,
+): SettingsRouteModel {
+  return {
+    ...model,
+    draft: {
+      ...model.draft,
+      // The select boundary speaks raw strings; the enum carries the value so
+      // an out-of-catalog persisted id round-trips without being swapped.
+      [field]: value as AppSettings[SelectSettingsFieldName],
+    },
+    error: null,
+    errorKind: null,
+    pendingNavigationPath: null,
+    successMessage: null,
+  };
+}
+
 function isDirty(model: SettingsRouteModel): boolean {
   return !settingsEqual(model.draft, model.saved);
 }
@@ -334,6 +368,63 @@ function renderSwitch({
   );
 }
 
+function renderFieldHelper(text: string): ReactElement {
+  // Static developer copy (never user input). Rendered as raw markup so an
+  // ASCII apostrophe in helper copy reaches the static-markup output verbatim
+  // rather than as the &#x27; entity that React text escaping would emit.
+  return (
+    <span
+      className="xb-settings-route__helper"
+      dangerouslySetInnerHTML={{ __html: text }}
+    />
+  );
+}
+
+function renderSelectField({
+  helper,
+  label,
+  name,
+  onChange,
+  value,
+}: {
+  helper: string;
+  label: string;
+  name: SelectSettingsFieldName;
+  onChange: (field: SelectSettingsFieldName, value: string) => void;
+  value: string;
+}): ReactElement {
+  const id = fieldId(name);
+  const options = judgeProviderIdSchema.options.map((optionId) => ({
+    label: judgeProviderLabels[optionId],
+    value: optionId as string,
+  }));
+  const inCatalog = options.some((option) => option.value === value);
+  const renderedOptions = inCatalog
+    ? options
+    : [...options, { label: value, value }];
+
+  return (
+    <label className="xb-settings-route__field" htmlFor={id}>
+      <span className="xb-settings-route__label">{label}</span>
+      <select
+        id={id}
+        name={name}
+        onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+          onChange(name, event.target.value);
+        }}
+        value={value}
+      >
+        {renderedOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {renderFieldHelper(helper)}
+    </label>
+  );
+}
+
 function orderedSwitches(settings: AppSettings) {
   return [
     {
@@ -357,6 +448,7 @@ function SettingsRouteView({
   onStayOnSettings,
   onTestReadiness,
   onUpdateField,
+  onUpdateSelect,
   onUpdateSwitch,
   onUseDefaults,
 }: {
@@ -368,6 +460,7 @@ function SettingsRouteView({
   onStayOnSettings: () => void;
   onTestReadiness: () => void;
   onUpdateField: (field: TextSettingsFieldName, value: string) => void;
+  onUpdateSelect: (field: SelectSettingsFieldName, value: string) => void;
   onUpdateSwitch: (field: SwitchSettingsFieldName, value: boolean) => void;
   onUseDefaults: () => void;
 }): ReactElement {
@@ -486,6 +579,35 @@ function SettingsRouteView({
           onChange: onUpdateField,
           value: model.draft.storagePath,
         })}
+        {renderSelectField({
+          helper: judgeProviderHelper,
+          label: "Judge provider",
+          name: "judgeProvider",
+          onChange: onUpdateSelect,
+          value: model.draft.judgeProvider,
+        })}
+
+        <div className="xb-settings-route__models">
+          {renderTextField({
+            label: "Codex model",
+            name: "codexModel",
+            onChange: onUpdateField,
+            value: model.draft.codexModel ?? "",
+          })}
+          {renderTextField({
+            label: "Claude model",
+            name: "claudeModel",
+            onChange: onUpdateField,
+            value: model.draft.claudeModel ?? "",
+          })}
+          {renderTextField({
+            label: "Cursor model",
+            name: "cursorModel",
+            onChange: onUpdateField,
+            value: model.draft.cursorModel ?? "",
+          })}
+          {renderFieldHelper(modelFieldHelper)}
+        </div>
 
         <div className="xb-settings-route__switches">
           {orderedSwitches(model.draft).map((switchConfig) =>
@@ -753,6 +875,9 @@ export function SettingsRoute({
       onUpdateField={(field, value) => {
         setModel((current) => updateTextField(current, field, value));
       }}
+      onUpdateSelect={(field, value) => {
+        setModel((current) => updateSelectField(current, field, value));
+      }}
       onUpdateSwitch={(field, value) => {
         setModel((current) => updateSwitchField(current, field, value));
       }}
@@ -900,6 +1025,10 @@ export function createSettingsRoutePublicDriver(
     },
     updateField: (field, value) => {
       model = updateTextField(model, field, value);
+      return render();
+    },
+    updateSelect: (field, value) => {
+      model = updateSelectField(model, field, value);
       return render();
     },
     updateSwitch: (field, value) => {
