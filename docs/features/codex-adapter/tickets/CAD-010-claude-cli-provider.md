@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # CAD-010: Claude CLI Provider
@@ -67,3 +67,4 @@ Stderr-only output (stdout empty → `empty_stdout`); usage fields absent (usage
 
 - 2026-06-11 — Created by arch-recon (multi-provider epic extension; validated APPROVE_WITH_CONCERNS, cycle 2).
 - 2026-06-11 — Verification steps executed live (claude 2.1.111): envelope captured (`structured_output` field); `--json-schema` inline-only (file path hangs — contingency removed); `--tools ""` confirmed no-execution; keychain requires `USER` in the env allowlist (added to spec). Fixtures must encode the captured envelope.
+- 2026-06-12 — RGB pipeline DONE (rgb-tdd): Red tests `2bb382c` → Blue(Red) REJECT (unit fixtures vs route fixtures contract collision: provider-unit tests parsed judge-shaped fixtures against a `{draft,confidence}` contract — 4 unsatisfiable-at-Green cases) → Red fix (decoupled draft-shaped unit fixtures from captured judge-shaped route fixtures) → Blue(Red) APPROVE → Green impl `003bade` → gates.py all clean → Blue(Green)+Yellow APPROVE. New `ClaudeCliProvider`+`ClaudeCommandBuilder`+`ClaudeCliOutputParser`; `claude -p --output-format json --json-schema <inline> --system-prompt <instr> --tools "" --no-session-persistence --setting-sources ""` (no `--bare`, no file-path schema), `--model` iff configured, 100KB inline-arg guard, envelope-tolerant parser (`structured_output`→`result`→fence-strip), `claudeCliProcessEnvAllowlist = base + ANTHROPIC_API_KEY + USER`, registry entry (readiness `{command:"claude",sandbox:"tools-disabled"}`, label from shared catalog). Engine suite 281/281, typecheck+lint clean; failure `details` leak nothing (sentinel-verified). 1 rejection cycle (Red station) + 1 infra retry (first Red agent hit an org spend limit; restarted clean). Fixtures encode the live-captured envelopes (verification recorded above); CLIs never spawned in CI.
