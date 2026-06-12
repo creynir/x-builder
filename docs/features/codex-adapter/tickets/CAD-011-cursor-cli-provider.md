@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # CAD-011: Cursor CLI Provider
@@ -66,3 +66,4 @@ Envelope field names drifting on a future CLI build (tier-2 direct parse and tie
 
 - 2026-06-11 — Created by arch-recon (multi-provider epic extension; validated APPROVE_WITH_CONCERNS, cycle 2).
 - 2026-06-11 — Verification steps executed live (cursor-agent 2026.06.11): envelope captured (`result` JSON-string, camelCase usage keys); full designed argv verified in print mode; latency ~7–9s; auth works under the base env allowlist with no extra vars. Fixtures must encode the captured envelope.
+- 2026-06-12 — RGB pipeline DONE (rgb-tdd): Red tests `11ef17b` → Blue(Red) APPROVE → Green impl `23749c7` → gates.py all clean → Blue(Green)+Yellow APPROVE. Extracted codex `buildPrompt` → shared `buildStructuredPromptEnvelope` (codex byte-identical, snapshot-enforced; inline copy deleted — one path); new `CursorCliProvider`+`CursorCommandBuilder`+lenient 4-tier `CursorCliOutputParser`; `cursor-agent -p --output-format json --mode ask --sandbox enabled --trust --workspace <root> <envelope>` with mandatory `stdin:""` (hang-vector fix), `--model` iff configured, 100KB guard, `cursorCliProcessEnvAllowlist = base + CURSOR_API_KEY`, registry entry (readiness `{command:"cursor-agent",sandbox:"ask-mode"}`, version-only — never `status`/`about`). All three providers now register uniformly. Engine suite 316/316, typecheck+lint clean; failure `details` leak nothing. 0 rejection cycles. Fixtures encode the live-captured envelope (JSON-string `result`, camelCase usage); CLIs never spawned in CI.
