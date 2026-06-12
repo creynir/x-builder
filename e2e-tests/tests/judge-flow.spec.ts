@@ -24,8 +24,6 @@ test("judges a pasted draft and renders the verdict panel with provider attribut
   await expect(judgePanel.getByText(sampleVerdict.improvements[0]!)).toBeVisible();
   // The stubbed response model "codex-cli" maps through the shared catalog to "Codex judge".
   await expect(judgePanel.getByText("Judged by Codex judge")).toBeVisible();
-
-  await page.screenshot({ path: "/tmp/lj-judge-verdict.png", fullPage: true });
 });
 
 test("disables the judge button with a neutral hint when the provider is unavailable", async ({ page }) => {
@@ -39,6 +37,4 @@ test("disables the judge button with a neutral hint when the provider is unavail
   await expect(
     page.getByText("The judge is unavailable right now. Check the provider in Settings."),
   ).toBeVisible();
-
-  await page.screenshot({ path: "/tmp/lj-judge-unavailable.png", fullPage: true });
 });
