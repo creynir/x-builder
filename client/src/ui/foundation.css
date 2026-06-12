@@ -394,6 +394,11 @@ select {
   font: var(--type-body-small);
 }
 
+.xb-judge-verdict__attribution {
+  color: var(--text-muted);
+  font: var(--type-caption);
+}
+
 .xb-judge-verdict__headline {
   margin: 0;
   color: var(--text-primary);

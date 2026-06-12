@@ -6,6 +6,7 @@ import {
   type ReactElement,
 } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { judgeProviderLabels } from "@x-builder/shared";
 import type { JudgeScores, JudgeVerdictLabel } from "@x-builder/shared";
 
 import { RouteErrorBanner } from "../../shell/route-error-banner";
@@ -265,6 +266,15 @@ const judgeScoreRows: Array<{ key: keyof JudgeScores; label: string }> = [
   { key: "negativeRisk", label: "Negative risk" },
 ];
 
+// Maps a verdict's producing model id through the shared provider catalog. Ids
+// inside the closed enum resolve to their label; ids outside it (the schema
+// allows any string) fall back to the raw id rather than rendering blank.
+function providerLabelFor(modelId: string): string {
+  return modelId in judgeProviderLabels
+    ? judgeProviderLabels[modelId as keyof typeof judgeProviderLabels]
+    : modelId;
+}
+
 export function JudgePanel({
   judgeReady,
   draftReady,
@@ -280,15 +290,17 @@ export function JudgePanel({
   const disabled = !judgeReady || !draftReady || isLoading;
 
   return (
-    <section aria-label="Codex judge" className="xb-judge-panel">
+    <section aria-label="Draft judge" className="xb-judge-panel">
       <div className="xb-judge-panel__header">
-        <h2>Codex Judge</h2>
+        <h2>Draft Judge</h2>
         <Button disabled={disabled} onClick={onJudge} type="button" variant="secondary">
-          {isLoading ? "Judging…" : judge.status === "failed" ? "Retry judge" : "Judge draft"}
+          {isLoading ? "Judging…" : judge.status === "failed" ? "Try judging again" : "Judge draft"}
         </Button>
       </div>
       {judgeReady ? null : (
-        <p className="xb-judge-panel__hint">Codex judge is unavailable right now.</p>
+        <p className="xb-judge-panel__hint">
+          The judge is unavailable right now. Check the provider in Settings.
+        </p>
       )}
       {judge.status === "loading" ? (
         <div aria-busy="true" role="status">
@@ -306,6 +318,9 @@ export function JudgePanel({
             <Badge>{judgeVerdictLabels[judge.verdict.verdict]}</Badge>
             <span className="xb-judge-verdict__confidence">
               Confidence: {judge.verdict.confidence}
+            </span>
+            <span className="xb-judge-verdict__attribution">
+              Judged by {providerLabelFor(judge.model)}
             </span>
           </div>
           <p className="xb-judge-verdict__headline">{judge.verdict.headline}</p>

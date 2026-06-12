@@ -22,7 +22,7 @@ export type WriterApiClient = {
 export type JudgeState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; verdict: JudgeVerdict }
+  | { status: "ready"; verdict: JudgeVerdict; model: string }
   | { status: "failed"; error: ApiError };
 
 export type WriterCandidate = {
@@ -183,7 +183,7 @@ function normalizeJudgeError(error: unknown): ApiError {
 
   return {
     code: "judge_failed",
-    message: "The Codex judge could not score this draft. Try again.",
+    message: "The judge could not score this draft. Try again.",
     retryable: true,
     scope: "judge",
     status: 503,
@@ -1080,7 +1080,7 @@ export async function runJudgeDraft(
 
     nextModel = publishLatest(publish, nextModel, (current) => ({
       ...current,
-      judge: { status: "ready", verdict: response.verdict },
+      judge: { status: "ready", verdict: response.verdict, model: response.model },
     }));
   } catch (error) {
     nextModel = publishLatest(publish, nextModel, (current) => ({
