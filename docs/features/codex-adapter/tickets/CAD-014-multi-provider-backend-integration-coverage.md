@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # CAD-014: [INT] Multi-Provider Backend Contract Integration Coverage
@@ -29,3 +29,5 @@ Settings repository ↔ provider resolver ↔ `JudgeDraftService` ↔ `Structure
 ## Pipeline Log
 
 - 2026-06-11 — Created by arch-recon (multi-provider epic extension; validated APPROVE_WITH_CONCERNS, cycle 2).
+- 2026-06-12 — RGB [INT] pipeline DONE (rgb-tdd): Purple integration tests `3930998` → Blue(Validate Purple) APPROVE. Two suites (`multi-provider-judge-integration.test.ts` + `multi-provider-judge-readiness-integration.test.ts`) drive the real stack (settings repo → resolver → JudgeDraftService → StructuredLlmService → all 3 providers; SelectedJudgeReadinessProbe → registry → CliReadinessProbe → GET /status) via Fastify inject + fake `ProcessRunner` + temp-root repos. All 4 flows + 6 falsifiable architectural invariants (registry-completeness, read-only argv, no secret/output leakage, version-only readiness, label single-source, model-flag-iff-configured) covered. Engine suite 344/344, typecheck+lint clean. 0 rejection cycles.
+  - Note (not a defect; pre-existing): the DEFAULT judge path runs `attempts:1` (no retry) — `JudgeDraftService.judge()` sets no `attempts`, so a retryable failure maps straight to 503; the ≤2 bounded retry is opt-in (exercised by `structured-llm-service.test.ts` + CAD-010's `attempts:2` claude test). Blue confirmed via `git log -S` that single-attempt predates this epic (since CAD-001), so it is correct integration coverage, not a regression. If a one-retry-on-retryable judge default is ever wanted, that's a separate ticket against the judge wiring.
