@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { subsystemStatusSchema, type SubsystemStatus } from "@x-builder/shared";
 
-import type {
-  ProcessRunner,
-  ProcessRunOptions,
-  ProcessRunResult,
+import {
+  baseProcessEnvAllowlist,
+  type ProcessRunner,
+  type ProcessRunOptions,
+  type ProcessRunResult,
 } from "../process-runner.js";
 
 // The codex provider's readiness contract, expressed as a spec the parameterized
@@ -146,8 +147,14 @@ describe("CliReadinessProbe with the codex readiness spec", () => {
       timeoutMs: executionTimeoutMs,
       maxStdoutBytes: 512,
       maxStderrBytes: 512,
-      envAllowlist: ["PATH"],
+      // The readiness probe must run the version check under the provider-neutral
+      // base env allowlist, not a PATH-only env. cursor-agent's launcher needs
+      // HOME ("HOME: unbound variable" crash), so a PATH-only readiness env
+      // false-negatives Cursor while judging itself works.
+      envAllowlist: [...baseProcessEnvAllowlist],
     });
+    // Explicit regression guard: HOME must be in the readiness env (see above).
+    expect(call.options.envAllowlist).toContain("HOME");
     expect(call.options).not.toHaveProperty("stdin");
     expect(status.state).toBe("ready");
   });

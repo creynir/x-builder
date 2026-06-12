@@ -78,6 +78,58 @@ describe("JudgeDraftService", () => {
     );
   });
 
+  it("requires additionalProperties false on every object in the judge output schema for strict structured-output providers", async () => {
+    // Strict structured-output providers (codex 0.139 / gpt-5.5 routing
+    // --output-schema through OpenAI structured output) reject any object node
+    // that does not set "additionalProperties": false with HTTP 400
+    // ("'additionalProperties' is required to be supplied and to be false").
+    // The schema is module-private, so capture it from the request the service
+    // builds through the injected fake gateway.
+    const captured: StructuredLlmRequest<JudgeVerdict>[] = [];
+    const service = new JudgeDraftService({
+      generateStructured: async (request) => {
+        captured.push(request);
+        return successResult;
+      },
+    });
+
+    await service.judge("draft");
+
+    const schema = captured[0]!.structuredOutput.schema;
+
+    // Pin the two known object nodes explicitly so the contract is legible.
+    expect(schema.additionalProperties).toBe(false);
+    const scoresNode = (schema.properties as Record<string, unknown>).scores as
+      | Record<string, unknown>
+      | undefined;
+    expect(scoresNode?.additionalProperties).toBe(false);
+
+    // Falsifiable, future-proof guard: EVERY object node anywhere in the schema
+    // must set additionalProperties:false, so any object node added later
+    // without it also turns this red.
+    const objectNodesMissingFlag = (node: unknown, path: string): string[] => {
+      if (Array.isArray(node)) {
+        return node.flatMap((child, index) =>
+          objectNodesMissingFlag(child, `${path}[${index}]`),
+        );
+      }
+      if (node === null || typeof node !== "object") {
+        return [];
+      }
+      const record = node as Record<string, unknown>;
+      const offenders: string[] = [];
+      if (record.type === "object" && record.additionalProperties !== false) {
+        offenders.push(path);
+      }
+      for (const [key, value] of Object.entries(record)) {
+        offenders.push(...objectNodesMissingFlag(value, `${path}.${key}`));
+      }
+      return offenders;
+    };
+
+    expect(objectNodesMissingFlag(schema, "schema")).toEqual([]);
+  });
+
   it("derives the verdict band from overall in the structured-output parser", async () => {
     // The parser receives the model output (no verdict field) and derives the
     // verdict from scores.overall, so the verdict can never disagree with the score.
