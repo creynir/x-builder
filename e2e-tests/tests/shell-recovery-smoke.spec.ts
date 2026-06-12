@@ -61,6 +61,9 @@ function codexUnavailableStatus() {
 function settingsResponse() {
   return {
     settings: {
+      claudeModel: "",
+      codexModel: "",
+      cursorModel: "",
       engineBaseUrl: engineBaseUrl,
       judgeProvider: "codex-cli",
       showDeterministicDetails: true,
@@ -207,6 +210,10 @@ test("sidebar navigation reaches every shell route with active state", async ({ 
 
   await expect(page.getByLabel("Engine URL")).toBeVisible();
   await expect(page.getByLabel("Storage path")).toBeVisible();
+  await expect(page.getByLabel("Judge provider")).toBeVisible();
+  await expect(page.getByLabel("Codex model")).toBeVisible();
+  await expect(page.getByLabel("Claude model")).toBeVisible();
+  await expect(page.getByLabel("Cursor model")).toBeVisible();
   await expect(page.getByRole("button", { name: "Back to Studio" })).toBeVisible();
   expect(requests.status).toBeGreaterThan(0);
   expect(requests.settings).toBeGreaterThan(0);
@@ -304,9 +311,19 @@ test("opens Settings from partial readiness without exposing raw judge controls"
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   await expect(page.getByLabel("Engine URL")).toBeVisible();
   await expect(page.getByLabel("Storage path")).toBeVisible();
+  await expect(page.getByLabel("Judge provider")).toBeVisible();
   await expect(page.getByLabel("Codex command label")).toHaveCount(0);
   await expect(page.getByText("Codex command label")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Test readiness" })).toBeEnabled();
+  await expect(page.getByText("Judge provider")).not.toHaveText(
+    /codex exec|raw llm|llm judge|judge retry|retry judge/i,
+  );
+  await expect(page.getByText("Codex model")).not.toHaveText(
+    /codex exec|raw llm|llm judge|judge retry|retry judge/i,
+  );
+  await expect(page.getByText("Leave empty to use the provider's default.")).not.toHaveText(
+    /codex exec|raw llm|llm judge|judge retry|retry judge/i,
+  );
 
   await page.getByRole("button", { name: "Test readiness" }).click();
 

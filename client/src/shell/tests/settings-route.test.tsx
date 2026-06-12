@@ -6,8 +6,10 @@ import type {
   AppSettings,
   AppSettingsResponse,
   AppStatus,
+  JudgeProviderId,
   RouteConfig,
 } from "@x-builder/shared";
+import { judgeProviderIdSchema, judgeProviderLabels } from "@x-builder/shared";
 
 import {
   createShellPreferencesStore,
@@ -20,12 +22,13 @@ const appShellModulePath = "../app-shell";
 type SettingsFieldName = keyof AppSettings;
 type TextSettingsFieldName = Extract<
   SettingsFieldName,
-  "engineBaseUrl" | "storagePath"
+  "engineBaseUrl" | "storagePath" | "codexModel" | "claudeModel" | "cursorModel"
 >;
 type SwitchSettingsFieldName = Extract<
   SettingsFieldName,
   "showDeterministicDetails"
 >;
+type SelectSettingsFieldName = Extract<SettingsFieldName, "judgeProvider">;
 
 type SettingsApiClient = {
   getSettings: () => Promise<AppSettingsResponse>;
@@ -54,6 +57,7 @@ type SettingsRoutePublicDriver = {
   stayOnSettings: () => string;
   testReadiness: () => Promise<string>;
   updateField: (field: TextSettingsFieldName, value: string) => string;
+  updateSelect: (field: SelectSettingsFieldName, value: JudgeProviderId) => string;
   updateSwitch: (field: SwitchSettingsFieldName, value: boolean) => string;
   useDefaults: () => string;
   warnBeforeNavigateAway: (to: RouteConfig["path"]) => string;
@@ -100,6 +104,40 @@ function expectInputValue(html: string, label: string, value: string) {
   expect(html).toContain(`value="${value.replaceAll('"', "&quot;")}"`);
 }
 
+const bannedJudgeJargon = /codex exec|raw llm|llm judge|judge retry|retry judge/i;
+
+function selectMarkup(html: string): string {
+  const match = html.match(/<select\b[\s\S]*?<\/select>/);
+
+  if (match === null) {
+    throw new Error("Expected a <select> element in the Settings markup.");
+  }
+
+  return match[0];
+}
+
+function optionLabel(selectHtml: string, value: string): string {
+  const match = selectHtml.match(
+    new RegExp(`<option\\b[^>]*value="${value}"[^>]*>([^<]*)</option>`),
+  );
+
+  if (match === null || match[1] === undefined) {
+    throw new Error(`Expected an <option> for value "${value}".`);
+  }
+
+  return match[1];
+}
+
+function optionCount(selectHtml: string): number {
+  return (selectHtml.match(/<option\b/g) ?? []).length;
+}
+
+function selectedOptionValue(selectHtml: string): string | null {
+  const match = selectHtml.match(/<option\b[^>]*value="([^"]*)"[^>]*selected/);
+
+  return match?.[1] ?? null;
+}
+
 function expectChecked(html: string, label: string, checked: boolean) {
   expect(textContent(html)).toContain(label);
 
@@ -113,6 +151,9 @@ function expectChecked(html: string, label: string, checked: boolean) {
 
 function createDefaultSettings(): AppSettings {
   return {
+    claudeModel: "",
+    codexModel: "",
+    cursorModel: "",
     engineBaseUrl: "http://127.0.0.1:4173",
     judgeProvider: "codex-cli",
     showDeterministicDetails: true,
@@ -122,6 +163,9 @@ function createDefaultSettings(): AppSettings {
 
 function createSavedSettings(): AppSettings {
   return {
+    claudeModel: "",
+    codexModel: "",
+    cursorModel: "",
     engineBaseUrl: "http://localhost:5123",
     judgeProvider: "codex-cli",
     showDeterministicDetails: false,
@@ -617,6 +661,289 @@ describe("SettingsRoute rendering", () => {
     expect(text).toContain("Show deterministic details");
     expect(text).toContain("Save settings");
     expect(text).toContain("Test readiness");
+  });
+});
+
+describe("SettingsRoute judge provider selection", () => {
+  it("renders the judge provider select with the saved value and one catalog-labeled option per id", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const savedSettings = createSavedSettings();
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(savedSettings, "persisted"),
+      ),
+    });
+
+    const html = await createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    }).load();
+    const select = selectMarkup(html);
+
+    expect(textContent(html)).toContain("Judge provider");
+    expect(optionCount(select)).toBe(judgeProviderIdSchema.options.length);
+    for (const id of judgeProviderIdSchema.options) {
+      expect(optionLabel(select, id)).toBe(judgeProviderLabels[id]);
+    }
+    expect(selectedOptionValue(select)).toBe(savedSettings.judgeProvider);
+  });
+
+  it("dirties on a provider change and gates Test readiness behind a save", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(createSavedSettings(), "persisted"),
+      ),
+    });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    });
+
+    await driver.load();
+    const html = driver.updateSelect("judgeProvider", "claude-cli");
+    const text = textContent(html);
+
+    expect(text).toContain("Unsaved changes");
+    expect(text).toContain("Save settings before testing readiness.");
+    expect(html).toMatch(/<button\b[^>]*disabled=""[^>]*>Test readiness/);
+    expect(selectedOptionValue(selectMarkup(html))).toBe("claude-cli");
+
+    await driver.testReadiness();
+
+    expect(apiClient.getStatus).not.toHaveBeenCalled();
+  });
+
+  it("saves a provider change with the new id and publishes the refreshed status", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const readyStatus = createReadyStatus();
+    const onStatusRefresh = vi.fn();
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(createSavedSettings(), "persisted"),
+      ),
+      getStatus: vi.fn(async () => readyStatus),
+    });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      onStatusRefresh,
+      renderRoute: SettingsRoute,
+    });
+
+    await driver.load();
+    driver.updateSelect("judgeProvider", "cursor-cli");
+    const savedHtml = await driver.save();
+
+    expect(apiClient.saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ judgeProvider: "cursor-cli" }),
+    );
+    expect(onStatusRefresh).toHaveBeenCalledWith(readyStatus);
+    expect(textContent(savedHtml)).toContain("Settings saved");
+    expect(textContent(savedHtml)).not.toContain("Unsaved changes");
+    expect(selectedOptionValue(selectMarkup(savedHtml))).toBe("cursor-cli");
+  });
+
+  it("preserves the drafted provider when save fails and re-issues it on retry", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const saveError = createApiError();
+    const saveSettings = vi
+      .fn<SettingsApiClient["saveSettings"]>()
+      .mockImplementationOnce(async () => {
+        throw Object.assign(new Error(saveError.message), {
+          apiError: saveError,
+        });
+      })
+      .mockImplementationOnce(async (settings) =>
+        settingsResponse(settings, "persisted"),
+      );
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(createSavedSettings(), "persisted"),
+      ),
+      saveSettings,
+    });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    });
+
+    await driver.load();
+    driver.updateSelect("judgeProvider", "claude-cli");
+    const failedHtml = await driver.save();
+    const failedText = textContent(failedHtml);
+
+    expect(failedText).toContain(
+      "Settings could not be saved. Your edits are still here.",
+    );
+    expect(failedText).toContain("Retry save");
+    expect(selectedOptionValue(selectMarkup(failedHtml))).toBe("claude-cli");
+
+    const retriedHtml = await driver.save();
+
+    expect(saveSettings).toHaveBeenCalledTimes(2);
+    expect(saveSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ judgeProvider: "claude-cli" }),
+    );
+    expect(textContent(retriedHtml)).toContain("Settings saved");
+  });
+
+  it("warns before discarding a dirty provider change and honors Stay then Discard", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const onNavigateToWriter = vi.fn();
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(createSavedSettings(), "persisted"),
+      ),
+    });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      onNavigateToWriter,
+      openedFrom: "writer",
+      renderRoute: SettingsRoute,
+    });
+
+    await driver.load();
+    driver.updateSelect("judgeProvider", "claude-cli");
+    const warningHtml = driver.warnBeforeNavigateAway("/writer");
+    const warningText = textContent(warningHtml);
+
+    expect(warningText).toContain("You have unsaved settings changes.");
+    expect(warningText).toContain("Stay on Settings");
+    expect(warningText).toContain("Discard changes");
+    expect(onNavigateToWriter).not.toHaveBeenCalled();
+
+    const stayedHtml = driver.stayOnSettings();
+
+    expect(textContent(stayedHtml)).toContain("Unsaved changes");
+    expect(onNavigateToWriter).not.toHaveBeenCalled();
+
+    driver.warnBeforeNavigateAway("/writer");
+    driver.discardUnsavedNavigation();
+
+    expect(onNavigateToWriter).toHaveBeenCalledOnce();
+  });
+
+  it("renders the provider select and model fields without banned judge jargon", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const readyStatus = createReadyStatus();
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(createSavedSettings(), "persisted"),
+      ),
+      getStatus: vi.fn(async () => readyStatus),
+    });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    });
+
+    await driver.load();
+    const html = await driver.testReadiness();
+    const text = textContent(html);
+
+    expect(text).toContain("Judge provider");
+    expect(text).toContain("Codex model");
+    expect(text).toContain("Claude model");
+    expect(text).toContain("Cursor model");
+    expect(text).toContain("Leave empty to use the provider's default.");
+    for (const id of judgeProviderIdSchema.options) {
+      expect(text).toContain(judgeProviderLabels[id]);
+    }
+    expect(text).not.toMatch(bannedJudgeJargon);
+    expect(html).not.toMatch(bannedJudgeJargon);
+  });
+
+  it("clears dirty when a model field is reverted and rides the saved value through the PATCH", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const savedSettings = createSavedSettings();
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(savedSettings, "persisted"),
+      ),
+    });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    });
+
+    await driver.load();
+    const dirtyHtml = driver.updateField("codexModel", "gpt-5.2-codex");
+
+    expect(textContent(dirtyHtml)).toContain("Unsaved changes");
+    expectInputValue(dirtyHtml, "Codex model", "gpt-5.2-codex");
+
+    const revertedHtml = driver.updateField(
+      "codexModel",
+      savedSettings.codexModel ?? "",
+    );
+
+    expect(textContent(revertedHtml)).not.toContain("Unsaved changes");
+
+    driver.updateField("codexModel", "gpt-5.2-codex");
+    await driver.save();
+
+    expect(apiClient.saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ codexModel: "gpt-5.2-codex" }),
+    );
+  });
+
+  it("saves an empty model field so the provider runs its default", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const savedSettings = createSavedSettings();
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(savedSettings, "persisted"),
+      ),
+    });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    });
+
+    await driver.load();
+    driver.updateField("codexModel", "gpt-5.2-codex");
+    const clearedHtml = driver.updateField("codexModel", "");
+
+    expectInputValue(clearedHtml, "Codex model", "");
+
+    driver.updateField("storagePath", "/tmp/x-builder-empty-model");
+    await driver.save();
+
+    const savedDraft = vi.mocked(apiClient.saveSettings).mock.calls.at(-1)?.[0];
+
+    expect(savedDraft).toBeDefined();
+    expect(savedDraft?.codexModel ?? "").toBe("");
+  });
+
+  it("renders an out-of-catalog persisted provider as a raw option without crashing", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const forcedSettings = {
+      ...createSavedSettings(),
+      judgeProvider: "ghost-cli" as JudgeProviderId,
+    };
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(forcedSettings, "persisted"),
+      ),
+    });
+
+    const html = await createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    }).load();
+    const select = selectMarkup(html);
+
+    expect(textContent(html)).toContain("Judge provider");
+    expect(selectedOptionValue(select)).toBe("ghost-cli");
   });
 });
 
