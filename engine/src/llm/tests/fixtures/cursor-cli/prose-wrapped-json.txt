@@ -1,0 +1,4 @@
+Here is my assessment of the draft you shared.
+I considered the hook, the evidence, and the closing line before scoring.
+{"draft":"Specific proof beats generic claims.","confidence":0.91}
+Let me know if you would like a tighter rewrite of the opening sentence.

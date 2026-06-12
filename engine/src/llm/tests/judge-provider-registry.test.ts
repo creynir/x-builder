@@ -34,14 +34,15 @@ const fakeRunner = (): ProcessRunner =>
   }) as unknown as ProcessRunner;
 
 describe("judge provider registry", () => {
-  it("registers both the codex-cli and claude-cli providers", async () => {
+  it("registers the codex-cli, claude-cli, and cursor-cli providers", async () => {
     const registry = await loadJudgeProviderRegistry();
 
-    // Membership, not an exact set: cursor-cli arrives in a later ticket, so the
-    // registry must CONTAIN these ids without pinning "exactly these two".
+    // Membership, not an exact set: future providers may arrive, so the registry
+    // must CONTAIN these ids without pinning "exactly these three".
     const ids = registry.map((entry) => entry.id);
     expect(ids).toContain("codex-cli");
     expect(ids).toContain("claude-cli");
+    expect(ids).toContain("cursor-cli");
   });
 
   it("creates a codex provider whose id matches the registered codex entry", async () => {
@@ -91,6 +92,40 @@ describe("judge provider registry", () => {
       adapter: "claude-cli",
       label: judgeProviderLabels["claude-cli"],
       sandbox: "tools-disabled",
+    });
+  });
+
+  it("creates a cursor provider whose id matches the registered cursor entry", async () => {
+    const registry = await loadJudgeProviderRegistry();
+    const cursorEntry = registry.find((entry) => entry.id === "cursor-cli");
+
+    if (cursorEntry === undefined) {
+      throw new Error("Expected a cursor-cli entry in the judge provider registry.");
+    }
+
+    const provider = cursorEntry.createProvider({
+      runner: fakeRunner(),
+      workspaceRoot: "/tmp/x-builder-registry-workspace",
+    });
+
+    expect(provider.id).toBe("cursor-cli");
+  });
+
+  it("labels the cursor entry from the shared catalog and probes cursor-agent with the ask-mode sandbox", async () => {
+    const registry = await loadJudgeProviderRegistry();
+    const cursorEntry = registry.find((entry) => entry.id === "cursor-cli");
+
+    if (cursorEntry === undefined) {
+      throw new Error("Expected a cursor-cli entry in the judge provider registry.");
+    }
+
+    expect(cursorEntry.judgeLabel).toBe(judgeProviderLabels["cursor-cli"]);
+    expect(cursorEntry.judgeLabel).toBe("Cursor judge");
+    expect(cursorEntry.readiness).toMatchObject({
+      command: "cursor-agent",
+      adapter: "cursor-cli",
+      label: judgeProviderLabels["cursor-cli"],
+      sandbox: "ask-mode",
     });
   });
 });

@@ -1,0 +1,19 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "duration_ms": 7710,
+  "duration_api_ms": 7100,
+  "result": {
+    "draft": "Specific proof beats generic claims.",
+    "confidence": 0.91
+  },
+  "session_id": "33333333-4444-5555-6666-777777777777",
+  "request_id": "req_cursor_obj_0001",
+  "usage": {
+    "inputTokens": 488,
+    "outputTokens": 90,
+    "cacheReadTokens": 0,
+    "cacheWriteTokens": 0
+  }
+}
