@@ -369,15 +369,7 @@ function renderSwitch({
 }
 
 function renderFieldHelper(text: string): ReactElement {
-  // Static developer copy (never user input). Rendered as raw markup so an
-  // ASCII apostrophe in helper copy reaches the static-markup output verbatim
-  // rather than as the &#x27; entity that React text escaping would emit.
-  return (
-    <span
-      className="xb-settings-route__helper"
-      dangerouslySetInnerHTML={{ __html: text }}
-    />
-  );
+  return <span className="xb-settings-route__helper">{text}</span>;
 }
 
 function renderSelectField({

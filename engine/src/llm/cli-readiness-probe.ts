@@ -81,12 +81,14 @@ export class CliReadinessProbe {
     const timedOut = result.timedOut === true || result.code === "request_timeout";
     const commandAvailable = result.code !== "process_failed";
 
+    const capitalize = (s: string) => (s.length ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
     return this.subsystem("unavailable", {
       message: timedOut
-        ? `${this.spec.command} version check timed out.`
+        ? `${capitalize(this.spec.command)} version check timed out.`
         : commandAvailable
-          ? `${this.spec.command} version check failed.`
-          : `${this.spec.command} command is not available.`,
+          ? `${capitalize(this.spec.command)} version check failed.`
+          : `${capitalize(this.spec.command)} command is not available.`,
       retryable: true,
       details: this.details(commandAvailable),
     });
