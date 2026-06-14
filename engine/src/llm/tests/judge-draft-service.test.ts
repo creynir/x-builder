@@ -17,6 +17,11 @@ const scores = {
   dwellProxy: 70,
   voiceMatch: 85,
   negativeRisk: 10,
+  answerEffort: 55,
+  strangerAnswerability: 48,
+  statusDependency: 30,
+  replyVsQuoteOrientation: 62,
+  audienceMatch: null,
 };
 
 const verdict: JudgeVerdict = {
@@ -244,5 +249,131 @@ describe("JudgeDraftService", () => {
     expect(resolveProvider).toHaveBeenCalledTimes(2);
     expect(generateStructured.mock.calls[0]![0].provider).toBe("codex-cli");
     expect(generateStructured.mock.calls[1]![0].provider).toBe("cursor-cli");
+  });
+});
+
+// The serialized prompt the model sees: instructions, every turn's content, and
+// any metadata flattened to one string. Used to assert that an account profile
+// reaches the envelope without pinning which field carries it.
+const serializeRequestPrompt = (request: StructuredLlmRequest<JudgeVerdict>): string =>
+  JSON.stringify({
+    instructions: request.instructions,
+    turns: request.turns,
+    metadata: request.metadata ?? null,
+  });
+
+describe("JudgeDraftService account profile and rubric", () => {
+  it("passes a supplied account profile into the structured-prompt envelope", async () => {
+    const captured: StructuredLlmRequest<JudgeVerdict>[] = [];
+    const service = new JudgeDraftService({
+      generateStructured: async (request) => {
+        captured.push(request);
+        return successResult;
+      },
+    });
+
+    const accountProfile = "Indie hacker shipping a local-first writing tool for founders.";
+    await service.judge("A draft worth judging.", accountProfile);
+
+    expect(serializeRequestPrompt(captured[0]!)).toContain(accountProfile);
+  });
+
+  it("does not leak an account profile into the envelope when none is provided", async () => {
+    const captured: StructuredLlmRequest<JudgeVerdict>[] = [];
+    const service = new JudgeDraftService({
+      generateStructured: async (request) => {
+        captured.push(request);
+        return successResult;
+      },
+    });
+
+    await service.judge("A draft worth judging.");
+
+    expect(serializeRequestPrompt(captured[0]!)).not.toContain("Indie hacker shipping");
+  });
+
+  it("describes the five new dimensions in the judge instructions and output schema", async () => {
+    const captured: StructuredLlmRequest<JudgeVerdict>[] = [];
+    const service = new JudgeDraftService({
+      generateStructured: async (request) => {
+        captured.push(request);
+        return successResult;
+      },
+    });
+
+    await service.judge("draft");
+
+    const request = captured[0]!;
+    const newDimensions = [
+      "answerEffort",
+      "strangerAnswerability",
+      "statusDependency",
+      "replyVsQuoteOrientation",
+      "audienceMatch",
+    ];
+
+    // The output schema the provider receives must require all thirteen scores.
+    const scoresNode = (
+      (request.structuredOutput.schema.properties as Record<string, unknown>).scores as Record<
+        string,
+        unknown
+      >
+    );
+    const scoreProperties = scoresNode.properties as Record<string, unknown>;
+    for (const dimension of newDimensions) {
+      expect(scoreProperties).toHaveProperty(dimension);
+    }
+    expect(scoresNode.required).toEqual(expect.arrayContaining(newDimensions));
+
+    // The instructions must brief the model on the new dimensions and on the
+    // null-audienceMatch rule when no profile is present.
+    for (const dimension of newDimensions) {
+      expect(request.instructions).toContain(dimension);
+    }
+    expect(request.instructions).toContain("null");
+  });
+
+  it("instructs a null audienceMatch when judging without an account profile", async () => {
+    const captured: StructuredLlmRequest<JudgeVerdict>[] = [];
+    const service = new JudgeDraftService({
+      generateStructured: async (request) => {
+        captured.push(request);
+        return successResult;
+      },
+    });
+
+    await service.judge("draft");
+
+    // audienceMatch is required on the wire and explicitly nullable: the schema
+    // the provider receives must carry it as a score property.
+    const request = captured[0]!;
+    const scoresNode = (request.structuredOutput.schema.properties as Record<string, unknown>)
+      .scores as Record<string, unknown>;
+    const scoreProperties = scoresNode.properties as Record<string, unknown>;
+    expect(scoreProperties).toHaveProperty("audienceMatch");
+    expect((scoresNode.required as string[]) ?? []).toContain("audienceMatch");
+  });
+
+  it("validates the thirteen-dimension gateway output through the verdict schema", async () => {
+    // A success result already carries the full thirteen-dim verdict fixture; the
+    // service must surface it unchanged (proving it does not strip the new dims).
+    const generateStructured = vi.fn(
+      async (_request: StructuredLlmRequest<JudgeVerdict>) => successResult,
+    );
+    const service = new JudgeDraftService({ generateStructured });
+
+    const outcome = await service.judge("A draft worth judging.");
+
+    expect(outcome.status).toBe("judged");
+    if (outcome.status !== "judged") {
+      throw new Error("Expected a judged outcome.");
+    }
+    expect(outcome.response.verdict.scores).toMatchObject({
+      answerEffort: 55,
+      strangerAnswerability: 48,
+      statusDependency: 30,
+      replyVsQuoteOrientation: 62,
+      audienceMatch: null,
+    });
   });
 });

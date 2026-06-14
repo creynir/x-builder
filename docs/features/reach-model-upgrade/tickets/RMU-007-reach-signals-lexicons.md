@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # RMU-007: Reach signals — remove tension, split trending/tribe lexicons, answer-effort → pEscape/replies
@@ -65,3 +65,8 @@ moves only pEscape/replies; `pnpm test` + `pnpm typecheck` green.
 A trending term in an external-link post: the 0.03 cap still wins (applied last).
 "in 1 word" combined with anecdote phrasing composes both pEscape factors. pEscape never
 exceeds 1 after bonuses.
+
+## Pipeline Log
+
+- 2026-06-14 — **Done.** Standard pipeline: Red (`f885f24`) pinned tension-removal + trending/tribe lexicon split + answer-effort, each with a midpoint-unchanged guard (format+score held fixed); scope-confirmed (did NOT touch `quality_tension`/engagement-readiness) → Blue Validate Red APPROVE → Green (`b9bcf85`) removed the prediction tension signal + `tensionMultiplier`, added `trending-topic-lexicon.ts` (dated `2026-06-14`) + `tribeVocativeTerms`, wired trending(pEscape)/tribe(replies+20%)/answer-effort adjustments into `computeReachModel`, re-keyed the transitional `timely_wording` signal to `trendingTopicTerms`, removed blended `timelyTopicTerms` → Green flagged 3 stale RMU-006 contract pins (fixtures contained "agent"/"launch") → Red pin update (`5d898e1`, applied the trending/tribe factors to those pEscape/replies pins; midpoint/ranges unchanged) → Blue (Validate Green) + Yellow both APPROVE. Full `pnpm test` green (engine 482 / client 179 / shared 81), typecheck 5/5, lint clean, gates clean.
+- Invariant verified in source: every RMU-007 adjustment writes only `escapeProbability`/`expectedReplies` (midpoint fixed beforehand); external-link 0.03 cap applied LAST; pEscape clamped [0,1]. `tensionMultiplier`/`timelyTopicTerms` removed (zero non-test hits); `quality_tension` quality-score check untouched.

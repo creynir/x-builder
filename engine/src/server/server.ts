@@ -520,6 +520,19 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const judgeDraftService =
     options.judgeDraftService ?? createDefaultJudgeDraftService({ settingsRepository });
 
+  // Resolve the persisted account profile for the judge route's fallback. A
+  // missing or unreadable settings file yields no profile (undefined), so the
+  // judge proceeds profile-less rather than failing the request.
+  const resolveSettingsAccountProfile = async (): Promise<string | undefined> => {
+    try {
+      const { settings } = await settingsRepository.load();
+
+      return settings.accountProfile;
+    } catch {
+      return undefined;
+    }
+  };
+
   app.setNotFoundHandler((_request, reply) => {
     const apiError = notFoundError();
 
@@ -602,7 +615,15 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
 
   app.post("/drafts/judge", async (request, reply) => {
     const input = judgeDraftRequestSchema.parse(request.body);
-    const outcome = await judgeDraftService.judge(input.text);
+    // Prefer an explicit profile from the body; otherwise fall back to the
+    // persisted settings.accountProfile so the judge's audienceMatch is anchored
+    // to the user's configured account. When neither is present, no profile is
+    // passed and the model returns a null audienceMatch.
+    const accountProfile = input.accountProfile ?? (await resolveSettingsAccountProfile());
+    const outcome =
+      accountProfile !== undefined
+        ? await judgeDraftService.judge(input.text, accountProfile)
+        : await judgeDraftService.judge(input.text);
 
     if (outcome.status === "failed") {
       throw new NormalizedApiError(judgeFailedError(outcome.retryable));

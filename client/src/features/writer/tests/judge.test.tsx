@@ -1,7 +1,13 @@
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { judgeProviderLabels } from "@x-builder/shared";
-import type { ApiError, JudgeDraftResponse, JudgeVerdict } from "@x-builder/shared";
+import type {
+  ApiError,
+  JudgeDraftResponse,
+  JudgeScores,
+  JudgeVerdict,
+} from "@x-builder/shared";
 
 import {
   createInitialModel,
@@ -30,6 +36,11 @@ const verdict: JudgeVerdict = {
     dwellProxy: 70,
     voiceMatch: 85,
     negativeRisk: 10,
+    answerEffort: 55,
+    strangerAnswerability: 48,
+    statusDependency: 30,
+    replyVsQuoteOrientation: 62,
+    audienceMatch: null,
   },
   headline: "Strong hook, weak closer.",
   strengths: ["Concrete claim up front"],
@@ -41,6 +52,53 @@ const judgedResponse: JudgeDraftResponse = {
   verdict,
   model: "claude-cli",
   judgedAt: "2026-06-10T12:00:00.000Z",
+};
+
+// Verdict builder for the judge panel render tests. The base carries all
+// thirteen dimensions (the eight legacy + the five behavioral). `audienceMatch`
+// is required on the wire but nullable; callers override individual scores to
+// exercise the null-recovery, numeric, and pole-edge variants without retyping
+// the whole verdict.
+const buildVerdict = (scores: Partial<JudgeScores> = {}): JudgeVerdict => ({
+  ...verdict,
+  scores: { ...verdict.scores, ...scores },
+});
+
+// SSR-faithful element-tree traversal (the harness is node-env, no DOM and no
+// testing-library). renderToStaticMarkup drops event handlers, so handler
+// wiring is verified by walking the rendered React element tree and invoking
+// the captured handler — the same component-level pattern foundation.test.tsx
+// uses for the Switch onChange.
+type ChildShape = {
+  type?: unknown;
+  props?: Record<string, unknown> & { children?: unknown };
+};
+
+const flattenElements = (node: unknown): ChildShape[] => {
+  if (node === null || node === undefined || typeof node !== "object") {
+    return [];
+  }
+
+  if (Array.isArray(node)) {
+    return node.flatMap((child) => flattenElements(child));
+  }
+
+  const element = node as ChildShape;
+  const here = element.type !== undefined ? [element] : [];
+
+  return [...here, ...flattenElements(element.props?.children)];
+};
+
+const findByAriaLabel = (element: ReactElement, label: string): ChildShape => {
+  const match = flattenElements(element).find(
+    (child) => child.props?.["aria-label"] === label,
+  );
+
+  if (match === undefined) {
+    throw new Error(`Expected an element with aria-label "${label}".`);
+  }
+
+  return match;
 };
 
 const buildApiClient = (judgeDraft: WriterApiClient["judgeDraft"]): WriterApiClient => ({
@@ -340,5 +398,308 @@ describe("JudgePanel", () => {
     // matches for the full banned-jargon regex family.
     expect(html.toLowerCase().includes("codex")).toBe(false);
     expect(BANNED_JARGON.test(html)).toBe(false);
+  });
+});
+
+// Extracts the `<dl class="xb-judge-scores">…</dl>` block so row assertions are
+// scoped to the scores list and never accidentally match the summary or
+// critique sections elsewhere on the panel.
+const scoresList = (html: string): string => {
+  const inner = html.match(/<dl class="xb-judge-scores">([\s\S]*?)<\/dl>/)?.[1];
+
+  if (inner === undefined) {
+    throw new Error("Expected an xb-judge-scores <dl> in the rendered panel.");
+  }
+
+  return inner;
+};
+
+// Every score row labels itself with a single <dt>; counting them is the
+// stable "how many rows" contract independent of each row's inner markup.
+const countRows = (html: string): number =>
+  (scoresList(html).match(/<dt[\s>]/g) ?? []).length;
+
+describe("JudgePanel score dimensions", () => {
+  it("renders all thirteen scoring dimensions, leaving the eight legacy rows unchanged", () => {
+    const html = renderToStaticMarkup(
+      <JudgePanel
+        judge={{
+          status: "ready",
+          verdict: buildVerdict({ audienceMatch: 72, replyVsQuoteOrientation: 80 }),
+          model: "claude-cli",
+        }}
+        onJudge={() => {}}
+        onOpenSettings={() => {}}
+        judgeReady
+        draftReady
+      />,
+    );
+
+    // Eight legacy + five behavioral dimensions = thirteen rows in the list.
+    expect(countRows(html)).toBe(13);
+
+    // The eight legacy rows still render with their original labels and values.
+    const scores = scoresList(html);
+    for (const label of [
+      "Overall",
+      "Replies",
+      "Profile clicks",
+      "Impressions",
+      "Bookmark value",
+      "Dwell",
+      "Voice match",
+      "Negative risk",
+    ]) {
+      expect(scores).toContain(label);
+    }
+    expect(scores).toContain("78");
+    expect(scores).toContain("10");
+  });
+
+  it("renders the three new numeric behavioral dimensions like the existing numeric rows, with their values", () => {
+    const html = renderToStaticMarkup(
+      <JudgePanel
+        judge={{
+          status: "ready",
+          verdict: buildVerdict({
+            answerEffort: 55,
+            strangerAnswerability: 48,
+            statusDependency: 30,
+            audienceMatch: 72,
+            replyVsQuoteOrientation: 80,
+          }),
+          model: "claude-cli",
+        }}
+        onJudge={() => {}}
+        onOpenSettings={() => {}}
+        judgeReady
+        draftReady
+      />,
+    );
+
+    const scores = scoresList(html);
+    expect(scores).toContain("Answer effort");
+    expect(scores).toContain("55");
+    expect(scores).toContain("Stranger answerability");
+    expect(scores).toContain("48");
+    expect(scores).toContain("Status dependency");
+    expect(scores).toContain("30");
+  });
+
+  it("renders the new behavioral dimensions at the 0 and 100 boundaries", () => {
+    const lowHtml = renderToStaticMarkup(
+      <JudgePanel
+        judge={{
+          status: "ready",
+          verdict: buildVerdict({
+            answerEffort: 0,
+            strangerAnswerability: 0,
+            statusDependency: 0,
+            audienceMatch: 0,
+            replyVsQuoteOrientation: 0,
+          }),
+          model: "claude-cli",
+        }}
+        onJudge={() => {}}
+        onOpenSettings={() => {}}
+        judgeReady
+        draftReady
+      />,
+    );
+    const highHtml = renderToStaticMarkup(
+      <JudgePanel
+        judge={{
+          status: "ready",
+          verdict: buildVerdict({
+            answerEffort: 100,
+            strangerAnswerability: 100,
+            statusDependency: 100,
+            audienceMatch: 100,
+            replyVsQuoteOrientation: 100,
+          }),
+          model: "claude-cli",
+        }}
+        onJudge={() => {}}
+        onOpenSettings={() => {}}
+        judgeReady
+        draftReady
+      />,
+    );
+
+    // Both boundary verdicts still render the full thirteen-row list.
+    expect(countRows(lowHtml)).toBe(13);
+    expect(countRows(highHtml)).toBe(13);
+    // A 0 must render as the value, not be dropped as falsy.
+    expect(scoresList(lowHtml)).toContain("Answer effort");
+    expect(scoresList(lowHtml)).toContain("0");
+    expect(scoresList(highHtml)).toContain("100");
+  });
+});
+
+describe("JudgePanel audience-match row", () => {
+  it("renders a numeric audience-match score as a normal row", () => {
+    const html = renderToStaticMarkup(
+      <JudgePanel
+        judge={{
+          status: "ready",
+          verdict: buildVerdict({ audienceMatch: 72 }),
+          model: "claude-cli",
+        }}
+        onJudge={() => {}}
+        onOpenSettings={() => {}}
+        judgeReady
+        draftReady
+      />,
+    );
+
+    const scores = scoresList(html);
+    expect(scores).toContain("Audience match");
+    expect(scores).toContain("72");
+    // A scored audience-match never shows the missing-profile recovery copy.
+    expect(scores).not.toContain("Needs account profile");
+    expect(scores).not.toContain("Add account profile");
+  });
+
+  it("renders the missing-profile recovery copy and an uncertain value when audience-match is null", () => {
+    const html = renderToStaticMarkup(
+      <JudgePanel
+        judge={{
+          status: "ready",
+          verdict: buildVerdict({ audienceMatch: null }),
+          model: "claude-cli",
+        }}
+        onJudge={() => {}}
+        onOpenSettings={() => {}}
+        judgeReady
+        draftReady
+      />,
+    );
+
+    const scores = scoresList(html);
+    // Null audience-match reads as a recovery prompt, not a number.
+    expect(scores).toContain("Audience match");
+    expect(scores).toContain("Needs account profile");
+    // The uncertain value is styled with the --text-uncertain token, applied via
+    // the codebase's "uncertain" class signal (cf. xb-badge--uncertain).
+    expect(scores).toMatch(/class="[^"]*uncertain/);
+  });
+
+  it("offers an Add-account-profile ghost button wired to onOpenSettings when audience-match is null", () => {
+    const onOpenSettings = vi.fn();
+    // Invoke the component (cf. foundation.test.tsx Switch({…})) so the returned
+    // host tree's props.children is traversable; a non-invoked JSX element keeps
+    // its children unrendered and findByAriaLabel could never reach the button.
+    const element = JudgePanel({
+      judge: {
+        status: "ready",
+        verdict: buildVerdict({ audienceMatch: null }),
+        model: "claude-cli",
+      },
+      onJudge: () => {},
+      onOpenSettings,
+      judgeReady: true,
+      draftReady: true,
+    });
+
+    // The recovery affordance is an accessible button naming the Settings target.
+    const html = renderToStaticMarkup(element);
+    expect(html).toContain("Add account profile");
+    expect(html).toContain('aria-label="Add account profile in Settings"');
+
+    // It is a ghost-variant Button, and its click handler is the panel's
+    // onOpenSettings prop. SSR drops handlers from markup, so wiring is verified
+    // by invoking the captured handler on the rendered element tree.
+    const button = findByAriaLabel(element, "Add account profile in Settings");
+    expect(button.props?.className).toMatch(/xb-button--ghost/);
+    const onClick = button.props?.onClick as (() => void) | undefined;
+    expect(onClick).toBeTypeOf("function");
+    onClick?.();
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not render the recovery button when audience-match is a number", () => {
+    const onOpenSettings = vi.fn();
+    const html = renderToStaticMarkup(
+      <JudgePanel
+        judge={{
+          status: "ready",
+          verdict: buildVerdict({ audienceMatch: 72 }),
+          model: "claude-cli",
+        }}
+        onJudge={() => {}}
+        onOpenSettings={onOpenSettings}
+        judgeReady
+        draftReady
+      />,
+    );
+
+    expect(html).not.toContain("Add account profile in Settings");
+  });
+});
+
+describe("JudgePanel reply-vs-quote orientation scale", () => {
+  it("renders a display-only labeled pole scale with the value, not a ScoreBar or progressbar", () => {
+    const html = renderToStaticMarkup(
+      <JudgePanel
+        judge={{
+          status: "ready",
+          verdict: buildVerdict({ replyVsQuoteOrientation: 80 }),
+          model: "claude-cli",
+        }}
+        onJudge={() => {}}
+        onOpenSettings={() => {}}
+        judgeReady
+        draftReady
+      />,
+    );
+
+    const scores = scoresList(html);
+    // Poled scale labelled at both ends; the value reads through.
+    expect(scores).toContain("Reply-oriented");
+    expect(scores).toContain("Quote-oriented");
+    expect(scores).toContain("80");
+    // Display-only: it must NOT be a ScoreBar/progressbar control.
+    expect(scores).not.toContain('role="progressbar"');
+    expect(scores).not.toContain("xb-score-bar");
+    // It is a numeric pole position, not an enum string like "reply"/"quote".
+    expect(scores).not.toMatch(/>(reply|quote)<\/dd>/i);
+  });
+
+  it("renders the orientation poles at the fully-quote (0) and fully-reply (100) ends", () => {
+    const quoteHtml = renderToStaticMarkup(
+      <JudgePanel
+        judge={{
+          status: "ready",
+          verdict: buildVerdict({ replyVsQuoteOrientation: 0 }),
+          model: "claude-cli",
+        }}
+        onJudge={() => {}}
+        onOpenSettings={() => {}}
+        judgeReady
+        draftReady
+      />,
+    );
+    const replyHtml = renderToStaticMarkup(
+      <JudgePanel
+        judge={{
+          status: "ready",
+          verdict: buildVerdict({ replyVsQuoteOrientation: 100 }),
+          model: "claude-cli",
+        }}
+        onJudge={() => {}}
+        onOpenSettings={() => {}}
+        judgeReady
+        draftReady
+      />,
+    );
+
+    // 0 = fully quote, 100 = fully reply; both render the labeled poles and the
+    // boundary value, and neither degrades into a progressbar.
+    expect(scoresList(quoteHtml)).toContain("Quote-oriented");
+    expect(scoresList(quoteHtml)).toContain("0");
+    expect(scoresList(quoteHtml)).not.toContain('role="progressbar"');
+    expect(scoresList(replyHtml)).toContain("Reply-oriented");
+    expect(scoresList(replyHtml)).toContain("100");
+    expect(scoresList(replyHtml)).not.toContain('role="progressbar"');
   });
 });

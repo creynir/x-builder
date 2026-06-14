@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # RMU-014: `accountProfile` settings field
@@ -64,3 +64,7 @@ Multi-line `<textarea>` (3–4 rows) using the `.xb-settings-route__field` token
 
 Very long profile shows the max-length helper and is bounded by the schema max;
 whitespace-only is treated as empty.
+
+## Pipeline Log
+
+- 2026-06-14 — **Done.** Standard pipeline, single clean cycle: Red (`68939a5`) extended the owning suite `client/src/shell/tests/settings-route.test.tsx` (+9 tests: AC1 dirty, AC2 persist+reload, AC3 reset, the whitespace edge, and the Visual/a11y set — position-after-`</select>`, rows 3–4, `.xb-settings-route__field` wrapper + exact label/helper copy, `id="settings-accountProfile"`/`<label for>`/`aria-describedby`→helper, and React-SSR escaped controlled-textarea inner-text) → Blue Validate Red APPROVE (anti-rubber-stamp: catches `<input>`-instead-of-`<textarea>`, missing `settingsEqual`, wrong position, dropped `aria-describedby`; confirmed Red's test-local-type widening is the established suite pattern + the React-SSR inner-text helpers are correct). Green (`295eab4`): `"accountProfile"` added to `TextSettingsFieldName`, `accountProfile: ""` to `defaultSettings`, `left.accountProfile === right.accountProfile` to `settingsEqual`, an `accountProfileHelper` const + a `renderTextAreaField` local helper (mirrors `renderTextField`) mounted after the judge-provider select, routed through `updateTextField` + the public driver, plus a token-only `.xb-settings-route__field textarea` CSS rule (`--text-measure-ui` max-inline-size) + `textarea:focus-visible` → Blue (Validate Green) APPROVE + Yellow APPROVE — **no concerns**. Full client suite **246 passed / 0 failed**, typecheck + lint clean, gates clean. Zero-trace confirmed: the client judge caller posts only `{ text }`; the engine resolves `accountProfile` from persisted settings (RMU-008/009); writer/judge code untouched. AA contrast inherited from the established settings-field tokens.

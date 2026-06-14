@@ -174,12 +174,10 @@ function readyPostCoach(
 function availablePrediction(
   overrides: Partial<AvailableEngagementPrediction> = {},
 ): AvailableEngagementPrediction {
+  // End-state four-regime contract: no legacy mirror fields. The card renders
+  // these directly through ReachRegimeBlock.
   return {
     status: "available",
-    rangeLow: 120,
-    rangeHigh: 280,
-    midpoint: 200,
-    confidence: "medium",
     signals: [
       {
         signal_key: "voice_score",
@@ -192,6 +190,15 @@ function availablePrediction(
         multiplier: 1.15,
       },
     ],
+    predictedMidImpressions: 1500,
+    stallRange: { low: 800, high: 2400 },
+    escapeRange: { low: 6000, high: 40000 },
+    escapeProbability: 0.12,
+    expectedReplies: 9,
+    baseImpressions: 1500,
+    baseSource: "follower_estimate",
+    qualityBasis: "static",
+    reachModelVersion: "reach-v1",
     ...overrides,
   };
 }
@@ -280,7 +287,12 @@ describe("CandidateDeterministicSummary", () => {
     expect(text).toContain("5 on point");
     expect(text).toContain("Needs a concrete detail");
     expect(text).toContain("Question could be sharper");
-    expect(text).toContain("120 - 280 impressions, medium");
+    // New four-regime chip: typical range + escape likelihood, replacing the
+    // deleted "<rangeLow> - <rangeHigh> impressions, <confidence>" string.
+    expect(text).toContain("800–2,400 typical");
+    expect(text).toContain("12% escape");
+    expect(text).not.toContain("impressions, medium");
+    expect(text).not.toContain("120 - 280");
   });
 
   it("renders missing source format gracefully in the compact summary", async () => {
@@ -486,7 +498,7 @@ describe("PostCoachCard", () => {
 });
 
 describe("EngagementPredictionCard", () => {
-  it("renders available prediction range, midpoint, confidence, and signals", async () => {
+  it("renders the four-regime block: expected reach, escape likelihood, typical and breakout ranges, replies, and signals", async () => {
     const { EngagementPredictionCard } = await loadDeterministicComponents();
 
     const html = render(
@@ -494,14 +506,149 @@ describe("EngagementPredictionCard", () => {
     );
     const text = textContent(html);
 
-    expect(text).toContain("120");
-    expect(text).toContain("280");
-    expect(text).toContain("200");
-    expect(text).toContain("medium");
+    // Regime labels and values from the four-regime contract.
+    expect(text).toContain("Expected reach");
+    expect(text).toContain("1500");
+    expect(text).toContain("Escape likelihood");
+    expect(text).toContain("12% escape");
+    expect(text).toContain("Typical reach");
+    expect(text).toContain("800 – 2,400");
+    expect(text).toContain("If it breaks out");
+    expect(text).toContain("6,000 – 40,000");
+    expect(text).toContain("Expected replies");
+    expect(text).toContain("9");
+    // The kept signals list still renders.
     expect(text).toContain("Static score 73");
     expect(text).toContain("0.85");
     expect(text).toContain("Question ending");
     expect(text).toContain("1.15");
+    // No legacy Range / Midpoint / Confidence rows survive.
+    expect(text).not.toContain("Midpoint");
+    expect(text).not.toContain("Confidence");
+    expect(text).not.toContain("120 - 280");
+  });
+
+  it("renders the escape likelihood as a text-labelled info badge, not a color-only chip", async () => {
+    const { EngagementPredictionCard } = await loadDeterministicComponents();
+
+    const html = render(
+      <EngagementPredictionCard prediction={availablePrediction()} />,
+    );
+
+    // The escape percentage carries a text label inside an info-variant badge.
+    const escapeBadge = html.match(
+      /<span class="xb-badge xb-badge--info[^"]*"[^>]*>([^<]*)<\/span>/,
+    );
+    expect(escapeBadge).not.toBeNull();
+    expect(escapeBadge?.[1]).toContain("12% escape");
+  });
+
+  it("omits the judge-refinement badge when the quality basis is static", async () => {
+    const { EngagementPredictionCard } = await loadDeterministicComponents();
+
+    const html = render(
+      <EngagementPredictionCard prediction={availablePrediction({ qualityBasis: "static" })} />,
+    );
+
+    expect(textContent(html)).not.toContain("Refined with judge signal");
+  });
+
+  it("shows the judge-refinement accent badge when the quality basis is judge", async () => {
+    const { EngagementPredictionCard } = await loadDeterministicComponents();
+
+    const html = render(
+      <EngagementPredictionCard prediction={availablePrediction({ qualityBasis: "judge" })} />,
+    );
+    const text = textContent(html);
+
+    expect(text).toContain("Refined with judge signal");
+    expect(html).toMatch(
+      /<span class="xb-badge xb-badge--accent[^"]*"[^>]*>[^<]*Refined with judge signal[^<]*<\/span>/,
+    );
+    // Regime values still render normally alongside the judge badge.
+    expect(text).toContain("Expected reach");
+    expect(text).toContain("1500");
+    expect(text).toContain("12% escape");
+  });
+
+  it("keeps regime sub-labels as definition terms, not headings, so no level is skipped under the card h3", async () => {
+    const { EngagementPredictionCard } = await loadDeterministicComponents();
+
+    const html = render(
+      <EngagementPredictionCard prediction={availablePrediction()} />,
+    );
+
+    // The card title is the only heading; regime sub-labels must not introduce
+    // h4/h5 headings under it.
+    expect(html).toContain("<h3");
+    expect(html).not.toMatch(/<h4\b/);
+    expect(html).not.toMatch(/<h5\b/);
+    // Regime rows are described with <dt>/<p>, not heading elements.
+    expect(html).toMatch(/<dt\b/);
+  });
+
+  it("renders no number-transition animation hooks on the regime values", async () => {
+    const { EngagementPredictionCard } = await loadDeterministicComponents();
+
+    const html = render(
+      <EngagementPredictionCard prediction={availablePrediction()} />,
+    );
+
+    expect(html).not.toContain("animate");
+    expect(html).not.toContain("transition");
+    expect(html).not.toContain("count-up");
+  });
+
+  it("renders identical card markup height across quality basis values so the layout does not shift", async () => {
+    const { EngagementPredictionCard } = await loadDeterministicComponents();
+
+    const staticHtml = render(
+      <EngagementPredictionCard prediction={availablePrediction({ qualityBasis: "static" })} />,
+    );
+    const judgeHtml = render(
+      <EngagementPredictionCard prediction={availablePrediction({ qualityBasis: "judge" })} />,
+    );
+
+    // The judge badge is additive copy, but the regime block structure (and thus
+    // its row count) must be identical across quality basis, so the card never
+    // reflows when a draft is refined. Count the regime rows in each render.
+    const staticRows = (staticHtml.match(/<dt\b/g) ?? []).length;
+    const judgeRows = (judgeHtml.match(/<dt\b/g) ?? []).length;
+    expect(staticRows).toBeGreaterThan(0);
+    expect(judgeRows).toBe(staticRows);
+  });
+
+  it("renders boundary escape probabilities of 0% and 100% with a text label", async () => {
+    const { EngagementPredictionCard } = await loadDeterministicComponents();
+
+    const neverEscapes = render(
+      <EngagementPredictionCard prediction={availablePrediction({ escapeProbability: 0 })} />,
+    );
+    const alwaysEscapes = render(
+      <EngagementPredictionCard prediction={availablePrediction({ escapeProbability: 1 })} />,
+    );
+
+    expect(textContent(neverEscapes)).toContain("0% escape");
+    expect(textContent(alwaysEscapes)).toContain("100% escape");
+  });
+
+  it("renders equal-low-high stall and escape ranges without collapsing the regime rows", async () => {
+    const { EngagementPredictionCard } = await loadDeterministicComponents();
+
+    const html = render(
+      <EngagementPredictionCard
+        prediction={availablePrediction({
+          stallRange: { low: 1200, high: 1200 },
+          escapeRange: { low: 5000, high: 5000 },
+        })}
+      />,
+    );
+    const text = textContent(html);
+
+    expect(text).toContain("Typical reach");
+    expect(text).toContain("1,200 – 1,200");
+    expect(text).toContain("If it breaks out");
+    expect(text).toContain("5,000 – 5,000");
   });
 
   it("renders missing followers as disabled context without a fake range", async () => {
@@ -650,8 +797,10 @@ describe("DeterministicDetailInspector", () => {
     expect(text).toContain("genuine question: what made your onboarding finally click?");
     expect(text).toContain("Draft Review");
     expect(text).toContain("Ship it");
-    expect(text).toContain("120");
-    expect(text).toContain("280");
+    expect(text).toContain("Expected reach");
+    expect(text).toContain("1500");
+    expect(text).toContain("12% escape");
+    expect(text).toContain("800 – 2,400");
     expect(text).toContain("Static score 73");
   });
 

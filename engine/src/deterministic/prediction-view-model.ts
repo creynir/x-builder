@@ -7,8 +7,12 @@ import type {
 export const toEngagementPrediction = (input: {
   analyzerPrediction: AnalyzerEngagementPrediction | null;
   followers?: number;
+  trailingMedianImpressions?: number;
 }): ApiEngagementPrediction => {
-  if (typeof input.followers !== "number") {
+  if (
+    typeof input.followers !== "number" &&
+    typeof input.trailingMedianImpressions !== "number"
+  ) {
     return {
       status: "disabled",
       reason: "missing_followers",
@@ -24,12 +28,19 @@ export const toEngagementPrediction = (input: {
     };
   }
 
+  const prediction = input.analyzerPrediction;
+
   return {
     status: "available",
-    rangeLow: input.analyzerPrediction.rangeLow,
-    rangeHigh: input.analyzerPrediction.rangeHigh,
-    midpoint: input.analyzerPrediction.midpoint,
-    confidence: input.analyzerPrediction.confidence,
-    signals: input.analyzerPrediction.signals,
+    predictedMidImpressions: prediction.predictedMidImpressions,
+    stallRange: prediction.stallRange,
+    escapeRange: prediction.escapeRange,
+    escapeProbability: prediction.escapeProbability,
+    expectedReplies: prediction.expectedReplies,
+    baseImpressions: prediction.baseImpressions,
+    baseSource: prediction.baseSource,
+    qualityBasis: prediction.qualityBasis,
+    reachModelVersion: prediction.reachModelVersion,
+    signals: prediction.signals,
   };
 };

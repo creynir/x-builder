@@ -27,7 +27,12 @@
       "bookmarkValue": 63,
       "dwellProxy": 73,
       "voiceMatch": 88,
-      "negativeRisk": 9
+      "negativeRisk": 9,
+      "answerEffort": 55,
+      "strangerAnswerability": 48,
+      "statusDependency": 30,
+      "replyVsQuoteOrientation": 62,
+      "audienceMatch": null
     },
     "confidence": "high",
     "headline": "Concrete hook, soft landing.",

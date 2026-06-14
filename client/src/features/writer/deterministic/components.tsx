@@ -25,7 +25,20 @@ type ScoreFailedAnalyzedPostItem = Extract<
   { status: "score_failed" }
 >;
 type ReadyPostCoachViewModel = Extract<PostCoachViewModel, { state: "ready" }>;
+type AvailableEngagementPrediction = Extract<
+  EngagementPrediction,
+  { status: "available" }
+>;
 const postCoachDisplayTitle = "Draft Review";
+
+const groupedNumber = (value: number): string =>
+  new Intl.NumberFormat("en-US").format(value);
+
+const reachRangeLabel = (range: { low: number; high: number }): string =>
+  `${groupedNumber(range.low)} – ${groupedNumber(range.high)}`;
+
+const escapeLikelihoodLabel = (escapeProbability: number): string =>
+  `${Math.round(escapeProbability * 100)}% escape`;
 
 export type CandidateDeterministicSummaryProps = {
   item: AnalyzedPostItem;
@@ -140,8 +153,9 @@ function predictionSummary(prediction: EngagementPrediction): {
   tone: "info" | "warning";
 } {
   if (prediction.status === "available") {
+    const typical = `${groupedNumber(prediction.stallRange.low)}–${groupedNumber(prediction.stallRange.high)} typical`;
     return {
-      label: `${prediction.rangeLow} - ${prediction.rangeHigh} impressions, ${prediction.confidence}`,
+      label: `${typical} · ${escapeLikelihoodLabel(prediction.escapeProbability)}`,
       tone: "info",
     };
   }
@@ -221,22 +235,7 @@ export function EngagementPredictionCard({
 
   return (
     <Card title="Engagement Prediction">
-      <KeyValueList
-        items={[
-          {
-            label: "Range",
-            value: `${prediction.rangeLow} - ${prediction.rangeHigh}`,
-          },
-          {
-            label: "Midpoint",
-            value: prediction.midpoint,
-          },
-          {
-            label: "Confidence",
-            value: prediction.confidence,
-          },
-        ]}
-      />
+      <ReachRegimeBlock prediction={prediction} />
       <div className="xb-deterministic-signals" aria-label="Prediction signals">
         {prediction.signals.map((signal) => (
           <div className="xb-deterministic-signals__row" key={signal.signal_key}>
@@ -246,6 +245,48 @@ export function EngagementPredictionCard({
         ))}
       </div>
     </Card>
+  );
+}
+
+export function ReachRegimeBlock({
+  prediction,
+}: {
+  prediction: AvailableEngagementPrediction;
+}): ReactElement {
+  return (
+    <div className="xb-reach-regime">
+      <dl className="xb-deterministic-signals xb-reach-regime__regimes">
+        <div className="xb-deterministic-signals__row">
+          <dt>Expected reach</dt>
+          <p>{prediction.predictedMidImpressions}</p>
+        </div>
+        <div className="xb-deterministic-signals__row">
+          <dt>Escape likelihood</dt>
+          <p>
+            <Badge variant="info">
+              {escapeLikelihoodLabel(prediction.escapeProbability)}
+            </Badge>
+          </p>
+        </div>
+        <div className="xb-deterministic-signals__row">
+          <dt>Typical reach</dt>
+          <p>{reachRangeLabel(prediction.stallRange)}</p>
+        </div>
+        <div className="xb-deterministic-signals__row">
+          <dt>If it breaks out</dt>
+          <p>{reachRangeLabel(prediction.escapeRange)}</p>
+        </div>
+        <div className="xb-deterministic-signals__row">
+          <dt>Expected replies</dt>
+          <p>{prediction.expectedReplies}</p>
+        </div>
+      </dl>
+      {prediction.qualityBasis === "judge" ? (
+        <p className="xb-reach-regime__basis">
+          <Badge variant="accent">Refined with judge signal</Badge>
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -451,6 +492,9 @@ export function CandidateDeterministicSummary({
           </Button>
         ) : null}
       </div>
+      {item.prediction.status === "available" ? (
+        <ReachRegimeBlock prediction={item.prediction} />
+      ) : null}
     </article>
   );
 }

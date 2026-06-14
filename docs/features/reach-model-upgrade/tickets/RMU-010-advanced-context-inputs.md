@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # RMU-010: Advanced Phase-0 context inputs + client model
@@ -94,3 +94,10 @@ affordance reuses `ManualScoringContextPanel`'s "Prediction needs refresh."; foc
 Trailing-median present + followers empty must still yield an available prediction (engine
 guard fixed in RMU-006); the panel must not gate the prediction on advanced fields.
 Whitespace-only date ignored.
+
+## Pipeline Log
+
+- 2026-06-14 — **Done.** Standard pipeline: Red (`4988527`) model fields + reducer + panel/control + analyze-wiring tests + shared `buildAnalyzeResponse()` builder (C2 honored — no settings label class asserted on the panel Switch) → Blue Validate Red APPROVE → Green (`5db700f`) `AdvancedContext`/`RefinementState` + `applyAdvancedContextChange` (+ exported `markAnalysisStale`) + `AdvancedContextPanel`/`RepeatHistoryControl` mounted after `ManualScoringContextPanel` + `candidateAnalysisRequest` per-field `scoringContextSchema.shape[key]` validation (out-of-range dropped) + repeatHistory mapping + `updateAdvancedContext` driver wiring → Blue (Validate Green) + Yellow both APPROVE. Client 202 / engine 508 green, typecheck 5/5, lint + ui-tokens clean.
+- **Concern C2 RESOLVED here:** added optional `labelClassName?` to foundation `Switch` (defaults to `xb-settings-route__switch-label` → RMU-003 settings pins byte-stable; the advanced panel passes writer-scoped classes). The RMU-003 forward-note is closed.
+- `refinement` is idle-only (the two-pass runner is RMU-013); `followers` UI/logic unchanged; re-score reached via the existing debounce-on-stale effect.
+- **Concern C9 (epic-close triage, Amber):** RMU-010's Integration Point prose says the advanced fields "shift the reach estimate," but `plannedHourUtc`/`willAttachMedia`/`accountAgeYears` are collected + sent yet have no engine consumer today (only `trailingMedianImpressions` + `repeatHistory` move the estimate) — a documented "optional-until-producer" deferral. The user-facing how-to (`estimate-post-reach.md`) was corrected (C9a) to label those three "recorded but do not change today's estimate"; adding the engine producers is tracked as follow-up **RMU-022** (C9b).

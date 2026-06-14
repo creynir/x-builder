@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # RMU-002: [RFR] Remove dead format-history, aiRating, and dormant relaxation paths
@@ -29,8 +29,8 @@ bridge cleanly rather than around the latent 0-10 path.
 ## Scope Boundaries / Out of Scope
 
 Behavior-preserving deletions only. Zero-trace: no stubs, no commented-out code, no TODOs
-left behind. No new logic; no tension-regex change; no schema change (RMU-001 already kept
-`one_liner`/`goal_share` valid).
+left behind. No new logic; no tension-regex change; no schema change (`one_liner`/`goal_share`
+are still emitted by the live classifier at this point — RMU-004 deletes them).
 
 ## Test Strategy & Fixture Ownership
 
@@ -52,3 +52,9 @@ hits post-merge.
 
 If `varietyFormatLabels` or the `varietyCheck` param turns out to have a live consumer,
 narrow the deletion and note it in the Pipeline Log rather than breaking that consumer.
+
+## Pipeline Log
+
+- 2026-06-14 — **Done.** Characterization pipeline: Red-RFR pinned production analyze behavior (`48e258f`, 15 concrete-value pinning tests in `production-analyze-contract.test.ts`) → Blue Validate Pinning APPROVE (mutation-tested falsifiable) → Red removed dead-surface tests (`d333ca4`) → pre-Green pinning gate 356/356 → Green deletion (`d14aa65`, 157 deletions) → post-Green gates clean (no test-path diff) → Blue (Validate Green/RFR) APPROVE + Yellow (facade) APPROVE.
+- Deleted: `format-history.ts`, `aiRatingQualityMultipliers`/`fallbackAiRatingBand`, the `aiRating` param chain, the dormant `aiHigh/MediumConfidenceSignalCount` confidence relaxation, `PostHistoryEntry`/`RecordPostHistoryEntryInput`, `varietyFormatLabels`. DoD `rg` zero non-test hits. Full `pnpm test` green (engine 356 / client 171), typecheck 5/5, lint clean.
+- **Narrowed (ticket Edge Case):** the `varietyCheck` param + threading was **kept** — it has a live consumer at `writing-checks.ts:342`. It is now producerless (its only producer `buildFormatVarietyCheck` was deleted) and production-fed-`undefined`; both validators confirmed it is wired end-to-end, not an orphan/facade.

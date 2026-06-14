@@ -242,6 +242,30 @@ describe("shell schemas", () => {
     expect(parsed.codexModel).toBe("gpt-5.2-codex");
   });
 
+  it("loads settings that omit the optional account profile", () => {
+    const parsed = appSettingsSchema.parse(validSettings);
+
+    expect(parsed.accountProfile).toBeUndefined();
+  });
+
+  it("retains a supplied account profile on settings", () => {
+    const parsed = appSettingsSchema.parse({
+      ...validSettings,
+      accountProfile: "Solo founder writing about local-first dev tooling.",
+    });
+
+    expect(parsed.accountProfile).toBe("Solo founder writing about local-first dev tooling.");
+  });
+
+  it("rejects an account profile longer than 600 characters on settings", () => {
+    const result = appSettingsSchema.safeParse({
+      ...validSettings,
+      accountProfile: "a".repeat(601),
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("accepts every judge provider id the catalog enumerates", () => {
     for (const id of judgeProviderIdSchema.options) {
       expect(judgeProviderIdSchema.safeParse(id).success).toBe(true);

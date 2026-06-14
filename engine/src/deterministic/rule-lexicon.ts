@@ -67,22 +67,16 @@ export const weakOpeningPhrases = [
   { pattern: /^just wondering\b/i, phrase: "just wondering" },
 ];
 
-export const timelyTopicTerms = [
-  "ai",
-  "agi",
-  "gpt",
-  "claude",
-  "agent",
-  "agents",
+// Tribe-vocative terms: the in-group vocabulary of the builder/founder
+// audience. A draft that names the tribe earns a reply lift only.
+export const tribeVocativeTerms = [
   "founder",
   "founders",
   "indie",
   "solo",
-  "distribution",
-  "audience",
+  "builder",
+  "builders",
   "growth",
   "shipping",
-  "shipped",
   "launch",
-  "launched",
 ];

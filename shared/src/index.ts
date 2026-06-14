@@ -2,10 +2,15 @@ export {
   analyzedPostItemSchema,
   analyzePostsRequestSchema,
   analyzePostsResponseSchema,
+  availableEngagementPredictionSchema,
   detectedPostFormatSchema,
   deterministicSourceFormatSchema,
   engagementPredictionSchema,
+  judgeSignalsSchema,
   postCoachViewModelSchema,
+  reachRangeSchema,
+  repeatHistoryEntrySchema,
+  scoringContextSchema,
 } from "./schemas/deterministic-analysis.js";
 export {
   deriveJudgeVerdict,
@@ -37,7 +42,11 @@ export type {
   DetectedPostFormat,
   DeterministicSourceFormat,
   EngagementPrediction,
+  JudgeSignals,
   PostCoachViewModel,
+  ReachRange,
+  RepeatHistoryEntry,
+  ScoringContext,
 } from "./schemas/deterministic-analysis.js";
 export type {
   JudgeConfidence,

@@ -4,6 +4,7 @@ export const judgeDraftRequestSchema = z.object({
   // Trim like generateIdeaRequestSchema: a whitespace-only draft must not reach
   // the (slow, paid) judge.
   text: z.string().trim().min(1).max(8_000),
+  accountProfile: z.string().trim().min(1).max(600).optional(),
 });
 
 const judgeScoreValue = z.number().int().min(0).max(100);
@@ -12,6 +13,10 @@ const judgeScoreValue = z.number().int().min(0).max(100);
 // why a post scores the way it does. Modelled on the x-post-performance rubric.
 // voiceMatch is generic ("authentic human voice, not AI-slop"), NOT tied to any
 // individual's voice profile.
+// The producer (RMU-008) always emits all thirteen dimensions: the four
+// behavioral dimensions are required, and audienceMatch is required on the wire
+// but nullable — an explicit null when no account profile anchors audience fit,
+// a 0..100 score when one does.
 export const judgeScoresSchema = z.object({
   overall: judgeScoreValue,
   replies: judgeScoreValue,
@@ -21,6 +26,11 @@ export const judgeScoresSchema = z.object({
   dwellProxy: judgeScoreValue,
   voiceMatch: judgeScoreValue,
   negativeRisk: judgeScoreValue,
+  answerEffort: judgeScoreValue,
+  strangerAnswerability: judgeScoreValue,
+  statusDependency: judgeScoreValue,
+  replyVsQuoteOrientation: judgeScoreValue,
+  audienceMatch: judgeScoreValue.nullable(),
 });
 
 export const judgeVerdictLabelSchema = z.enum([

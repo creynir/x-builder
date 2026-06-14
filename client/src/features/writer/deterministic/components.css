@@ -203,15 +203,33 @@
 
 .xb-post-coach-card__section li span:last-child,
 .xb-post-coach-card__check-group li span:last-child,
-.xb-deterministic-signals__row span:first-child {
+.xb-deterministic-signals__row span:first-child,
+.xb-deterministic-signals__row dt {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.xb-deterministic-signals__row span:last-child {
+.xb-deterministic-signals__row span:last-child,
+.xb-deterministic-signals__row p {
   flex: 0 0 auto;
+  margin: 0;
   color: var(--text-secondary);
   font: var(--type-data);
+}
+
+.xb-reach-regime,
+.xb-reach-regime__regimes {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.xb-reach-regime__regimes dt {
+  color: var(--text-primary);
+}
+
+.xb-reach-regime__basis {
+  margin: 0;
 }
 
 .xb-post-coach-card__learnings p,
@@ -244,4 +262,54 @@
 .xb-post-coach-card--compact .xb-post-coach-card__engageability,
 .xb-post-coach-card--compact .xb-post-coach-card__section li {
   align-items: center;
+}
+
+.xb-advanced-context {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--padding-panel-default);
+  border: var(--border-width-thin) solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+}
+
+.xb-advanced-context__summary {
+  cursor: pointer;
+  color: var(--text-heading);
+  font: var(--type-label);
+}
+
+.xb-advanced-context__summary:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.xb-advanced-context__fields {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.xb-advanced-context__repeat-history {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.xb-advanced-context__checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.xb-advanced-context__checkbox-label,
+.xb-advanced-context__switch-label {
+  color: var(--text-secondary);
+  font: var(--type-body-small);
+}
+
+.xb-advanced-context__switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
 }

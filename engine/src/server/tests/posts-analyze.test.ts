@@ -139,10 +139,6 @@ const scoredResponse = (request: AnalyzePostsRequest): AnalyzePostsResponse => (
     prediction: request.scoringContext.followers
       ? {
           status: "available",
-          rangeLow: 120,
-          rangeHigh: 260,
-          midpoint: 190,
-          confidence: "medium",
           signals: [
             {
               signal_key: "quality_voice",
@@ -150,6 +146,17 @@ const scoredResponse = (request: AnalyzePostsRequest): AnalyzePostsResponse => (
               multiplier: 0.8,
             },
           ],
+          // Four-regime reach fields (the only available-prediction shape now
+          // that the RMU-006 legacy mirror is deleted).
+          predictedMidImpressions: 230,
+          stallRange: { low: 120, high: 276 },
+          escapeRange: { low: 570, high: 2280 },
+          escapeProbability: 0.1,
+          expectedReplies: 3,
+          baseImpressions: 190,
+          baseSource: "follower_estimate",
+          qualityBasis: "static",
+          reachModelVersion: "reach-v1",
         }
       : {
           status: "disabled",
@@ -284,8 +291,9 @@ describe("posts analyze API", () => {
         status: "scored",
         prediction: {
           status: "available",
-          confidence: expect.any(String),
           signals: expect.any(Array),
+          qualityBasis: "static",
+          baseSource: "follower_estimate",
         },
       });
 
@@ -293,10 +301,26 @@ describe("posts analyze API", () => {
         throw new Error("Expected available engagement prediction.");
       }
 
-      expect(item.prediction.rangeLow).toBeGreaterThan(0);
-      expect(item.prediction.midpoint).toBeGreaterThan(item.prediction.rangeLow);
-      expect(item.prediction.rangeHigh).toBeGreaterThan(item.prediction.midpoint);
-      expect(item.prediction.signals.length).toBeGreaterThan(0);
+      const prediction = item.prediction;
+
+      // Two-regime reach output surfaced through the HTTP boundary.
+      expect(prediction.baseImpressions).toBeGreaterThanOrEqual(1);
+      expect(prediction.predictedMidImpressions).toBeGreaterThanOrEqual(1);
+      expect(prediction.stallRange.low).toBeLessThanOrEqual(prediction.stallRange.high);
+      expect(prediction.escapeRange).toEqual({
+        low: Math.round(3 * prediction.baseImpressions),
+        high: Math.round(12 * prediction.baseImpressions),
+      });
+      expect(prediction.escapeProbability).toBeGreaterThanOrEqual(0);
+      expect(prediction.escapeProbability).toBeLessThanOrEqual(1);
+      expect(typeof prediction.reachModelVersion).toBe("string");
+      expect(prediction.reachModelVersion.length).toBeGreaterThan(0);
+
+      // The deleted legacy mirror fields must not survive over the HTTP boundary.
+      expect(prediction).not.toHaveProperty("rangeLow");
+      expect(prediction).not.toHaveProperty("rangeHigh");
+      expect(prediction).not.toHaveProperty("midpoint");
+      expect(prediction).not.toHaveProperty("confidence");
     } finally {
       await app.close();
     }

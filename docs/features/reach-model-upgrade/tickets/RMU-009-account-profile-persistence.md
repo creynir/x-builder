@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # RMU-009: Persist `accountProfile` in engine settings
@@ -52,3 +52,7 @@ Round-trip works; old files load fail-soft; `pnpm test` + `pnpm typecheck` green
 
 Empty/whitespace `accountProfile` is treated as "no profile" by the judge (→ `audienceMatch = null`).
 A profile longer than the schema max is rejected at `PATCH` validation.
+
+## Pipeline Log
+
+- 2026-06-14 — **Done (coverage-only).** The persistence behavior was **already delivered upstream**: RMU-001 added `accountProfile` to `appSettingsSchema`, and `JsonFileAppSettingsRepository.save`/`load` + `PATCH/GET /settings` round-trip via `appSettingsSchema.parse`; RMU-008 added the judge route fallback. So RMU-009 needed **no Green source change** — its deliverable is the dedicated pinning coverage. Red (`c44ce30`) added 8 tests (round-trip via a fresh repo instance, fail-soft load of an old file, PATCH accept+persist+GET, PATCH reject >600 with `fieldErrors.accountProfile`, trim/whitespace→`""`); AC6 fallback referenced to the existing RMU-008 `drafts-judge.test.ts` (not duplicated). Blue (Validate Red, adapted for passing coverage) APPROVE — falsifiability confirmed via 3 implementation mutations each breaking the right tests; isolation (temp-root); **no Green gap**. Engine 508 pass, typecheck 5/5, gates clean. No Green/Yellow stage.

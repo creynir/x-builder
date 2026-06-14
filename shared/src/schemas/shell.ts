@@ -102,6 +102,7 @@ export const appSettingsSchema = z.object({
   codexModel: z.string().optional(),
   claudeModel: z.string().optional(),
   cursorModel: z.string().optional(),
+  accountProfile: z.string().trim().max(600).optional(),
   showDeterministicDetails: z.boolean().default(true),
 });
 

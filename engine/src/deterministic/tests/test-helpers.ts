@@ -1,4 +1,45 @@
+import type { PostFormat } from "../types";
 import type { VoiceCheck } from "../voice-check";
+
+export type RepeatHistoryEntry = {
+  format: PostFormat;
+  lastPostedAt: string;
+  countLast7d: number;
+};
+
+export type JudgeSignals = {
+  impressions: number;
+  replies: number;
+};
+
+export type ReachInput = {
+  text: string;
+  score: number;
+  format: PostFormat;
+  followers: number | undefined;
+  trailingMedianImpressions: number | undefined;
+  hasExternalLink: boolean;
+  repeatHistory: RepeatHistoryEntry[];
+  judgeSignals?: JudgeSignals;
+};
+
+/**
+ * Test-owned builder for reach-model inputs. Shared with the two-regime
+ * assembly suite so both suites describe the same input shape. Override only
+ * the fields a given test cares about.
+ */
+export function buildReachInput(overrides: Partial<ReachInput> = {}): ReachInput {
+  return {
+    text: "Clear writing compounds when the point is specific.",
+    score: 66,
+    format: "insight_share",
+    followers: 1000,
+    trailingMedianImpressions: undefined,
+    hasExternalLink: false,
+    repeatHistory: [],
+    ...overrides,
+  };
+}
 
 export const enrichedTextCheckIds = [
   "quality_answerable_question",

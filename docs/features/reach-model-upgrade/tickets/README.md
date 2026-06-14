@@ -28,3 +28,5 @@ Test tickets come after all implementation; the doc ticket is last.
 | RMU-018 | [INT] | Client writer two-pass + settings→judge wiring | client | RMU-010…014 |
 | RMU-019 | [E2E] | Reach-model scale separation + classifier corpus + studio flow | both | RMU-017, RMU-018 |
 | RMU-020 | [DOC] | Document reach regimes, advanced inputs, two-pass refine, account profile | docs | RMU-019 |
+| RMU-021 | — | _(triage follow-up, C4)_ Compact candidate summary should use the chip, not the full `ReachRegimeBlock` | client | RMU-011 |
+| RMU-022 | — | _(triage follow-up, C9b)_ Weight advanced inputs (plannedHourUtc/willAttachMedia/accountAgeYears) in the reach model | engine | RMU-010, RMU-016 |

@@ -17,11 +17,16 @@ import type {
 import { judgeProviderIdSchema, judgeProviderLabels } from "@x-builder/shared";
 
 import { ApiClientError } from "../api/engine-api-client";
-import { Alert, Badge } from "../ui/foundation";
+import { Alert, Badge, Switch } from "../ui/foundation";
 
 type TextSettingsFieldName = Extract<
   keyof AppSettings,
-  "engineBaseUrl" | "storagePath" | "codexModel" | "claudeModel" | "cursorModel"
+  | "engineBaseUrl"
+  | "storagePath"
+  | "codexModel"
+  | "claudeModel"
+  | "cursorModel"
+  | "accountProfile"
 >;
 
 type SwitchSettingsFieldName = Extract<
@@ -91,6 +96,7 @@ type SettingsRouteModel = {
 };
 
 const defaultSettings: AppSettings = {
+  accountProfile: "",
   claudeModel: "",
   codexModel: "",
   cursorModel: "",
@@ -105,6 +111,8 @@ const dirtyReadinessHelper = "Save settings before testing readiness.";
 const judgeProviderHelper =
   "Save, then run Test readiness to verify the provider.";
 const modelFieldHelper = "Leave empty to use the provider's default.";
+const accountProfileHelper =
+  "Describe your audience and niche. The judge uses this to score audience match.";
 
 function createInitialModel(): SettingsRouteModel {
   return {
@@ -147,6 +155,7 @@ function settingsEqual(left: AppSettings, right: AppSettings): boolean {
     left.codexModel === right.codexModel &&
     left.claudeModel === right.claudeModel &&
     left.cursorModel === right.cursorModel &&
+    left.accountProfile === right.accountProfile &&
     left.showDeterministicDetails === right.showDeterministicDetails &&
     left.storagePath === right.storagePath
   );
@@ -339,6 +348,42 @@ function renderTextField({
   );
 }
 
+function renderTextAreaField({
+  helper,
+  label,
+  name,
+  onChange,
+  value,
+}: {
+  helper: string;
+  label: string;
+  name: TextSettingsFieldName;
+  onChange: (field: TextSettingsFieldName, value: string) => void;
+  value: string;
+}): ReactElement {
+  const id = fieldId(name);
+  const helperId = `${id}-helper`;
+
+  return (
+    <label className="xb-settings-route__field" htmlFor={id}>
+      <span className="xb-settings-route__label">{label}</span>
+      <textarea
+        aria-describedby={helperId}
+        id={id}
+        name={name}
+        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
+          onChange(name, event.target.value);
+        }}
+        rows={3}
+        value={value}
+      />
+      <span className="xb-settings-route__helper" id={helperId}>
+        {helper}
+      </span>
+    </label>
+  );
+}
+
 function renderSwitch({
   checked,
   label,
@@ -350,21 +395,16 @@ function renderSwitch({
   name: SwitchSettingsFieldName;
   onChange: (field: SwitchSettingsFieldName, value: boolean) => void;
 }): ReactElement {
-  const id = fieldId(name);
-
   return (
-    <label className="xb-settings-route__switch" htmlFor={id}>
-      <span className="xb-settings-route__switch-label">{label}</span>
-      <input
-        checked={checked}
-        id={id}
-        name={name}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => {
-          onChange(name, event.target.checked);
-        }}
-        type="checkbox"
-      />
-    </label>
+    <Switch
+      checked={checked}
+      id={fieldId(name)}
+      label={label}
+      name={name}
+      onChange={(value) => {
+        onChange(name, value);
+      }}
+    />
   );
 }
 
@@ -577,6 +617,13 @@ function SettingsRouteView({
           name: "judgeProvider",
           onChange: onUpdateSelect,
           value: model.draft.judgeProvider,
+        })}
+        {renderTextAreaField({
+          helper: accountProfileHelper,
+          label: "Account profile",
+          name: "accountProfile",
+          onChange: onUpdateField,
+          value: model.draft.accountProfile ?? "",
         })}
 
         <div className="xb-settings-route__models">

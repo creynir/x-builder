@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # RMU-020: [DOC] Document reach regimes, advanced inputs, two-pass refine, account profile
@@ -25,10 +25,14 @@ status: todo
 - That it powers the judge's **audience-match** read; when it's empty, the Studio shows "Needs account profile" with a shortcut to add it.
 
 **Reference note:**
-- That the `one_liner` and `goal_share` format labels are **deprecated** (kept one release for older saved data, removed next release).
+- That the post-format taxonomy was reworked (new formats like fill-in-the-blank, CTA, fantasy question, binary choice, milestone, etc.) — described in plain user terms, not internal enum names. No deprecated-label note is needed; the old `one_liner`/`goal_share` values are removed, not retained.
 
 ## Scope Boundaries / Out of Scope
 
 User-facing behavior only. No internal architecture, symbol names, or state-management
 details. Comes after RMU-017/018/019. No calibration internals (developer-only, not a
 user-facing feature).
+
+## Pipeline Log
+
+- 2026-06-14 — **Done.** [DOC] pipeline (White only; no Red/Green/Blue). Three pages written (each by a White subagent, in user-facing language, no internal symbol/enum names): `docs/how-to/estimate-post-reach.md` (How-To — Advanced context inputs, the four reach numbers escape-likelihood/typical/breakout/expected-replies, score-is-a-quality-gate-not-reach-driver, and the two-pass "Refined with judge signal" on a different, non-comparable scale), `docs/how-to/set-account-profile.md` (How-To — the Settings account-profile field, audience-match, and the empty→"Needs account profile"→Settings recovery), and `docs/features/reach-model-upgrade/reach-model-reference.md` (Reference — overview + a plain-language format-family table noting the removed one_liner/goal_share labels + Related-pages links). All three match the sibling `docs/how-to/choose-judge-provider.md` style (frontmatter + `## Title` + steps/tables) and carry traceability comments. Verified: all cross-links resolve to real files; zero internal symbol/enum leakage in user-facing text; calibration noted as developer-only (not a UI feature). Plain markdown, no site generator → no build step. Documents only shipped behavior (all 20 tickets shipped; nothing escalated/skipped).

@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # RMU-016: Calibration scaffold — normalizer, predictor-runner, per-format fit, leave-one-account-out validator
@@ -79,3 +79,8 @@ constants file has the dated/sized header; no stats dependency; `pnpm test` + `p
 Account with < 14 days of posts → all `escape_label = null` → excluded from the escape-fit.
 Empty corpus → empty rows, no throw. A format with zero rows → fit leaves its placeholder
 unchanged and logs that it was not refit (no silent zero).
+
+## Pipeline Log
+
+- 2026-06-14 — **Done.** Standard pipeline, single clean cycle (Green interrupted once by an org spend-limit, resumed and finished). Red (`e111d14`) 5 test files + 3 bimodal synthetic JSONL fixtures + loader (schema/normalize/predictor/fit/validate; AC1–AC6 + edges), all failing on missing modules → Blue Validate Red APPROVE (independently RECOMPUTED every hand-set value: geometric medians 2.0/1.5/1.0, escape fractions 0.4, Spearman 0.8/0.9/0.85, AUC 2/3 — all CORRECT; confirmed the fixture is genuinely bimodal with an empty 3×–4× dead zone). Green (`b0c3065`): `CalibrationRow` Zod schema, `normalizeExportToRows` (milestone interpolation, 14-day trailing-median nulls, repeat/recency, `classifyPostFormat`, escape label, RT/0-imp/pinned exclusions, the 3-way t.co media/null/external rule), `runPredictor` (engine via DI), `fitReachConstants` (geometric-median multiplier, empirical escape fraction, median reply rate, repeat-decay + wisdom-status aggregation, link-penalty fit excluding null-link rows, zero-row formats keep seed + `console.warn`, dated/sized header), `validateLeaveOneAccountOut` (hand-rolled Spearman + Mann-Whitney AUC, report-only), the 4 real CLI bins (`predict` injects the real `analyzeDraftText`), and an additive behavior-neutral `format-classifier` re-export in `engine/src/index.ts` + `zod` dep. Blue (Validate Green) APPROVE + Yellow APPROVE — **no concerns**. Calibration **31 tests pass**; engine **508 pass** (no regression); typecheck + lint clean; gates clean (the 3 `console.log` slop leads cleared — intended CLI stdout in bin scripts only). Zero-trace verified: NO file in the live engine/client imports the calibration package or the generated constants; no OLS/stats library; no accuracy-target gate (report-only). The generated reach-model-weights text exists only as `fitReachConstants().fileContents` / the `fit` bin output.
+- Note: the bin CLIs operate on a developer-supplied corpus path; the labeled corpus JSONL remains absent from the repo (true external dependency), so accuracy targets (rho/AUC thresholds) are out of scope and untested — the calibration tooling is mechanics-complete and ready to run once a corpus is supplied.

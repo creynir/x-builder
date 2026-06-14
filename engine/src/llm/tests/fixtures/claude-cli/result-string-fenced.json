@@ -2,7 +2,7 @@
   "type": "result",
   "subtype": "success",
   "is_error": false,
-  "result": "```json\n{\"scores\":{\"overall\":82,\"replies\":84,\"profileClicks\":76,\"impressions\":68,\"bookmarkValue\":63,\"dwellProxy\":73,\"voiceMatch\":88,\"negativeRisk\":9},\"confidence\":\"high\",\"headline\":\"Concrete hook, soft landing.\",\"strengths\":[\"Specific proof beats generic claims.\"],\"improvements\":[\"Cut the closing question.\"]}\n```",
+  "result": "```json\n{\"scores\":{\"overall\":82,\"replies\":84,\"profileClicks\":76,\"impressions\":68,\"bookmarkValue\":63,\"dwellProxy\":73,\"voiceMatch\":88,\"negativeRisk\":9,\"answerEffort\":55,\"strangerAnswerability\":48,\"statusDependency\":30,\"replyVsQuoteOrientation\":62,\"audienceMatch\":null},\"confidence\":\"high\",\"headline\":\"Concrete hook, soft landing.\",\"strengths\":[\"Specific proof beats generic claims.\"],\"improvements\":[\"Cut the closing question.\"]}\n```",
   "num_turns": 1,
   "session_id": "12121212-3434-5656-7878-909090909090",
   "usage": {

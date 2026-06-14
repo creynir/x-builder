@@ -3,10 +3,15 @@ import {
   analyzedPostItemSchema,
   analyzePostsRequestSchema,
   analyzePostsResponseSchema,
+  availableEngagementPredictionSchema,
   detectedPostFormatSchema,
   deterministicSourceFormatSchema,
   engagementPredictionSchema,
+  judgeSignalsSchema,
   postCoachViewModelSchema,
+  reachRangeSchema,
+  repeatHistoryEntrySchema,
+  scoringContextSchema,
   type AnalyzedPostItem,
   type AnalyzePostsRequest,
   type AnalyzePostsResponse,
@@ -79,19 +84,31 @@ const postCoach = {
   footerText: "Static heuristic checks only.",
 };
 
+// Reach signals survive the legacy-field deletion; they are shared by both the
+// complete prediction below and the legacy-field-rejection fixture.
+const reachSignals = [
+  {
+    signal_key: "quality_voice",
+    label: "Static score 72",
+    multiplier: 0.8,
+  },
+];
+
+// Available prediction at the end-state contract: the four-regime reach fields
+// plus signals, with NONE of the deleted legacy mirror fields. This is the only
+// shape a producer emits once the RMU-006 bridge is removed.
 const availablePrediction = {
   status: "available",
-  rangeLow: 180,
-  rangeHigh: 420,
-  midpoint: 300,
-  confidence: "medium",
-  signals: [
-    {
-      signal_key: "quality_voice",
-      label: "Static score 72",
-      multiplier: 0.8,
-    },
-  ],
+  signals: reachSignals,
+  predictedMidImpressions: 300,
+  stallRange: { low: 180, high: 360 },
+  escapeRange: { low: 600, high: 2400 },
+  escapeProbability: 0.1,
+  expectedReplies: 6,
+  baseImpressions: 200,
+  baseSource: "follower_estimate",
+  qualityBasis: "static",
+  reachModelVersion: "reach-v1",
 };
 
 const missingFollowersPrediction = {
@@ -233,7 +250,8 @@ describe("deterministic analyze schemas", () => {
       },
       prediction: {
         status: "available",
-        confidence: "medium",
+        qualityBasis: "static",
+        predictedMidImpressions: 300,
       },
     });
   });
@@ -335,18 +353,34 @@ describe("deterministic analyze schemas", () => {
     ).toBe(false);
   });
 
-  it("rejects an available prediction whose range is not ordered low <= midpoint <= high", () => {
+  it("rejects an available prediction carrying only the deleted legacy mirror fields", () => {
+    // The RMU-006 bridge is gone: rangeLow/rangeHigh/midpoint/confidence no
+    // longer exist on the schema and cannot stand in for the four-regime fields.
     expect(
       engagementPredictionSchema.safeParse({
         status: "available",
-        rangeLow: 420,
-        rangeHigh: 180,
-        midpoint: 999,
+        rangeLow: 120,
+        rangeHigh: 280,
+        midpoint: 200,
         confidence: "medium",
         signals: [],
       }).success,
     ).toBe(false);
     expect(engagementPredictionSchema.safeParse(availablePrediction).success).toBe(true);
+  });
+
+  it("does not enforce a cross-field rangeLow <= midpoint <= rangeHigh ordering once the legacy mirror is gone", () => {
+    // The only prediction-range invariant left is reachRangeSchema (low <= high)
+    // on stall/escape. A prediction that adds extra legacy-shaped keys still
+    // parses by ignoring them — there is no cross-field refine to violate.
+    const withStrayLegacyKeys = {
+      ...availablePrediction,
+      rangeLow: 9_999,
+      midpoint: 1,
+      rangeHigh: 5,
+    };
+
+    expect(engagementPredictionSchema.safeParse(withStrayLegacyKeys).success).toBe(true);
   });
 
   it("keeps writer source format separate from analyzer detected format", () => {
@@ -358,5 +392,378 @@ describe("deterministic analyze schemas", () => {
     expect(detectedPostFormatSchema.safeParse("genuine_question").success).toBe(true);
     expect(detectedPostFormatSchema.safeParse("insight_share").success).toBe(true);
     expect(detectedPostFormatSchema.safeParse("one-liner").success).toBe(false);
+  });
+});
+
+const newDetectedFormats = [
+  "fill_blank_tribal",
+  "cta_farm",
+  "fantasy_question",
+  "binary_choice",
+  "nuanced_question",
+  "recognition_roast",
+  "wisdom_one_liner",
+  "milestone",
+] as const;
+
+describe("detected post format enum widening", () => {
+  it("accepts each of the eight new detected post formats", () => {
+    for (const format of newDetectedFormats) {
+      expect(detectedPostFormatSchema.safeParse(format).success).toBe(true);
+    }
+  });
+
+  it("no longer accepts the deleted one_liner and goal_share members once the classifier stops emitting them", () => {
+    expect(detectedPostFormatSchema.safeParse("one_liner").success).toBe(false);
+    expect(detectedPostFormatSchema.safeParse("goal_share").success).toBe(false);
+  });
+
+  it("still rejects an unknown detected post format string", () => {
+    expect(detectedPostFormatSchema.safeParse("viral_thread").success).toBe(false);
+    expect(detectedPostFormatSchema.safeParse("").success).toBe(false);
+  });
+});
+
+describe("scoring context schema", () => {
+  it("is re-exported from the shared entrypoint", () => {
+    expect(scoringContextSchema).toBeDefined();
+    expect(repeatHistoryEntrySchema).toBeDefined();
+    expect(judgeSignalsSchema).toBeDefined();
+  });
+
+  it("round-trips a followers-only context unchanged without injecting optional defaults", () => {
+    const parsed = scoringContextSchema.parse({ followers: 2400 });
+
+    expect(parsed.followers).toBe(2400);
+    expect(parsed.repeatHistory).toBeUndefined();
+    expect(parsed.willAttachMedia).toBeUndefined();
+    expect(parsed.trailingMedianImpressions).toBeUndefined();
+    expect(parsed.plannedHourUtc).toBeUndefined();
+    expect(parsed.accountAgeYears).toBeUndefined();
+    expect(parsed.judgeSignals).toBeUndefined();
+  });
+
+  it("round-trips an analyze request whose scoring context carries only followers without filling optional defaults", () => {
+    const parsed = analyzePostsRequestSchema.parse({
+      items: [{ id: "candidate-1", text: "Ship the smaller version that creates proof." }],
+      scoringContext: { followers: 2400 },
+      presentation: {},
+    });
+
+    expect(parsed.scoringContext.followers).toBe(2400);
+    expect(parsed.scoringContext.repeatHistory).toBeUndefined();
+    expect(parsed.scoringContext.willAttachMedia).toBeUndefined();
+    expect(parsed.scoringContext.trailingMedianImpressions).toBeUndefined();
+    expect(parsed.scoringContext.plannedHourUtc).toBeUndefined();
+    expect(parsed.scoringContext.accountAgeYears).toBeUndefined();
+    expect(parsed.scoringContext.judgeSignals).toBeUndefined();
+  });
+
+  it("retains a fully populated scoring context including media, planning, and judge signals", () => {
+    const result = scoringContextSchema.safeParse({
+      followers: 5000,
+      trailingMedianImpressions: 0,
+      repeatHistory: [
+        {
+          format: "hot_take",
+          lastPostedAt: "2026-06-10T08:00:00.000Z",
+          countLast7d: 3,
+        },
+      ],
+      plannedHourUtc: 14,
+      willAttachMedia: true,
+      accountAgeYears: 2,
+      judgeSignals: { impressions: 60, replies: 40 },
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      throw new Error("Expected fully populated scoring context to parse.");
+    }
+    expect(result.data.trailingMedianImpressions).toBe(0);
+    expect(result.data.willAttachMedia).toBe(true);
+    expect(result.data.judgeSignals).toEqual({ impressions: 60, replies: 40 });
+    expect(result.data.repeatHistory).toHaveLength(1);
+  });
+
+  it("treats trailingMedianImpressions of zero as a present value", () => {
+    const parsed = scoringContextSchema.parse({ trailingMedianImpressions: 0 });
+
+    expect(parsed.trailingMedianImpressions).toBe(0);
+  });
+
+  it("accepts judge signal boundaries at 0 and 100 but rejects values above 100", () => {
+    expect(judgeSignalsSchema.safeParse({ impressions: 0, replies: 0 }).success).toBe(true);
+    expect(judgeSignalsSchema.safeParse({ impressions: 100, replies: 100 }).success).toBe(true);
+    expect(judgeSignalsSchema.safeParse({ impressions: 101, replies: 40 }).success).toBe(false);
+    expect(
+      scoringContextSchema.safeParse({ judgeSignals: { impressions: 101, replies: 40 } }).success,
+    ).toBe(false);
+  });
+
+  it("accepts exactly forty repeat-history entries but rejects forty-one", () => {
+    const entry = {
+      format: "hot_take",
+      lastPostedAt: "2026-06-10T08:00:00.000Z",
+      countLast7d: 1,
+    };
+    const fortyEntries = Array.from({ length: 40 }, () => entry);
+    const fortyOneEntries = Array.from({ length: 41 }, () => entry);
+
+    expect(scoringContextSchema.safeParse({ repeatHistory: fortyEntries }).success).toBe(true);
+    expect(scoringContextSchema.safeParse({ repeatHistory: fortyOneEntries }).success).toBe(false);
+  });
+
+  it("constrains repeat-history entries to a valid format, ISO timestamp, and 0..100 weekly count", () => {
+    expect(
+      repeatHistoryEntrySchema.safeParse({
+        format: "hot_take",
+        lastPostedAt: "2026-06-10T08:00:00.000Z",
+        countLast7d: 0,
+      }).success,
+    ).toBe(true);
+    expect(
+      repeatHistoryEntrySchema.safeParse({
+        format: "hot_take",
+        lastPostedAt: "2026-06-10T08:00:00.000Z",
+        countLast7d: 100,
+      }).success,
+    ).toBe(true);
+    expect(
+      repeatHistoryEntrySchema.safeParse({
+        format: "not_a_format",
+        lastPostedAt: "2026-06-10T08:00:00.000Z",
+        countLast7d: 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      repeatHistoryEntrySchema.safeParse({
+        format: "hot_take",
+        lastPostedAt: "2026-06-10",
+        countLast7d: 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      repeatHistoryEntrySchema.safeParse({
+        format: "hot_take",
+        lastPostedAt: "2026-06-10T08:00:00.000Z",
+        countLast7d: 101,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("constrains plannedHourUtc to the 0..23 range", () => {
+    expect(scoringContextSchema.safeParse({ plannedHourUtc: 0 }).success).toBe(true);
+    expect(scoringContextSchema.safeParse({ plannedHourUtc: 23 }).success).toBe(true);
+    expect(scoringContextSchema.safeParse({ plannedHourUtc: 24 }).success).toBe(false);
+    expect(scoringContextSchema.safeParse({ plannedHourUtc: -1 }).success).toBe(false);
+  });
+});
+
+const completeAvailablePrediction = {
+  status: "available",
+  signals: [
+    {
+      signal_key: "quality_voice",
+      label: "Static score 72",
+      multiplier: 0.8,
+    },
+  ],
+  predictedMidImpressions: 140,
+  stallRange: { low: 10, high: 240 },
+  escapeRange: { low: 300, high: 900 },
+  escapeProbability: 0.35,
+  expectedReplies: 4,
+  baseImpressions: 200,
+  baseSource: "trailing_median",
+  qualityBasis: "static",
+  reachModelVersion: "reach-v1",
+};
+
+describe("reach range schema", () => {
+  it("is re-exported from the shared entrypoint", () => {
+    expect(reachRangeSchema).toBeDefined();
+  });
+
+  it("accepts a non-negative range where low does not exceed high", () => {
+    expect(reachRangeSchema.safeParse({ low: 10, high: 240 }).success).toBe(true);
+    expect(reachRangeSchema.safeParse({ low: 0, high: 0 }).success).toBe(true);
+  });
+
+  it("rejects a reach range whose low exceeds its high", () => {
+    expect(reachRangeSchema.safeParse({ low: 500, high: 100 }).success).toBe(false);
+  });
+
+  it("rejects a reach range with negative bounds", () => {
+    expect(reachRangeSchema.safeParse({ low: -1, high: 240 }).success).toBe(false);
+    expect(reachRangeSchema.safeParse({ low: 10, high: -240 }).success).toBe(false);
+  });
+});
+
+describe("available engagement prediction four-regime contract", () => {
+  it("is re-exported from the shared entrypoint", () => {
+    expect(availableEngagementPredictionSchema).toBeDefined();
+  });
+
+  it("parses a four-regime available prediction that omits every deleted legacy mirror field", () => {
+    expect(engagementPredictionSchema.safeParse(availablePrediction).success).toBe(true);
+    expect(availableEngagementPredictionSchema.safeParse(availablePrediction).success).toBe(true);
+  });
+
+  it("strips the deleted legacy mirror fields from the parsed available prediction", () => {
+    // rangeLow/rangeHigh/midpoint and the prediction confidence band were removed
+    // with the RMU-006 bridge; even when supplied they must not survive parsing.
+    const result = availableEngagementPredictionSchema.safeParse({
+      ...availablePrediction,
+      rangeLow: 180,
+      rangeHigh: 420,
+      midpoint: 300,
+      confidence: "medium",
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      throw new Error("Expected a four-regime available prediction to parse.");
+    }
+    expect(result.data).not.toHaveProperty("rangeLow");
+    expect(result.data).not.toHaveProperty("rangeHigh");
+    expect(result.data).not.toHaveProperty("midpoint");
+    expect(result.data).not.toHaveProperty("confidence");
+  });
+
+  it("rejects a complete available prediction that omits any single required four-regime field", () => {
+    const requiredFourRegimeFields = [
+      "predictedMidImpressions",
+      "stallRange",
+      "escapeRange",
+      "escapeProbability",
+      "expectedReplies",
+      "baseImpressions",
+      "baseSource",
+      "qualityBasis",
+      "reachModelVersion",
+    ] as const;
+
+    for (const field of requiredFourRegimeFields) {
+      const { [field]: _omitted, ...withoutField } = availablePrediction;
+
+      expect(engagementPredictionSchema.safeParse(withoutField).success).toBe(false);
+      expect(availableEngagementPredictionSchema.safeParse(withoutField).success).toBe(false);
+    }
+  });
+
+  it("retains the four-regime reach fields when an available prediction supplies them", () => {
+    const result = engagementPredictionSchema.safeParse(completeAvailablePrediction);
+
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      throw new Error("Expected a four-regime available prediction to parse.");
+    }
+    expect(result.data).toMatchObject({
+      status: "available",
+      predictedMidImpressions: 140,
+      stallRange: { low: 10, high: 240 },
+      escapeRange: { low: 300, high: 900 },
+      escapeProbability: 0.35,
+      expectedReplies: 4,
+      baseImpressions: 200,
+      baseSource: "trailing_median",
+      qualityBasis: "static",
+      reachModelVersion: "reach-v1",
+    });
+  });
+
+  it("rejects a stall range whose low exceeds its high", () => {
+    expect(
+      engagementPredictionSchema.safeParse({
+        ...completeAvailablePrediction,
+        stallRange: { low: 300, high: 10 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("constrains escapeProbability to the 0..1 range", () => {
+    expect(
+      engagementPredictionSchema.safeParse({
+        ...completeAvailablePrediction,
+        escapeProbability: 0,
+      }).success,
+    ).toBe(true);
+    expect(
+      engagementPredictionSchema.safeParse({
+        ...completeAvailablePrediction,
+        escapeProbability: 1,
+      }).success,
+    ).toBe(true);
+    expect(
+      engagementPredictionSchema.safeParse({
+        ...completeAvailablePrediction,
+        escapeProbability: 1.2,
+      }).success,
+    ).toBe(false);
+    expect(
+      engagementPredictionSchema.safeParse({
+        ...completeAvailablePrediction,
+        escapeProbability: -0.1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("constrains reachModelVersion to between one and forty characters", () => {
+    expect(
+      engagementPredictionSchema.safeParse({
+        ...completeAvailablePrediction,
+        reachModelVersion: "",
+      }).success,
+    ).toBe(false);
+    expect(
+      engagementPredictionSchema.safeParse({
+        ...completeAvailablePrediction,
+        reachModelVersion: "v".repeat(41),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects unknown baseSource and qualityBasis discriminants", () => {
+    expect(
+      engagementPredictionSchema.safeParse({
+        ...completeAvailablePrediction,
+        baseSource: "guess",
+      }).success,
+    ).toBe(false);
+    expect(
+      engagementPredictionSchema.safeParse({
+        ...completeAvailablePrediction,
+        qualityBasis: "vibes",
+      }).success,
+    ).toBe(false);
+    expect(
+      engagementPredictionSchema.safeParse({
+        ...completeAvailablePrediction,
+        baseSource: "follower_estimate",
+        qualityBasis: "judge",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects negative or non-integer base impression and reply counts", () => {
+    expect(
+      engagementPredictionSchema.safeParse({
+        ...completeAvailablePrediction,
+        baseImpressions: -1,
+      }).success,
+    ).toBe(false);
+    expect(
+      engagementPredictionSchema.safeParse({
+        ...completeAvailablePrediction,
+        predictedMidImpressions: -5,
+      }).success,
+    ).toBe(false);
+    expect(
+      engagementPredictionSchema.safeParse({
+        ...completeAvailablePrediction,
+        expectedReplies: -2,
+      }).success,
+    ).toBe(false);
   });
 });

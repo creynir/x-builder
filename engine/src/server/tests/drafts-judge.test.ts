@@ -1,5 +1,14 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
-import { apiErrorSchema, judgeDraftResponseSchema, type JudgeVerdict } from "@x-builder/shared";
+import {
+  apiErrorSchema,
+  judgeDraftResponseSchema,
+  type AppSettings,
+  type JudgeVerdict,
+} from "@x-builder/shared";
 
 import { JudgeDraftService } from "../../llm/judge-draft-service";
 import {
@@ -8,6 +17,7 @@ import {
   type NormalizedStructuredLlmRequest,
   type StructuredLlmProviderResult,
 } from "../../llm/structured-llm-service";
+import { JsonFileAppSettingsRepository } from "../settings-repository";
 import { buildServer } from "../server";
 
 const generalizedJudgeFailedMessage = "The judge could not score this draft. Try again.";
@@ -46,6 +56,11 @@ const verdict: JudgeVerdict = {
     dwellProxy: 70,
     voiceMatch: 85,
     negativeRisk: 10,
+    answerEffort: 55,
+    strangerAnswerability: 48,
+    statusDependency: 30,
+    replyVsQuoteOrientation: 62,
+    audienceMatch: null,
   },
   headline: "Solid hook, weak closer.",
   strengths: ["Clear, concrete claim"],
@@ -287,5 +302,139 @@ describe("POST /drafts/judge", () => {
     } finally {
       await app.close();
     }
+  });
+});
+
+// AC: the route reads accountProfile from the body, falls back to the persisted
+// settings.accountProfile, and passes the resolved profile to the judge — which
+// returns a numeric audienceMatch when a profile anchors fit and an explicit null
+// when none is present. Exercised through a real temp-root settings repository
+// and an in-process fake judge that captures the received profile.
+describe("POST /drafts/judge account profile fallback", () => {
+  // A judge fake that records the profile it received and reflects presence into
+  // the verdict's audienceMatch: a number when a profile arrives, null otherwise.
+  const profileCapturingJudge = () => {
+    const received: Array<string | undefined> = [];
+
+    const judge = vi.fn(async (_text: string, accountProfile?: string) => {
+      received.push(accountProfile);
+
+      return {
+        status: "judged" as const,
+        response: {
+          status: "judged" as const,
+          verdict: {
+            ...verdict,
+            scores: {
+              ...verdict.scores,
+              audienceMatch: accountProfile === undefined ? null : 64,
+            },
+          },
+          model: "codex-cli",
+          judgedAt: "2026-06-10T12:00:00.000Z",
+        },
+      };
+    });
+
+    return { judge, received };
+  };
+
+  const withSettingsRoot = async <T,>(
+    run: (repository: JsonFileAppSettingsRepository) => Promise<T>,
+  ): Promise<T> => {
+    const root = await mkdtemp(join(tmpdir(), "x-builder-judge-profile-"));
+
+    try {
+      return await run(new JsonFileAppSettingsRepository({ root }));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  };
+
+  const persistedSettings = (root: string, accountProfile?: string): AppSettings =>
+    ({
+      engineBaseUrl: "http://127.0.0.1:4173",
+      storagePath: join(root, "storage"),
+      judgeProvider: "codex-cli",
+      showDeterministicDetails: true,
+      ...(accountProfile !== undefined ? { accountProfile } : {}),
+    }) as AppSettings;
+
+  it("passes an account profile from the request body to the judge", async () => {
+    await withSettingsRoot(async (settingsRepository) => {
+      const { judge, received } = profileCapturingJudge();
+      const app = buildServer({ judgeDraftService: { judge }, settingsRepository });
+      const bodyProfile = "Indie hacker shipping a local-first writing tool.";
+
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/drafts/judge",
+          payload: { text: "A draft worth judging.", accountProfile: bodyProfile },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(received).toEqual([bodyProfile]);
+        const body = judgeDraftResponseSchema.parse(parseJson(response.body));
+        expect(body.verdict.scores.audienceMatch).toBe(64);
+      } finally {
+        await app.close();
+      }
+    });
+  });
+
+  it("falls back to the persisted settings account profile when the body omits one", async () => {
+    const settingsProfile = "Solo founder writing about local-first dev tooling.";
+
+    await withSettingsRoot(async (settingsRepository) => {
+      const saved = await settingsRepository.save(
+        persistedSettings(settingsRepository.defaults().storagePath, settingsProfile),
+      );
+      expect(saved.settings.accountProfile).toBe(settingsProfile);
+
+      const { judge, received } = profileCapturingJudge();
+      const app = buildServer({ judgeDraftService: { judge }, settingsRepository });
+
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/drafts/judge",
+          payload: { text: "A draft judged with the settings profile." },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(received).toEqual([settingsProfile]);
+        const body = judgeDraftResponseSchema.parse(parseJson(response.body));
+        expect(body.verdict.scores.audienceMatch).toBe(64);
+      } finally {
+        await app.close();
+      }
+    });
+  });
+
+  it("passes no account profile and yields a null audienceMatch when body and settings both omit one", async () => {
+    await withSettingsRoot(async (settingsRepository) => {
+      await settingsRepository.save(
+        persistedSettings(settingsRepository.defaults().storagePath),
+      );
+
+      const { judge, received } = profileCapturingJudge();
+      const app = buildServer({ judgeDraftService: { judge }, settingsRepository });
+
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/drafts/judge",
+          payload: { text: "A draft judged without any account profile." },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(received).toEqual([undefined]);
+        const body = judgeDraftResponseSchema.parse(parseJson(response.body));
+        expect(body.verdict.scores.audienceMatch).toBeNull();
+      } finally {
+        await app.close();
+      }
+    });
   });
 });

@@ -1,6 +1,7 @@
 import {
   apiErrorSchema,
   generateIdeaRequestSchema,
+  scoringContextSchema,
   type AnalyzedPostItem,
   type AnalyzePostsRequest,
   type AnalyzePostsResponse,
@@ -10,7 +11,10 @@ import {
   type GeneratedIdeaCandidate,
   type JudgeDraftRequest,
   type JudgeDraftResponse,
+  type JudgeSignals,
   type JudgeVerdict,
+  type RepeatHistoryEntry,
+  type ScoringContext,
 } from "@x-builder/shared";
 
 export type WriterApiClient = {
@@ -31,6 +35,20 @@ export type WriterCandidate = {
   source: "draft" | "generated";
   text: string;
 };
+
+export type AdvancedContext = {
+  trailingMedianImpressions?: number;
+  repeatHistory?: { similarInLast7Days: boolean; date?: string };
+  plannedHourUtc?: number;
+  willAttachMedia?: boolean;
+  accountAgeYears?: number;
+};
+
+export type RefinementState =
+  | { status: "idle" }
+  | { status: "running"; requestId: number }
+  | { status: "refined"; requestId: number }
+  | { status: "skipped" };
 
 type CandidateReadyAnalysisState = {
   item: AnalyzedPostItem;
@@ -108,6 +126,7 @@ export type WriterPageModel = {
   activeFocusRequest: number;
   activeFocusTarget: string | null;
   activeGenerationRequestId: number | null;
+  advancedContext: AdvancedContext;
   analysisByCandidateId: Record<string, CandidateAnalysisState>;
   appliedFollowers: number | undefined;
   candidates: WriterCandidate[];
@@ -120,6 +139,7 @@ export type WriterPageModel = {
   isScoring: boolean;
   judge: JudgeState;
   lastPayload: GenerateIdeaRequest | null;
+  refinement: RefinementState;
   routeError: ApiError | null;
   routeErrorOrigin: "analysis" | "generation" | null;
 };
@@ -129,12 +149,14 @@ const invalidFollowersError = "Enter your current follower count to estimate imp
 let nextAnalysisRequestId = 1;
 let nextDetailRequestId = 1;
 let nextGenerationRequestId = 1;
+let nextRefineRequestId = 1;
 
 export function createInitialModel(): WriterPageModel {
   return {
     activeFocusRequest: 0,
     activeFocusTarget: null,
     activeGenerationRequestId: null,
+    advancedContext: {},
     analysisByCandidateId: {},
     appliedFollowers: undefined,
     candidates: [],
@@ -149,6 +171,7 @@ export function createInitialModel(): WriterPageModel {
     isScoring: false,
     judge: { status: "idle" },
     lastPayload: null,
+    refinement: { status: "idle" },
     routeError: null,
     routeErrorOrigin: null,
   };
@@ -241,10 +264,89 @@ function payloadFromIdea(idea: string): PayloadResult {
   };
 }
 
+// Maps the optional advanced-context inputs onto a scoring context, dropping any
+// empty/undefined field so an all-empty advanced context contributes no keys. The
+// follower count is layered in separately so advanced inputs never disturb it.
+function scoringContextFromAdvanced(
+  followers: number | undefined,
+  advancedContext: AdvancedContext,
+  judgeSignals?: JudgeSignals,
+): ScoringContext {
+  const context: ScoringContext = {};
+
+  if (followers !== undefined) {
+    context.followers = followers;
+  }
+
+  assignValidScoringField(
+    context,
+    "trailingMedianImpressions",
+    advancedContext.trailingMedianImpressions,
+  );
+  assignValidScoringField(context, "plannedHourUtc", advancedContext.plannedHourUtc);
+  assignValidScoringField(context, "willAttachMedia", advancedContext.willAttachMedia);
+  assignValidScoringField(context, "accountAgeYears", advancedContext.accountAgeYears);
+
+  const repeatHistoryEntry = repeatHistoryEntryFromAdvanced(advancedContext.repeatHistory);
+
+  if (repeatHistoryEntry !== undefined) {
+    context.repeatHistory = [repeatHistoryEntry];
+  }
+
+  if (judgeSignals !== undefined) {
+    context.judgeSignals = judgeSignals;
+  }
+
+  return context;
+}
+
+// Includes an advanced field only when it both has a value and clears that
+// field's own schema validation, so an out-of-range input (e.g. a planned hour
+// past 23) is silently dropped from the request rather than sent or coerced.
+function assignValidScoringField<Key extends keyof ScoringContext>(
+  context: ScoringContext,
+  key: Key,
+  value: ScoringContext[Key] | undefined,
+): void {
+  if (value === undefined) {
+    return;
+  }
+
+  if (scoringContextSchema.shape[key].safeParse(value).success) {
+    context[key] = value;
+  }
+}
+
+// One reported "similar post in the last 7 days" becomes a single repeat-history
+// entry. A whitespace-only or absent date falls back to the current time so the
+// entry always carries a schema-valid ISO `lastPostedAt`.
+function repeatHistoryEntryFromAdvanced(
+  repeatHistory: AdvancedContext["repeatHistory"],
+): RepeatHistoryEntry | undefined {
+  if (repeatHistory?.similarInLast7Days !== true) {
+    return undefined;
+  }
+
+  const trimmedDate = repeatHistory.date?.trim() ?? "";
+  const parsedDate = trimmedDate.length === 0 ? undefined : new Date(trimmedDate);
+  const lastPostedAt =
+    parsedDate !== undefined && !Number.isNaN(parsedDate.getTime())
+      ? parsedDate.toISOString()
+      : new Date().toISOString();
+
+  return {
+    format: "insight_share",
+    countLast7d: 1,
+    lastPostedAt,
+  };
+}
+
 function candidateAnalysisRequest(
   candidates: WriterCandidate[],
   followers: number | undefined,
+  advancedContext: AdvancedContext,
   postCoachMode: AnalyzePostsRequest["presentation"]["postCoachMode"] = "preview",
+  judgeSignals?: JudgeSignals,
 ): AnalyzePostsRequest {
   return {
     items: candidates.map((candidate) => ({
@@ -255,7 +357,7 @@ function candidateAnalysisRequest(
     presentation: {
       postCoachMode,
     },
-    scoringContext: followers === undefined ? {} : { followers },
+    scoringContext: scoringContextFromAdvanced(followers, advancedContext, judgeSignals),
   };
 }
 
@@ -434,7 +536,9 @@ async function requestAnalysis(
   apiClient: WriterApiClient,
   candidates: WriterCandidate[],
   followers: number | undefined,
+  advancedContext: AdvancedContext,
   postCoachMode: AnalyzePostsRequest["presentation"]["postCoachMode"] = "preview",
+  judgeSignals?: JudgeSignals,
 ): Promise<
   | {
       items: AnalyzedPostItem[];
@@ -447,7 +551,13 @@ async function requestAnalysis(
 > {
   try {
     const response = await apiClient.analyzePosts(
-      candidateAnalysisRequest(candidates, followers, postCoachMode),
+      candidateAnalysisRequest(
+        candidates,
+        followers,
+        advancedContext,
+        postCoachMode,
+        judgeSignals,
+      ),
     );
 
     return {
@@ -710,7 +820,7 @@ function applyAnalysisLoading(
   };
 }
 
-function markAnalysisStale(
+export function markAnalysisStale(
   analysisByCandidateId: Record<string, CandidateAnalysisState>,
 ): Record<string, CandidateAnalysisState> {
   return Object.fromEntries(
@@ -773,6 +883,22 @@ export function applyFollowerDraftChange(
     followerDraft,
     followerError: null,
     isScoring: false,
+    refinement: { status: "skipped" },
+  };
+}
+
+export function applyAdvancedContextChange(
+  model: WriterPageModel,
+  patch: AdvancedContext,
+): WriterPageModel {
+  return {
+    ...model,
+    advancedContext: {
+      ...model.advancedContext,
+      ...patch,
+    },
+    analysisByCandidateId: markAnalysisStale(model.analysisByCandidateId),
+    refinement: { status: "idle" },
   };
 }
 
@@ -786,6 +912,7 @@ export function applyIdeaChange(model: WriterPageModel, idea: string): WriterPag
     fieldError: null,
     idea,
     isScoring: false,
+    refinement: { status: "skipped" },
   };
 }
 
@@ -929,6 +1056,7 @@ async function runGenerationFromStart(
       apiClient,
       requestedCandidates,
       requestedFollowers,
+      currentModel.advancedContext,
     );
     currentModel = publishLatest(
       publish,
@@ -991,6 +1119,7 @@ async function runAnalysisForCandidates(
     apiClient,
     candidates,
     requestedFollowers,
+    currentModel.advancedContext,
   );
   currentModel = publishLatest(publish, currentModel, (latestModel) =>
     applyAnalysisResult(
@@ -1011,6 +1140,18 @@ export async function runRetryAnalysis(
   publish: PublishModel,
 ): Promise<WriterPageModel> {
   return runAnalysisForCandidates(apiClient, model, model.candidates, publish);
+}
+
+export async function runAdvancedContextChange(
+  apiClient: WriterApiClient,
+  model: WriterPageModel,
+  patch: AdvancedContext,
+  publish: PublishModel,
+): Promise<WriterPageModel> {
+  const nextModel = applyAdvancedContextChange(model, patch);
+  publish(nextModel);
+
+  return runAnalysisForCandidates(apiClient, nextModel, nextModel.candidates, publish);
 }
 
 export async function runApplyFollowers(
@@ -1055,6 +1196,122 @@ export async function runScoreDraft(
   return runAnalysisForCandidates(apiClient, nextModel, [candidate], publish);
 }
 
+// Finds the scored draft candidate whose text matches the current idea and whose
+// prediction is available — the exact precondition the judge→refine pass needs to
+// replace a deterministic reach estimate with a judge-refined one.
+function refineTargetFor(
+  model: WriterPageModel,
+): { candidate: WriterCandidate } | null {
+  const text = model.idea.trim();
+
+  if (text.length === 0) {
+    return null;
+  }
+
+  for (const candidate of model.candidates) {
+    if (candidate.text !== text) {
+      continue;
+    }
+
+    const state = model.analysisByCandidateId[candidate.id];
+
+    if (
+      state?.status === "ready" &&
+      state.item.status === "scored" &&
+      state.item.prediction.status === "available"
+    ) {
+      return { candidate };
+    }
+  }
+
+  return null;
+}
+
+// Client two-pass flow: re-issues analyze for the already-scored draft carrying
+// the judge's two reach scalars, then REPLACES the deterministic prediction with
+// the judge-refined one. Pre/post-judge reach are different scales, so exactly one
+// prediction is held per draft version — no diff is ever rendered.
+export async function runTwoPassRefine(
+  apiClient: WriterApiClient,
+  model: WriterPageModel,
+  publish: PublishModel,
+): Promise<WriterPageModel> {
+  if (model.judge.status !== "ready") {
+    return model;
+  }
+
+  const target = refineTargetFor(model);
+
+  if (target === null) {
+    return model;
+  }
+
+  const judgeSignals: JudgeSignals = {
+    impressions: model.judge.verdict.scores.impressions,
+    replies: model.judge.verdict.scores.replies,
+  };
+
+  const refineRequestId = nextRefineRequestId++;
+  let currentModel = publishLatest(publish, model, (latestModel) => ({
+    ...latestModel,
+    refinement: { status: "running", requestId: refineRequestId },
+  }));
+
+  const followerContext = parseFollowerDraft(currentModel.followerDraft);
+  const requestedFollowers =
+    followerContext.type === "valid" ? followerContext.followers : undefined;
+
+  const analysisResult = await requestAnalysis(
+    apiClient,
+    [target.candidate],
+    requestedFollowers,
+    currentModel.advancedContext,
+    "preview",
+    judgeSignals,
+  );
+
+  currentModel = publishLatest(publish, currentModel, (latestModel) => {
+    if (
+      latestModel.refinement.status !== "running" ||
+      latestModel.refinement.requestId !== refineRequestId
+    ) {
+      return latestModel;
+    }
+
+    if (analysisResult.type === "error") {
+      return {
+        ...latestModel,
+        refinement: { status: "skipped" },
+        routeError: analysisResult.error,
+        routeErrorOrigin: "analysis",
+      };
+    }
+
+    if (latestModel.idea.trim() !== target.candidate.text) {
+      return latestModel;
+    }
+
+    const refinedItem = analysisResult.items.find(
+      (item) => item.id === target.candidate.id,
+    );
+
+    if (refinedItem === undefined) {
+      return latestModel;
+    }
+
+    return {
+      ...latestModel,
+      analysisByCandidateId: {
+        ...latestModel.analysisByCandidateId,
+        [target.candidate.id]: analysisStateFromItem(target.candidate, refinedItem),
+      },
+      refinement: { status: "refined", requestId: refineRequestId },
+    };
+  });
+
+  return currentModel;
+}
+
 export async function runJudgeDraft(
   apiClient: WriterApiClient,
   model: WriterPageModel,
@@ -1082,6 +1339,10 @@ export async function runJudgeDraft(
       ...current,
       judge: { status: "ready", verdict: response.verdict, model: response.model },
     }));
+
+    // The verdict is published before the refine pass so the JudgePanel renders
+    // ahead of the second analyze call upgrading the deterministic prediction.
+    nextModel = await runTwoPassRefine(apiClient, nextModel, publish);
   } catch (error) {
     nextModel = publishLatest(publish, nextModel, (current) => ({
       ...current,
@@ -1148,6 +1409,7 @@ export async function runOpenDetails(
     apiClient,
     [candidate],
     requestedFollowers,
+    currentModel.advancedContext,
     "expanded",
   );
 

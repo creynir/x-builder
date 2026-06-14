@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # Reach-Model Upgrade
@@ -23,25 +23,34 @@ nearly uncorrelated with impressions. So format becomes the dominant reach lever
 aggregation in `calculateDeterministicScore`, and verdict bands in `selectPostCoachBadge`
 are **unchanged**). The static quality multiplier is compressed to 0.6–1.3.
 
-**Additive-discriminant rule (never rename a UI-consumed field).** New four-regime fields
-are added to the `available` variant of `engagementPredictionSchema`; the legacy fields are
-**derived** so every existing consumer keeps working:
-`rangeLow = stallRange.low`, `rangeHigh = escapeRange.high`, `midpoint = predictedMidImpressions`.
-The existing `.refine(rangeLow <= midpoint <= rangeHigh)` and `reachRangeSchema(low <= high)`
-are kept valid **by construction, not by coincidence** — the `mid/base` multiplier product is
-NOT bounded ≥ 0.3 (e.g. `insight_share 0.3 × low quality 0.6 × repeat 0.2 = 0.036`), so the
-band floor and combined high are derived to bracket the honest midpoint without ever clamping
-it up (see Two-regime reach below). Spreads are computed in **log space**. `one_liner` and
-`goal_share` remain valid `detectedPostFormatSchema` members for one release (the classifier
-stops emitting them); removed next release.
+**No backward-compat — clean replacement.** This is a single-deploy monorepo: `@x-builder/shared`
+is a `workspace:*` dependency of *both* `client` and `engine`, so schemas, server, and UI ship
+together in one build; and the engine persists **only** `appSettings` (no analyzed posts, no
+format history), so no saved data carries old field or format values. There is therefore **no
+external or persisted consumer to protect** — rename and replace freely, and **delete obsolete
+fields and enum members outright**. No kept-for-a-release members, no derived legacy mirrors,
+no "extend → deprecate → remove." The new `available` prediction variant carries the
+four-regime fields only — there are **no** `rangeLow`/`rangeHigh`/`midpoint`/`confidence`
+fields and **no** `one_liner`/`goal_share` members in the end state. The single constraint is
+that each ticket builds green, so an obsolete field/member is removed **within this epic** the
+moment its last producer/consumer migrates — `one_liner`/`goal_share` in RMU-004 (when the
+classifier stops emitting them), the old prediction fields in RMU-011 (when the client stops
+reading them). Any field that must outlive its own ticket is a **temporary migration bridge**
+explicitly deleted by the named later ticket — never a permanent shim — and RMU-019 asserts no
+legacy field or member survives. Spreads are computed in **log space**; each `reachRange` stays
+internally ordered (`low ≤ high`).
 
 **Two-regime reach.** `base = trailingMedianImpressions ?? clamp(0.4·followers, …)`;
 `mid = max(1, base · formatMult · qualityMult · linkMult · repeatMult · statusMult)`;
-`midpoint = round(mid)` (honest — never clamped up). Bands are derived to bracket the
-midpoint for every multiplier product and every `// CALIBRATE` value:
-`stallRange = [min(round(0.3·base), midpoint), max(stallLow, round(1.2·mid))]`,
-`escapeRange = [round(3·base), max(round(12·base), midpoint)]`,
-`rangeLow = stallRange.low`, `rangeHigh = escapeRange.high`.
+`predictedMidImpressions = round(mid)` (the honest point estimate — never clamped). The two
+bands stay internally ordered (`low ≤ high`) for every multiplier product and every
+`// CALIBRATE` value — the product is NOT bounded ≥ 0.3 (e.g. `insight_share 0.3 × low quality
+0.6 × repeat 0.2 = 0.036`), so the stall floor is taken relative to `mid`, not anchored at
+`0.3·base`:
+`stallRange = [round(min(0.3·base, mid)), round(max(0.3·base, 1.2·mid))]` (low ≤ high by
+construction), `escapeRange = [round(3·base), round(12·base)]` (3 < 12, always ordered).
+The card consumes `predictedMidImpressions`, `stallRange`, `escapeRange`, `escapeProbability`,
+`expectedReplies`, and `signals` directly — there are no legacy range/midpoint/confidence fields.
 `escapeProbability` (pEscape) from the per-format table, adjusted; `expectedReplies`
 from per-format reply rates. **pEscape vs midpoint discipline:** answer-effort and
 trending-topic adjustments move **pEscape / expectedReplies only — never the midpoint**.

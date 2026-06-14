@@ -1,27 +1,22 @@
 import type { VoiceCheck } from "./voice-check.js";
 
 export type PostFormat =
-  | "one_liner"
   | "genuine_question"
   | "hot_take"
   | "audience_question"
   | "story"
   | "insight_share"
-  | "goal_share"
   | "ab_choice"
   | "connect"
-  | "other";
-
-export type PostHistoryEntry = {
-  format: string;
-  at: string;
-  kind?: string;
-};
-
-export type RecordPostHistoryEntryInput = {
-  format: PostFormat;
-  kind?: string;
-};
+  | "other"
+  | "fill_blank_tribal"
+  | "cta_farm"
+  | "fantasy_question"
+  | "binary_choice"
+  | "nuanced_question"
+  | "recognition_roast"
+  | "wisdom_one_liner"
+  | "milestone";
 
 export type ScoreLearning = {
   text: string;
@@ -89,17 +84,39 @@ export type PredictionSignal = {
   multiplier: number;
 };
 
+export type ReachRange = {
+  low: number;
+  high: number;
+};
+
 export type EngagementPrediction = {
-  rangeLow: number;
-  rangeHigh: number;
-  midpoint: number;
-  confidence: "low" | "medium" | "high";
+  // Four-regime reach output (RMU-006).
+  predictedMidImpressions: number;
+  stallRange: ReachRange;
+  escapeRange: ReachRange;
+  escapeProbability: number;
+  expectedReplies: number;
+  baseImpressions: number;
+  baseSource: "trailing_median" | "follower_estimate";
+  qualityBasis: "static" | "judge";
+  reachModelVersion: string;
   signals: PredictionSignal[];
+};
+
+export type RepeatHistoryEntry = {
+  format: PostFormat;
+  lastPostedAt: string;
+  countLast7d: number;
 };
 
 export type AnalyzeOptions = {
   followers?: number;
-  aiRating?: number;
+  trailingMedianImpressions?: number;
+  hasExternalLink?: boolean;
+  repeatHistory?: RepeatHistoryEntry[];
+  // Pass-2 judge signals (judged impressions/replies). When present they drive
+  // the judged-quality reach branch instead of the static-quality path.
+  judgeSignals?: { impressions: number; replies: number };
   enabled?: Partial<Record<string, boolean>>;
   varietyCheck?: VoiceCheck;
 };

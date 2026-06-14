@@ -432,6 +432,33 @@ select {
   font: var(--type-data);
 }
 
+.xb-judge-scores__uncertain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+  color: var(--text-uncertain);
+  font: var(--type-body-small);
+}
+
+.xb-judge-scores__orientation {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.xb-judge-scores__pole {
+  color: var(--text-secondary);
+  font: var(--type-caption);
+}
+
+.xb-judge-scores__orientation-value {
+  text-align: center;
+  color: var(--text-heading);
+  font: var(--type-data);
+}
+
 .xb-judge-verdict__section h3 {
   margin: 0 0 var(--space-1);
   color: var(--text-heading);
@@ -1083,8 +1110,22 @@ select {
   color: var(--text-primary);
 }
 
+.xb-settings-route__field textarea {
+  width: 100%;
+  max-inline-size: var(--text-measure-ui);
+  box-sizing: border-box;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width-thin) solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font: var(--type-body);
+  resize: vertical;
+}
+
 .xb-settings-route__field input[type="text"]:focus-visible,
 .xb-settings-route__field select:focus-visible,
+.xb-settings-route__field textarea:focus-visible,
 .xb-settings-route__switch input:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-ring-offset);

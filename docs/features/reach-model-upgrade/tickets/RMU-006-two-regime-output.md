@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # RMU-006: Two-regime reach output + expectedReplies + base override + disabled-guard fix
@@ -17,17 +17,16 @@ four-regime output from the RMU-005 tables/helpers. Spreads computed in **log sp
    `computeReachModel`'s own null-guard uses the SAME "followers undefined AND median undefined" condition so the two guards agree (no split-brain).
 2. **Midpoint.** `mid = base · formatMult · qualityMult · linkMult · repeatMult · statusMult` where `formatMult = formatReachTable[format].p50Multiplier`, `qualityMult = staticQualityCompression(score)` (static path only here — judge branch is RMU-008), `linkMult = hasExternalLink ? externalLinkMidpointMultiplier(0.2) : 1`, `repeatMult = computeRepeatMultiplier(...)`, `statusMult = computeStatusMultiplier(...)`.
 3. **pEscape.** `escapeProbability = formatReachTable[format].escapeProbability`, adjusted: ×0.5 if format ∈ {`nuanced_question`, `wisdom_one_liner`, `insight_share`}; **capped at `externalLinkEscapeCap` (0.03) when `hasExternalLink`**. Answer-effort and trending adjustments are added in RMU-007 (neutral here).
-4. **Ranges (log space) — derived to satisfy both Zod refines by construction.** The multiplier product is NOT bounded ≥ 0.3 (e.g. `insight_share 0.3 × static-low 0.6 × repeat 0.2 = 0.036`), so `mid` can fall far below `0.3·base`; a naive `[0.3·base, 1.2·mid]` inverts (`low > high`) and breaks `rangeLow ≤ midpoint`. Compute instead (with `mid` floored to `≥1`, `midpoint = round(mid)`, never clamped up):
-   - `stallRange.low  = min(round(0.3·base), midpoint)`  — band floor can't exceed the prediction
-   - `stallRange.high = max(stallRange.low, round(1.2·mid))`  — ordered; `= round(1.2·mid)` for normal posts
-   - `escapeRange.low  = round(3·base)`
-   - `escapeRange.high = max(round(12·base), midpoint)`  — calibration-proof upper bound (today max product ≈ 7.5 ≤ 12, but `// CALIBRATE` factors could exceed it; this guard removes the dependency on that coincidence)
+4. **Ranges (log space) — each kept internally ordered by construction.** The multiplier product is NOT bounded ≥ 0.3 (e.g. `insight_share 0.3 × static-low 0.6 × repeat 0.2 = 0.036`), so `mid` can fall far below `0.3·base`; a naive `[0.3·base, 1.2·mid]` would invert (`low > high`). With `mid` floored to `≥1` and `predictedMidImpressions = round(mid)` (honest, never clamped):
+   - `stallRange = [round(min(0.3·base, mid)), round(max(0.3·base, 1.2·mid))]`  — `low ≤ high` for every product (`low ≤ 0.3·base ≤ high`, and `low ≤ mid ≤ 1.2·mid ≤ high`)
+   - `escapeRange = [round(3·base), round(12·base)]`  — `3 < 12`, always ordered
 
-   This guarantees `reachRangeSchema(low ≤ high)` for both ranges and `rangeLow ≤ midpoint ≤ rangeHigh` for **every** multiplier product and **every** `// CALIBRATE` value, WITHOUT clamping the honest midpoint (the low-reach signal must survive — that is the point of the two-regime model; do NOT clamp `midpoint` up into the range).
+   This guarantees `reachRangeSchema(low ≤ high)` for both ranges regardless of the product or any `// CALIBRATE` value. There is **no** cross-field `rangeLow ≤ midpoint ≤ rangeHigh` invariant in the end state — those legacy fields are gone (removed in RMU-011).
 5. **expectedReplies.** `mid · replyRateTable[format]` (static path; judge `replies` override is RMU-008; tribe +20% is RMU-007).
-6. **Legacy mirror.** `rangeLow = stallRange.low`, `rangeHigh = escapeRange.high`, `midpoint = predictedMidImpressions = round(mid)` (honest, per step 4). Set `qualityBasis = "static"`, `baseSource`, `baseImpressions = base`, `reachModelVersion`.
-7. **Confidence ladder.** Keep the relaxation but rename internally to reflect input richness (e.g. `inputRichnessConfidence`) with a comment that it reflects input richness, not accuracy.
-8. **Service wiring.** `DeterministicAnalysisService.analyzePosts` reads the full `scoringContext` and computes `hasExternalLink = detectExternalLink(item.text)` per item, passing `{ followers, trailingMedianImpressions, repeatHistory, hasExternalLink }` into `analyzeDraftText`.
+6. **Set the new fields.** `predictedMidImpressions = round(mid)`, `stallRange`, `escapeRange`, `escapeProbability`, `expectedReplies`, `signals`, `qualityBasis = "static"`, `baseSource`, `baseImpressions = base`, `reachModelVersion`. **Temporary migration bridge (deleted in RMU-011):** because the un-migrated client still reads them, also populate `rangeLow = stallRange.low`, `rangeHigh = escapeRange.high`, `midpoint = predictedMidImpressions`, `confidence` — solely to keep the client compiling/working until RMU-011 migrates it. This is NOT a permanent shim and carries no semantic weight. (If the pipeline forbids even a transitional bridge, fold the client field-read migration into this ticket and emit the new fields only.)
+7. **Confidence (transitional).** `confidence` is a legacy field; compute it via the existing ladder only as part of the bridge, and delete it with the bridge in RMU-011. The four-regime output + pEscape is what replaces it for the user — add no new confidence behavior here.
+8. **Service wiring + use-time defaults.** `DeterministicAnalysisService.analyzePosts` reads the full `scoringContext` and computes `hasExternalLink = detectExternalLink(item.text)` per item, passing `{ followers, trailingMedianImpressions, repeatHistory, hasExternalLink }` into `analyzeDraftText`. The scoringContext inputs carry **no schema `.default()`** (RMU-001 rule), so apply defaults at use-time here: `repeatHistory ?? []`, `willAttachMedia ?? false`.
+8b. **Tighten the prediction schema (this ticket is the producer).** The four-regime fields were `.optional()` at RMU-001 because nothing emitted them; the rebuilt estimator now ALWAYS emits them, so tighten `predictedMidImpressions`, `stallRange`, `escapeRange`, `escapeProbability`, `expectedReplies`, `baseImpressions`, `baseSource`, `qualityBasis`, `reachModelVersion` to **required** in `availableEngagementPredictionSchema`. (The legacy bridge fields stay until RMU-011.)
 9. **Delete the now-dead legacy constants** (zero-trace — they go dead the moment `estimateEngagementRange` is rebuilt onto `formatReachTable`/`staticQualityCompression`): remove `formatEngagementMultipliers` and `staticScoreQualityMultipliers` (and the `scoreBand`/`formatMultiplier` lookups that referenced them) from `const/scoring-weights.ts` and `prediction-estimator.ts`. RMU-002 could not (both were still live then).
 
 ## Data Models
@@ -60,15 +59,15 @@ spreads; `pnpm test` + `pnpm typecheck` green.
 
 ## Acceptance Criteria
 
-- Given `followers=5000`, no median, format `cta_farm` / When analyzed / Then `baseSource="follower_estimate"`, `escapeRange.high = 12·base`, `rangeHigh === escapeRange.high`, `midpoint === predictedMidImpressions`, `qualityBasis="static"`.
+- Given `followers=5000`, no median, format `cta_farm` / When analyzed / Then `baseSource="follower_estimate"`, `escapeRange=[round(3·base), round(12·base)]`, `predictedMidImpressions=round(mid)`, `qualityBasis="static"`, and both ranges ordered.
 - Given `trailingMedianImpressions=2000` present and `followers` ABSENT / When analyzed / Then the prediction is `available` with `baseSource="trailing_median"` and base derived from 2000 (NOT `disabled/missing_followers`).
 - Given `trailingMedianImpressions=2000` AND followers present / Then `baseSource="trailing_median"` (median wins).
 - Given BOTH `followers` and `trailingMedianImpressions` absent / Then `disabled` with `reason="missing_followers"`.
 - Given a base present but text < 15 chars / Then `disabled` with `reason="text_too_short"` (precedence preserved).
-- Given an external-link draft / Then `midpoint` is ×0.2 **and** `escapeProbability ≤ 0.03` (the cap moves pEscape; the ×0.2 moves midpoint — separate effects).
+- Given an external-link draft / Then `predictedMidImpressions` is ×0.2 **and** `escapeProbability ≤ 0.03` (the cap moves pEscape; the ×0.2 moves the midpoint — separate effects).
 - Given format `nuanced_question` / Then `escapeProbability` is half the table value.
-- Given a worst-case low-multiplier draft — `insight_share` × static-low quality (0.6) × repeat (`countLast7d≥10`→0.2) × external-link (0.2), product ≈ 0.0072·base / When analyzed / Then the prediction PARSES (no Zod throw): `stallRange.low ≤ stallRange.high`, `escapeRange.low ≤ escapeRange.high`, and `rangeLow ≤ midpoint ≤ rangeHigh`; the honest `midpoint` is NOT clamped up to `0.3·base`.
-- Given any `available` prediction (any multiplier product, any `// CALIBRATE` value) / Then `rangeLow ≤ midpoint ≤ rangeHigh` and both ranges are ordered — by construction (step 4).
+- Given a worst-case low-multiplier draft — `insight_share` × static-low quality (0.6) × repeat (`countLast7d≥10`→0.2) × external-link (0.2), product ≈ 0.0072·base / When analyzed / Then the prediction PARSES (no Zod throw): `stallRange.low ≤ stallRange.high` and `escapeRange.low ≤ escapeRange.high`; `predictedMidImpressions` is the honest `round(mid)`, NOT clamped up to `0.3·base`.
+- Given any `available` prediction (any multiplier product, any `// CALIBRATE` value) / Then both `stallRange` and `escapeRange` are ordered (`low ≤ high`) — by construction (step 4).
 - Given the merged engine / When `rg` for `formatEngagementMultipliers` and `staticScoreQualityMultipliers` runs / Then zero non-test hits (deleted per step 9).
 
 ## Edge Cases
@@ -76,3 +75,9 @@ spreads; `pnpm test` + `pnpm typecheck` green.
 `trailingMedianImpressions=0` is a present value → `available`/`trailing_median`, base
 floored to ≥1 (also closes the `log(0)` risk). Both base inputs absent → `missing_followers`.
 `statusMult` only applies to `wisdom_one_liner`.
+
+## Pipeline Log
+
+- 2026-06-14 — **Done.** Standard pipeline (model rebuild): Red (`34a9248`) two-regime + disabled-guard + by-construction ranges + schema-tightening + rewrote 6 old-model pin files → Blue Validate Red **REJECT** (follower-estimate base only derived-from-produced, never hard-pinned — a base-computation bug would slip through) → Red fix (`1502795`, hard-pinned base 5000→2000, floor 100→80, cap 50000→4000) → Blue APPROVE → Green (`40a8b77`) `computeReachModel` + disabled-guard fix + schema tightening (9 fields → required) + deleted `formatEngagementMultipliers`/`staticScoreQualityMultipliers` → Green flagged the tightening broke 3 client fixtures → Red fixture update (`0c5f384`, added the four-regime fields to the client available-prediction fixtures) → Blue (Validate Green) + Yellow both APPROVE. Full `pnpm test` green (shared 81 / engine 466 / client 179), typecheck 5/5, lint clean, gates clean, deleted consts zero non-test hits.
+- F1 resolved in code: ranges ordered by construction (`stallRange=[round(min(0.3·base,mid)), round(max(0.3·base,1.2·mid))]`, `escapeRange=[round(3·base),round(12·base)]`); honest midpoint never clamped up (verified by the worst-case + 16×4×2 ordering sweep). Base unambiguous (`baseImpressionsPerThousandFollowers=400` ⇒ `clamp(0.4·followers,80,4000)`).
+- Transitional bridge: legacy `rangeLow`/`rangeHigh`/`midpoint`/`confidence` derived from the regimes, live consumer (client `components.tsx`) today, **deleted in RMU-011**. Confidence signal_key renamed `zeitgeist`→`timely_wording` (within the transitional confidence bridge; no new behavior).

@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # RMU-008: Judge rubric +5 dims, accountProfile input, judge→reach two-pass bridge
@@ -16,6 +16,14 @@ Greenfield judge→reach bridge (the old 0-10 `aiRating` path was deleted in RMU
    `audienceMatch` (given `accountProfile`; explicit `null` when no profile is provided),
    `replyVsQuoteOrientation` (0-100 display-only: 100 = built to collect replies, 0 = built
    to be quote-tweeted). `audienceMatch` allows `null` in the output schema.
+   **Tighten the schema (this ticket is the producer).** The 5 dims were `.optional()` at
+   RMU-001 because the judge emitted only the 8 existing dims; the judge now always emits all
+   13, so tighten in `judgeScoresSchema`: the 4 behavioral dims (`answerEffort`,
+   `strangerAnswerability`, `statusDependency`, `replyVsQuoteOrientation`) → **required**, and
+   `audienceMatch` → `judgeScoreValue.nullable()` (**required on the wire, explicit `null`**
+   when no profile — the "nullable, NOT optional" end state). Add the test that a full verdict
+   carrying the new dims must include the 4 behavioral dims and a present (possibly `null`)
+   `audienceMatch`.
 2. **`accountProfile` input.** `JudgeDraftService.judge(text, accountProfile?)`; the
    `/drafts/judge` route reads `accountProfile` from the request, falling back to the
    persisted `settings.accountProfile` (RMU-009). Pass it into the structured-prompt
@@ -88,3 +96,9 @@ the bridge replaces only the quality slot; `qualityBasis` stamped correctly; `pn
 
 Judge failure → no pass-2 (client keeps the static reach). `judgeSignals` out of 0-100 →
 `validation_failed` at request parse. The double-count risk is documented, not "fixed".
+
+## Pipeline Log
+
+- 2026-06-14 — **Done.** Standard pipeline: Red (`bfd2bb8`) schema tightening (4 behavioral required + `audienceMatch` nullable-required) + fixture cascade across 10 files incl. 3 on-disk JSON verdicts + bridge math + judge-branch + accountProfile fallback (fakes/spies only, no real CLI) → Blue Validate Red APPROVE (fixture cascade complete; `0.5·5^0.5≈1.118`; isolation confirmed) → Green (`4f0a09d`) tightened schema, extended `judgeInstructions`/`verdictOutputSchema` (+5 dims, `additionalProperties:false` preserved), `JudgeDraftService.judge(text, accountProfile?)` + route `body.accountProfile ?? settings.accountProfile` fallback, `toJudgedQualityMultiplier` + the `computeReachModel` judge branch (quality slot + reply lerp only; `qualityBasis="judge"`), and threaded `scoringContext.judgeSignals` service→estimator so pass-2 is reachable → Blue (Validate Green) APPROVE + Yellow APPROVE_WITH_CONCERNS. Full `pnpm test` green (shared 90 / engine 500 / client 179), typecheck 5/5, lint clean, gates clean. Pass-1 static + `deriveJudgeVerdict` + 8 existing dims unchanged.
+- **Concern C3 (Yellow, non-blocking → epic-close Crimson):** `accountProfile` user free-text reaches the judge prompt (prompt-injection/PII surface). Mitigated: schema-bounded (`trim().max(600)`), envelope-only (string interpolation into `instructions`, no shell/SQL sink), local single-user. Flagged for the RMU-019/Crimson security pass.
+- Note: judge bridge tuning constants (`judgedQuality` band, reply lerp 0.002/0.025) are `// CALIBRATE` placeholders (calibration-pending; clamped band bounds them).

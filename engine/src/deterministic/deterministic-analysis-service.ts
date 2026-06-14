@@ -14,6 +14,7 @@ import { analyzeDraftText } from "./analyzer.js";
 import { sanitizeScoreLearnings } from "./learning-copy.js";
 import { deriveApiPostCoach } from "./post-coach-view-model.js";
 import { toEngagementPrediction } from "./prediction-view-model.js";
+import { detectExternalLink } from "./quality-signal-checks.js";
 
 const nowIso = (): string => new Date().toISOString();
 type AnalyzePost = typeof analyzeDraftText;
@@ -34,6 +35,15 @@ export class DeterministicAnalysisService {
       try {
         analysis = this.analyzePost(item.text, {
           followers: parsedRequest.scoringContext.followers,
+          trailingMedianImpressions:
+            parsedRequest.scoringContext.trailingMedianImpressions,
+          repeatHistory: parsedRequest.scoringContext.repeatHistory ?? [],
+          hasExternalLink: detectExternalLink(item.text),
+          // Pass-2: a judged scoringContext threads judgeSignals into the reach
+          // model's judged-quality branch. Absent (pass-1) -> static quality.
+          ...(parsedRequest.scoringContext.judgeSignals !== undefined
+            ? { judgeSignals: parsedRequest.scoringContext.judgeSignals }
+            : {}),
         });
       } catch (error) {
         console.error("[deterministic-analysis] failed to score candidate", {
@@ -60,6 +70,8 @@ export class DeterministicAnalysisService {
       const prediction = toEngagementPrediction({
         analyzerPrediction: analysis.prediction,
         followers: parsedRequest.scoringContext.followers,
+        trailingMedianImpressions:
+          parsedRequest.scoringContext.trailingMedianImpressions,
       });
 
       return {

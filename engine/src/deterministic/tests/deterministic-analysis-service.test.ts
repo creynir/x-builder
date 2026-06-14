@@ -161,18 +161,66 @@ describe("deterministic analysis service", () => {
 
     expect(item.prediction).toMatchObject({
       status: "available",
-      confidence: expect.any(String),
       signals: expect.any(Array),
+      qualityBasis: "static",
+      baseSource: "follower_estimate",
     });
 
     if (item.prediction.status !== "available") {
       throw new Error("Expected available engagement prediction.");
     }
 
-    expect(item.prediction.rangeLow).toBeGreaterThan(0);
-    expect(item.prediction.midpoint).toBeGreaterThan(item.prediction.rangeLow);
-    expect(item.prediction.rangeHigh).toBeGreaterThan(item.prediction.midpoint);
-    expect(item.prediction.signals.length).toBeGreaterThan(0);
+    const prediction = item.prediction;
+
+    // Four-regime reach output, derived from the produced base.
+    expect(prediction.baseImpressions).toBeGreaterThanOrEqual(1);
+    expect(prediction.predictedMidImpressions).toBeGreaterThanOrEqual(1);
+    expect(prediction.stallRange.low).toBeLessThanOrEqual(prediction.stallRange.high);
+    expect(prediction.escapeRange.low).toBeLessThanOrEqual(prediction.escapeRange.high);
+    expect(prediction.escapeRange).toEqual({
+      low: Math.round(3 * prediction.baseImpressions),
+      high: Math.round(12 * prediction.baseImpressions),
+    });
+    expect(prediction.escapeProbability).toBeGreaterThanOrEqual(0);
+    expect(prediction.escapeProbability).toBeLessThanOrEqual(1);
+    expect(prediction.expectedReplies).toBeGreaterThanOrEqual(0);
+    expect(typeof prediction.reachModelVersion).toBe("string");
+    expect(prediction.reachModelVersion.length).toBeGreaterThan(0);
+    expect(prediction.signals.length).toBeGreaterThanOrEqual(0);
+
+    // The deleted legacy mirror fields must not survive on the produced output.
+    expect(prediction).not.toHaveProperty("rangeLow");
+    expect(prediction).not.toHaveProperty("rangeHigh");
+    expect(prediction).not.toHaveProperty("midpoint");
+    expect(prediction).not.toHaveProperty("confidence");
+  });
+
+  it("surfaces an available prediction from a trailing median when followers are absent", async () => {
+    const item = await analyzeOne({
+      items: [
+        {
+          id: "candidate-1",
+          text: "hot take: specific launch proof beats generic positioning every week",
+        },
+      ],
+      scoringContext: {
+        trailingMedianImpressions: 2000,
+      },
+      presentation: {
+        postCoachMode: "preview",
+      },
+    });
+
+    expectSharedScoredShape(item);
+
+    if (item.prediction.status !== "available") {
+      throw new Error("Expected a trailing-median request to be available, not disabled.");
+    }
+
+    expect(item.prediction.baseSource).toBe("trailing_median");
+    expect(item.prediction.baseImpressions).toBe(2000);
+    expect(item.prediction.qualityBasis).toBe("static");
+    expect(item.prediction.escapeRange).toEqual({ low: 6000, high: 24000 });
   });
 
   it("does not expose the analyzer implicit follower fallback as a prediction", async () => {

@@ -4,7 +4,7 @@
   "is_error": false,
   "duration_ms": 7421,
   "duration_api_ms": 6890,
-  "result": "{\"scores\":{\"overall\":82,\"replies\":84,\"profileClicks\":76,\"impressions\":68,\"bookmarkValue\":63,\"dwellProxy\":73,\"voiceMatch\":88,\"negativeRisk\":9},\"confidence\":\"high\",\"headline\":\"Concrete hook, soft landing.\",\"strengths\":[\"Specific proof beats generic claims.\"],\"improvements\":[\"Cut the closing question.\"]}",
+  "result": "{\"scores\":{\"overall\":82,\"replies\":84,\"profileClicks\":76,\"impressions\":68,\"bookmarkValue\":63,\"dwellProxy\":73,\"voiceMatch\":88,\"negativeRisk\":9,\"answerEffort\":55,\"strangerAnswerability\":48,\"statusDependency\":30,\"replyVsQuoteOrientation\":62,\"audienceMatch\":null},\"confidence\":\"high\",\"headline\":\"Concrete hook, soft landing.\",\"strengths\":[\"Specific proof beats generic claims.\"],\"improvements\":[\"Cut the closing question.\"]}",
   "session_id": "11111111-2222-3333-4444-555555555555",
   "request_id": "req_cursor_judge_0001",
   "usage": {

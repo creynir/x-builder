@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { evaluateQualitySignalChecks } from "../quality-signal-checks";
+import {
+  detectExternalLink,
+  evaluateQualitySignalChecks,
+} from "../quality-signal-checks";
 import { countWords, getNonEmptyLines } from "../text-metrics";
 import { bannedClaimPattern, findCheck } from "./test-helpers";
 
@@ -152,5 +155,43 @@ describe("quality-signal-checks", () => {
     });
     expect(check.label).toMatch(labelPattern);
     expect(check.label).not.toMatch(bannedClaimPattern);
+  });
+});
+
+describe("detectExternalLink", () => {
+  it("flags a plain external URL as an external link", () => {
+    expect(detectExternalLink("Full teardown here: https://example.com")).toBe(true);
+  });
+
+  it("does not flag a post whose only URL is a pic.twitter.com media attachment", () => {
+    expect(detectExternalLink("Shipped it https://pic.twitter.com/abc")).toBe(false);
+  });
+
+  it("does not flag a post whose only URL is a pbs.twimg.com media attachment", () => {
+    expect(detectExternalLink("Before and after https://pbs.twimg.com/media/xyz.jpg")).toBe(
+      false,
+    );
+  });
+
+  it("does not flag a post whose only URL is a video.twimg.com media attachment", () => {
+    expect(detectExternalLink("Demo clip https://video.twimg.com/ext_tw_video/1.mp4")).toBe(
+      false,
+    );
+  });
+
+  it("treats an ambiguous t.co wrapper as an external link", () => {
+    expect(detectExternalLink("Read more https://t.co/x")).toBe(true);
+  });
+
+  it("returns false when the post has no URL at all", () => {
+    expect(detectExternalLink("A self-contained teardown with no link friction.")).toBe(false);
+  });
+
+  it("flags the post when a media host and a real external link are both present", () => {
+    expect(
+      detectExternalLink(
+        "Screenshot https://pic.twitter.com/abc and the writeup https://example.com/post",
+      ),
+    ).toBe(true);
   });
 });

@@ -29,6 +29,17 @@ const judgeInstructions = [
   "  polish. Do not assume any specific person's style.",
   "- negativeRisk: risk of negative signals (ragebait, misleading or overclaimed,",
   "  spammy engagement bait, generic AI hype). Higher means more risk.",
+  "- answerEffort: how little effort a reply takes — 100 means a one-word answer,",
+  "  0 means it demands an essay.",
+  "- strangerAnswerability: how broadly answerable it is — 100 means anyone can",
+  "  reply, 0 means only insiders can.",
+  "- statusDependency: how self-evident the payoff is — 100 means it needs a famous",
+  "  author bio to land, 0 means it stands on its own. Score the TEXT only, never",
+  "  the (unknown) author's actual status.",
+  "- replyVsQuoteOrientation: 0-100, where 100 means it collects replies and 0 means",
+  "  it invites quote-tweets.",
+  "- audienceMatch: how well the draft fits the supplied account profile (0-100).",
+  "  When no account profile is provided, return null for audienceMatch.",
   "- overall: your holistic 0-100 judgment, accounting for the dimensions and the",
   "  negative risk.",
   "Penalize hashtag/emoji spam, em dashes, engagement bait, vague 'thoughts?' endings,",
@@ -38,7 +49,23 @@ const judgeInstructions = [
   "the output schema.",
 ].join(" ");
 
+// When the caller supplies an account profile, the model anchors audienceMatch to
+// it; absent a profile this instruction tells the model to emit null for that
+// single dimension while still scoring the other twelve.
+const accountProfileInstruction = (accountProfile: string): string =>
+  [
+    "Account profile for audienceMatch (the author's audience/positioning):",
+    accountProfile,
+  ].join(" ");
+
 const scoreProperty = { type: "integer", minimum: 0, maximum: 100 };
+// audienceMatch is required on the wire but nullable: an integer score when an
+// account profile anchors fit, an explicit null when none is supplied.
+const nullableScoreProperty = {
+  type: ["integer", "null"],
+  minimum: 0,
+  maximum: 100,
+};
 
 const verdictOutputSchema: Record<string, unknown> = {
   type: "object",
@@ -57,6 +84,11 @@ const verdictOutputSchema: Record<string, unknown> = {
         "dwellProxy",
         "voiceMatch",
         "negativeRisk",
+        "answerEffort",
+        "strangerAnswerability",
+        "statusDependency",
+        "replyVsQuoteOrientation",
+        "audienceMatch",
       ],
       properties: {
         overall: scoreProperty,
@@ -67,6 +99,11 @@ const verdictOutputSchema: Record<string, unknown> = {
         dwellProxy: scoreProperty,
         voiceMatch: scoreProperty,
         negativeRisk: scoreProperty,
+        answerEffort: scoreProperty,
+        strangerAnswerability: scoreProperty,
+        statusDependency: scoreProperty,
+        replyVsQuoteOrientation: scoreProperty,
+        audienceMatch: nullableScoreProperty,
       },
     },
     confidence: { type: "string", enum: ["low", "medium", "high"] },
@@ -110,7 +147,7 @@ export type JudgeDraftOutcome =
   | { status: "failed"; retryable: boolean; code: string; message: string };
 
 export interface JudgeDraft {
-  judge(text: string): Promise<JudgeDraftOutcome>;
+  judge(text: string, accountProfile?: string): Promise<JudgeDraftOutcome>;
 }
 
 export type JudgeProviderResolver = string | (() => string | Promise<string>);
@@ -129,13 +166,20 @@ export class JudgeDraftService implements JudgeDraft {
     private readonly resolveModel?: JudgeModelResolver,
   ) {}
 
-  async judge(text: string): Promise<JudgeDraftOutcome> {
+  async judge(text: string, accountProfile?: string): Promise<JudgeDraftOutcome> {
     const provider = await resolveValue(this.resolveProvider);
     const model = await this.resolveModel?.();
+    // Thread the account profile into the prompt envelope only when present, so a
+    // profile-less judge keeps a clean envelope and the model returns a null
+    // audienceMatch per the rubric instructions.
+    const instructions =
+      accountProfile !== undefined
+        ? `${judgeInstructions} ${accountProfileInstruction(accountProfile)}`
+        : judgeInstructions;
     const result = await this.llm.generateStructured({
       provider,
       purpose: "candidate_judge",
-      instructions: judgeInstructions,
+      instructions,
       turns: [{ role: "user", content: text }],
       structuredOutput: {
         name: "draft_judge_verdict",

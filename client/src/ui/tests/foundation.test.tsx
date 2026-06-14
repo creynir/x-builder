@@ -5,7 +5,7 @@ import type {
   ReactNode,
 } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const foundationModulePath = "../foundation";
 
@@ -96,6 +96,15 @@ type KeyValueListProps = {
   disabled?: boolean;
 };
 
+type SwitchProps = {
+  id: string;
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  name?: string;
+  disabled?: boolean;
+};
+
 type FoundationComponents = {
   Alert: (props: AlertProps) => ReactElement;
   Badge: (props: BadgeProps) => ReactElement;
@@ -108,6 +117,7 @@ type FoundationComponents = {
   PageHeader: (props: PageHeaderProps) => ReactElement;
   ScoreBar: (props: ScoreBarProps) => ReactElement;
   Skeleton: (props: SkeletonProps) => ReactElement;
+  Switch: (props: SwitchProps) => ReactElement;
   ToastRegion: () => ReactElement;
   Tooltip: (props: { label: string; children: ReactNode }) => ReactElement;
 };
@@ -401,6 +411,141 @@ describe("Button", () => {
 
     expect(button).toContain('aria-busy="true"');
     expect(buttonVisibleText(button)).toBe("Generate");
+  });
+});
+
+// EXTRACTION-TARGET TEST (AC2) — the foundation `Switch` does not exist yet.
+// This block FAILS NOW because `Switch` is not exported from `foundation`:
+// destructuring it yields `undefined`, so calling it throws a runtime
+// "Switch is not a function" error (a clean missing-export failure, not a
+// syntax/type error). Green's extraction adds and exports `Switch`, which makes
+// every assertion below pass. The harness is SSR-only (node env, no DOM, no
+// testing-library), so the keyboard toggle is exercised the SSR-compatible way:
+// a Space keypress on a native checkbox produces exactly the change event whose
+// `target.checked` is the flipped value, so invoking the rendered input's
+// `onChange` with that synthetic event is the faithful component-level analog.
+type ChildShape = {
+  type?: unknown;
+  props?: Record<string, unknown> & { children?: unknown };
+};
+
+function flattenElements(node: unknown): ChildShape[] {
+  if (node === null || node === undefined || typeof node !== "object") {
+    return [];
+  }
+
+  if (Array.isArray(node)) {
+    return node.flatMap((child) => flattenElements(child));
+  }
+
+  const element = node as ChildShape;
+  const here = element.type !== undefined ? [element] : [];
+  const children = element.props?.children;
+
+  return [...here, ...flattenElements(children)];
+}
+
+function findCheckboxInput(element: ReactElement): ChildShape {
+  const input = flattenElements(element).find(
+    (child) =>
+      child.type === "input" && child.props?.type === "checkbox",
+  );
+
+  if (input === undefined) {
+    throw new Error("Expected a native checkbox <input> inside the Switch.");
+  }
+
+  return input;
+}
+
+describe("Switch", () => {
+  it("encapsulates the prior native-checkbox markup: toggles via change/Space to flip checked + fire onChange, reflects disabled, with no aria-checked or role=switch", async () => {
+    const { Switch } = await loadFoundation();
+    const onChange = vi.fn();
+
+    // Calling the missing export throws "Switch is not a function" here — the
+    // expected fail-now mode before Green adds and exports the component.
+    // Render unchecked: a Space keypress on a native checkbox emits a change
+    // event whose target.checked is the flipped (now true) value, so invoking
+    // the rendered input's onChange with it is the SSR-faithful keyboard toggle.
+    const uncheckedElement = Switch({
+      id: "show-details",
+      label: "Show deterministic details",
+      checked: false,
+      onChange,
+    });
+    const uncheckedInput = findCheckboxInput(uncheckedElement);
+    const toggleOn = uncheckedInput.props?.onChange as
+      | ((event: { target: { checked: boolean } }) => void)
+      | undefined;
+
+    expect(toggleOn).toBeTypeOf("function");
+    toggleOn?.({ target: { checked: true } });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(true);
+
+    // Toggling a checked switch the other way reports false.
+    const checkedElement = Switch({
+      id: "show-details",
+      label: "Show deterministic details",
+      checked: true,
+      onChange,
+    });
+    const toggleOff = findCheckboxInput(checkedElement).props?.onChange as
+      | ((event: { target: { checked: boolean } }) => void)
+      | undefined;
+
+    toggleOff?.({ target: { checked: false } });
+    expect(onChange).toHaveBeenLastCalledWith(false);
+
+    // Rendered markup must reproduce the prior inline settings switch exactly:
+    // a labeled bare native checkbox with id/htmlFor wiring, controlled checked
+    // reflection, the same wrapper class, and a disabled control when disabled.
+    // It is NOT a custom role="switch" widget, so it carries NO aria-checked and
+    // NO role="switch" — matching the preserved settings-route SSR markup.
+    const checkedHtml = renderToStaticMarkup(
+      <Switch
+        id="show-details"
+        label="Show deterministic details"
+        checked
+        onChange={() => {}}
+      />,
+    );
+    const uncheckedHtml = renderToStaticMarkup(
+      <Switch
+        id="show-details"
+        label="Show deterministic details"
+        checked={false}
+        onChange={() => {}}
+      />,
+    );
+    const disabledHtml = renderToStaticMarkup(
+      <Switch
+        id="show-details"
+        label="Show deterministic details"
+        checked
+        disabled
+        onChange={() => {}}
+      />,
+    );
+
+    expect(textContent(checkedHtml)).toContain("Show deterministic details");
+    expect(checkedHtml).toContain('id="show-details"');
+    expect(checkedHtml).toContain('for="show-details"');
+    expect(checkedHtml).toContain('type="checkbox"');
+    // Same tokenized switch wrapper class the settings markup uses.
+    expect(checkedHtml).toContain('class="xb-settings-route__switch"');
+    // Controlled checked state reflects in the markup.
+    expect(checkedHtml).toContain("checked=");
+    expect(uncheckedHtml).not.toContain("checked=");
+    // Bare native checkbox — never an ARIA switch widget.
+    expect(checkedHtml).not.toContain("aria-checked");
+    expect(uncheckedHtml).not.toContain("aria-checked");
+    expect(checkedHtml).not.toContain('role="switch"');
+    // Disabled renders the input disabled.
+    expect(disabledHtml).toContain("disabled");
+    expect(disabledHtml).not.toContain("aria-checked");
   });
 });
 

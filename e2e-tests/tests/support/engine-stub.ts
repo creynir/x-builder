@@ -149,6 +149,10 @@ export function settingsBody(options: EngineStubOptions = {}) {
   };
 }
 
+// Schema-shaped to the real judgeVerdictSchema (judge.ts): the producer emits all
+// thirteen dimensions. The four behavioral dimensions are required; audienceMatch
+// is required on the wire but nullable (an explicit number when an account profile
+// anchors audience fit, null otherwise).
 export type JudgeVerdict = {
   verdict: "post_now" | "slight_rework" | "major_rework" | "do_not_post";
   confidence: "low" | "medium" | "high";
@@ -161,6 +165,11 @@ export type JudgeVerdict = {
     dwellProxy: number;
     voiceMatch: number;
     negativeRisk: number;
+    answerEffort: number;
+    strangerAnswerability: number;
+    statusDependency: number;
+    replyVsQuoteOrientation: number;
+    audienceMatch: number | null;
   };
   headline: string;
   strengths: string[];
@@ -179,6 +188,11 @@ export const sampleVerdict: JudgeVerdict = {
     dwellProxy: 70,
     voiceMatch: 85,
     negativeRisk: 10,
+    answerEffort: 55,
+    strangerAnswerability: 48,
+    statusDependency: 30,
+    replyVsQuoteOrientation: 62,
+    audienceMatch: 41,
   },
   headline: "Strong hook, weak closer.",
   strengths: [
