@@ -459,7 +459,7 @@ function findCheckboxInput(element: ReactElement): ChildShape {
 }
 
 describe("Switch", () => {
-  it("toggles by keyboard (Space) to flip checked + fire onChange, and reflects disabled and aria-checked", async () => {
+  it("encapsulates the prior native-checkbox markup: toggles via change/Space to flip checked + fire onChange, reflects disabled, with no aria-checked or role=switch", async () => {
     const { Switch } = await loadFoundation();
     const onChange = vi.fn();
 
@@ -499,8 +499,11 @@ describe("Switch", () => {
     toggleOff?.({ target: { checked: false } });
     expect(onChange).toHaveBeenLastCalledWith(false);
 
-    // Rendered markup: labeled native checkbox, controlled checked reflection,
-    // aria-checked mirroring the boolean, and a disabled control when disabled.
+    // Rendered markup must reproduce the prior inline settings switch exactly:
+    // a labeled bare native checkbox with id/htmlFor wiring, controlled checked
+    // reflection, the same wrapper class, and a disabled control when disabled.
+    // It is NOT a custom role="switch" widget, so it carries NO aria-checked and
+    // NO role="switch" — matching the preserved settings-route SSR markup.
     const checkedHtml = renderToStaticMarkup(
       <Switch
         id="show-details"
@@ -531,12 +534,18 @@ describe("Switch", () => {
     expect(checkedHtml).toContain('id="show-details"');
     expect(checkedHtml).toContain('for="show-details"');
     expect(checkedHtml).toContain('type="checkbox"');
+    // Same tokenized switch wrapper class the settings markup uses.
+    expect(checkedHtml).toContain('class="xb-settings-route__switch"');
+    // Controlled checked state reflects in the markup.
     expect(checkedHtml).toContain("checked=");
     expect(uncheckedHtml).not.toContain("checked=");
-    expect(checkedHtml).toContain('aria-checked="true"');
-    expect(uncheckedHtml).toContain('aria-checked="false"');
+    // Bare native checkbox — never an ARIA switch widget.
+    expect(checkedHtml).not.toContain("aria-checked");
+    expect(uncheckedHtml).not.toContain("aria-checked");
+    expect(checkedHtml).not.toContain('role="switch"');
+    // Disabled renders the input disabled.
     expect(disabledHtml).toContain("disabled");
-    expect(disabledHtml).toContain('aria-checked="true"');
+    expect(disabledHtml).not.toContain("aria-checked");
   });
 });
 
