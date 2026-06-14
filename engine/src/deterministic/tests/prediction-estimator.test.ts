@@ -23,6 +23,18 @@ import { buildReachInput } from "./test-helpers";
 const QUALITY_SCORE = 66; // staticQualityCompression -> 1.0
 const STATIC_LOW_SCORE = 10; // staticQualityCompression -> 0.6
 
+function requirePrediction(
+  input: Parameters<typeof computeReachModel>[0],
+): NonNullable<ReturnType<typeof computeReachModel>> {
+  const prediction = computeReachModel(input);
+
+  if (prediction === null) {
+    throw new Error("Expected an available reach prediction.");
+  }
+
+  return prediction;
+}
+
 describe("computeReachModel", () => {
   it("derives a follower-estimate base when no trailing median is supplied", () => {
     const input = buildReachInput({
@@ -377,5 +389,182 @@ describe("computeStatusMultiplier", () => {
 
   it("falls back to 1 for a wisdom_one_liner with undefined followers", () => {
     expect(computeStatusMultiplier("wisdom_one_liner", undefined)).toBe(1);
+  });
+});
+
+// Reach-signal adjustments (trending lexicon, tribe vocative, answer-effort).
+// These are pEscape / expectedReplies adjustments only: the load-bearing
+// invariant for every case below is that `predictedMidImpressions` is identical
+// to a baseline draft that differs solely by the trigger phrase. The shared
+// inputs hold `score` and `format` fixed so the midpoint cannot drift through
+// quality compression or a format reclassification.
+
+const NEUTRAL_DRAFT = "Clear writing compounds when the point is specific.";
+
+// cta_farm: escapeProbability 0.3 (not halved, well below any cap), replyRate
+// 0.02. With followers 5000 the follower-estimate base is 2000.
+function ctaFarmInput(text: string, overrides: Record<string, unknown> = {}) {
+  return buildReachInput({
+    text,
+    followers: 5000,
+    trailingMedianImpressions: undefined,
+    format: "cta_farm",
+    score: QUALITY_SCORE,
+    hasExternalLink: false,
+    repeatHistory: [],
+    ...overrides,
+  });
+}
+
+describe("tension signal removal", () => {
+  it("emits no tension_contradiction signal for a draft containing 'but'", () => {
+    const prediction = requirePrediction(
+      ctaFarmInput("This shipped fast, but the docs lagged behind for weeks."),
+    );
+
+    const tensionSignal = prediction.signals.find(
+      (signal) => signal.signal_key === "tension_contradiction",
+    );
+
+    expect(tensionSignal).toBeUndefined();
+  });
+
+  it("leaves the midpoint identical whether or not the draft contains 'but'", () => {
+    const withTension = requirePrediction(
+      ctaFarmInput("This shipped fast, but the docs lagged behind for weeks."),
+    );
+    const withoutTension = requirePrediction(
+      ctaFarmInput("This shipped fast and the docs kept pace for weeks."),
+    );
+
+    expect(withTension.predictedMidImpressions).toBe(
+      withoutTension.predictedMidImpressions,
+    );
+  });
+});
+
+describe("trending-topic lexicon escape bonus", () => {
+  it("lifts pEscape by the per-match bonus for one trending term and leaves the midpoint unchanged", () => {
+    const baseline = requirePrediction(ctaFarmInput(NEUTRAL_DRAFT));
+    const trending = requirePrediction(
+      ctaFarmInput("Why did you reach for claude on that workflow?"),
+    );
+
+    // cta_farm base pEscape 0.3, one match -> 0.3 · (1 + 0.15) = 0.345.
+    expect(trending.escapeProbability).toBeCloseTo(0.3 * (1 + 0.15), 10);
+    expect(baseline.escapeProbability).toBeCloseTo(0.3, 10);
+
+    // Midpoint unchanged: the trending bonus never touches the median regime.
+    expect(trending.predictedMidImpressions).toBe(baseline.predictedMidImpressions);
+  });
+
+  it("caps the pEscape bonus at +0.40 for three or more trending terms", () => {
+    const baseline = requirePrediction(ctaFarmInput(NEUTRAL_DRAFT));
+    const trending = requirePrediction(
+      ctaFarmInput("Comparing claude, codex, and gpt on the same task this week."),
+    );
+
+    // Three matches would be 3·0.15 = 0.45 uncapped; capped at +0.40 -> ×1.40.
+    expect(trending.escapeProbability).toBeCloseTo(0.3 * 1.4, 10);
+    expect(trending.escapeProbability).toBeLessThanOrEqual(1);
+
+    expect(trending.predictedMidImpressions).toBe(baseline.predictedMidImpressions);
+  });
+});
+
+describe("tribe-vocative reply bonus", () => {
+  it("adds +20% to expectedReplies for a tribe term while leaving pEscape and the midpoint unchanged", () => {
+    const baseline = requirePrediction(ctaFarmInput(NEUTRAL_DRAFT));
+    const tribe = requirePrediction(
+      ctaFarmInput("Every founder I know wrestles with the same first hire."),
+    );
+
+    // expectedReplies = mid · replyRate(cta_farm 0.02); the tribe term multiplies
+    // that reply figure by 1.2 and nothing else.
+    expect(tribe.expectedReplies).toBeCloseTo(baseline.expectedReplies * 1.2, 6);
+
+    // pEscape and midpoint are untouched by the tribe vocative.
+    expect(tribe.escapeProbability).toBeCloseTo(baseline.escapeProbability, 10);
+    expect(tribe.predictedMidImpressions).toBe(baseline.predictedMidImpressions);
+  });
+});
+
+describe("answer-effort adjustments", () => {
+  it("lifts pEscape ×1.4 and expectedReplies ×2.0 for an 'in 1 word' constraint, midpoint unchanged", () => {
+    const baseline = requirePrediction(ctaFarmInput(NEUTRAL_DRAFT));
+    const constrained = requirePrediction(
+      ctaFarmInput("Describe your last quarter in 1 word?"),
+    );
+
+    expect(constrained.escapeProbability).toBeCloseTo(baseline.escapeProbability * 1.4, 10);
+    expect(constrained.expectedReplies).toBeCloseTo(baseline.expectedReplies * 2.0, 6);
+    expect(constrained.predictedMidImpressions).toBe(baseline.predictedMidImpressions);
+  });
+
+  it("recognises the spelled-out 'in one word' constraint", () => {
+    const baseline = requirePrediction(ctaFarmInput(NEUTRAL_DRAFT));
+    const constrained = requirePrediction(
+      ctaFarmInput("Describe your last quarter in one word?"),
+    );
+
+    expect(constrained.escapeProbability).toBeCloseTo(baseline.escapeProbability * 1.4, 10);
+    expect(constrained.expectedReplies).toBeCloseTo(baseline.expectedReplies * 2.0, 6);
+    expect(constrained.predictedMidImpressions).toBe(baseline.predictedMidImpressions);
+  });
+
+  it("dampens pEscape ×0.7 for an anecdote/justification question, midpoint unchanged", () => {
+    const baseline = requirePrediction(ctaFarmInput(NEUTRAL_DRAFT));
+    const anecdote = requirePrediction(
+      ctaFarmInput("How did you build that, and why?"),
+    );
+
+    expect(anecdote.escapeProbability).toBeCloseTo(baseline.escapeProbability * 0.7, 10);
+    expect(anecdote.predictedMidImpressions).toBe(baseline.predictedMidImpressions);
+  });
+
+  it("dampens pEscape ×0.7 for self-disclosure of money specifics, midpoint unchanged", () => {
+    const baseline = requirePrediction(ctaFarmInput(NEUTRAL_DRAFT));
+    const disclosure = requirePrediction(
+      ctaFarmInput("I burned through $40,000 of savings last quarter."),
+    );
+
+    expect(disclosure.escapeProbability).toBeCloseTo(baseline.escapeProbability * 0.7, 10);
+    expect(disclosure.predictedMidImpressions).toBe(baseline.predictedMidImpressions);
+  });
+});
+
+describe("reach-signal composition and clamps", () => {
+  it("composes the 'in 1 word' lift and the anecdote penalty multiplicatively on pEscape, midpoint unchanged", () => {
+    const baseline = requirePrediction(ctaFarmInput(NEUTRAL_DRAFT));
+    const composed = requirePrediction(
+      ctaFarmInput("How did you build that, and why? Answer in 1 word?"),
+    );
+
+    // 0.3 · 1.4 (in 1 word) · 0.7 (anecdote) = 0.294.
+    expect(composed.escapeProbability).toBeCloseTo(0.3 * 1.4 * 0.7, 10);
+    expect(composed.predictedMidImpressions).toBe(baseline.predictedMidImpressions);
+  });
+
+  it("applies the external-link 0.03 cap last so a trending term cannot lift pEscape past it", () => {
+    const linkedTrending = requirePrediction(
+      ctaFarmInput("Comparing claude, codex, and gpt on the same task this week.", {
+        hasExternalLink: true,
+      }),
+    );
+
+    // Even though three trending terms would push the uncapped value to 0.42,
+    // the external-link cap is applied last and wins.
+    expect(linkedTrending.escapeProbability).toBeLessThanOrEqual(0.03);
+  });
+
+  it("clamps the composed pEscape to at most 1", () => {
+    const prediction = requirePrediction(
+      ctaFarmInput("Comparing claude, codex, and gpt? Answer in 1 word?", {
+        format: "fill_blank_tribal",
+      }),
+    );
+
+    expect(prediction.escapeProbability).toBeLessThanOrEqual(1);
+    expect(prediction.escapeProbability).toBeGreaterThanOrEqual(0);
   });
 });
