@@ -3,6 +3,13 @@ import {
   formatEngagementMultipliers,
   staticScoreQualityMultipliers,
 } from "./const/scoring-weights.js";
+import {
+  repeatDecayBase,
+  repeatDecayFloor,
+  wisdomStatusDivisor,
+  wisdomStatusMax,
+  wisdomStatusMin,
+} from "./const/reach-model-weights.js";
 import { predictionFormatLabels } from "./format-classifier.js";
 import { timelyTopicTerms } from "./rule-lexicon.js";
 import type {
@@ -143,4 +150,72 @@ export function estimateEngagementRange(input: {
     confidence,
     signals,
   };
+}
+
+/**
+ * Compresses the static quality score into a reach-model multiplier band.
+ * Higher-quality drafts earn a modest lift; lower-quality drafts are damped.
+ */
+export function staticQualityCompression(score: number): number {
+  if (score >= 90) {
+    return 1.3;
+  }
+
+  if (score >= 70) {
+    return 1.1;
+  }
+
+  if (score >= 50) {
+    return 1.0;
+  }
+
+  if (score >= 25) {
+    return 0.8;
+  }
+
+  return 0.6;
+}
+
+type RepeatHistoryEntry = {
+  format: PostFormat;
+  lastPostedAt: string;
+  countLast7d: number;
+};
+
+/**
+ * Decays reach for a format the author has posted recently. The decay base
+ * raised to the recent count, floored, models diminishing returns from
+ * repeating the same format. No matching history means no decay.
+ */
+export function computeRepeatMultiplier(
+  repeatHistory: RepeatHistoryEntry[],
+  format: PostFormat,
+): number {
+  const entry = repeatHistory.find((item) => item.format === format);
+
+  if (!entry) {
+    return 1;
+  }
+
+  return Math.max(repeatDecayFloor, repeatDecayBase ** entry.countLast7d);
+}
+
+/**
+ * Scales wisdom_one_liner reach by author status (follower count): the format
+ * trades on authority, so a low-follower account is damped and a high-follower
+ * account is lifted, both clamped. Every other format is status-neutral, and a
+ * wisdom_one_liner with unknown followers falls back to neutral.
+ */
+export function computeStatusMultiplier(
+  format: PostFormat,
+  followers: number | undefined,
+): number {
+  if (format !== "wisdom_one_liner" || followers === undefined) {
+    return 1;
+  }
+
+  return Math.min(
+    wisdomStatusMax,
+    Math.max(wisdomStatusMin, followers / wisdomStatusDivisor),
+  );
 }

@@ -30,6 +30,28 @@ function countUrls(text: string): number {
   return (text.match(/\bhttps?:\/\/[^\s)]+/gi) ?? []).length;
 }
 
+/**
+ * Hosts that serve X's own media attachments rather than off-platform
+ * destinations. URLs on these hosts do not count as external link friction.
+ * `t.co` is deliberately excluded: it is an ambiguous wrapper that usually
+ * resolves to an off-platform link.
+ */
+const mediaAttachmentHosts = new Set([
+  "pic.twitter.com",
+  "pbs.twimg.com",
+  "video.twimg.com",
+]);
+
+export function detectExternalLink(text: string): boolean {
+  const urls = text.match(/\bhttps?:\/\/[^\s)]+/gi) ?? [];
+
+  return urls.some((url) => {
+    const host = url.replace(/^https?:\/\//i, "").split("/")[0]?.toLowerCase() ?? "";
+
+    return !mediaAttachmentHosts.has(host);
+  });
+}
+
 function countMentions(text: string): number {
   return (text.match(/(^|[\s(])@[A-Za-z0-9_]{1,15}\b/g) ?? []).length;
 }
