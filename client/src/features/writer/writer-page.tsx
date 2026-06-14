@@ -271,6 +271,15 @@ const judgeScoreRows: Array<{ key: keyof JudgeScores; label: string }> = [
   { key: "negativeRisk", label: "Negative risk" },
 ];
 
+// The three behavioral dimensions that render as plain 0-100 numbers, exactly
+// like the legacy rows above. audienceMatch (nullable) and replyVsQuoteOrientation
+// (a poled scale) need their own renders and are intentionally excluded here.
+const judgeAuxiliaryRows: Array<{ key: keyof JudgeScores; label: string }> = [
+  { key: "answerEffort", label: "Answer effort" },
+  { key: "strangerAnswerability", label: "Stranger answerability" },
+  { key: "statusDependency", label: "Status dependency" },
+];
+
 // Maps a verdict's producing model id through the shared provider catalog. Ids
 // inside the closed enum resolve to their label; ids outside it (the schema
 // allows any string) fall back to the raw id rather than rendering blank.
@@ -285,11 +294,13 @@ export function JudgePanel({
   draftReady,
   judge,
   onJudge,
+  onOpenSettings,
 }: {
   judgeReady: boolean;
   draftReady: boolean;
   judge: JudgeState;
   onJudge: () => void;
+  onOpenSettings?: () => void;
 }): ReactElement {
   const isLoading = judge.status === "loading";
   const disabled = !judgeReady || !draftReady || isLoading;
@@ -336,6 +347,41 @@ export function JudgePanel({
                 <dd>{judge.verdict.scores[row.key]}</dd>
               </div>
             ))}
+            {judgeAuxiliaryRows.map((row) => (
+              <div className="xb-judge-scores__row" key={row.key}>
+                <dt>{row.label}</dt>
+                <dd>{judge.verdict.scores[row.key]}</dd>
+              </div>
+            ))}
+            <div className="xb-judge-scores__row">
+              <dt>Audience match</dt>
+              {judge.verdict.scores.audienceMatch === null ? (
+                <dd className="xb-judge-scores__uncertain">
+                  Needs account profile
+                  <Button
+                    aria-label="Add account profile in Settings"
+                    className="xb-button--ghost"
+                    onClick={() => onOpenSettings?.()}
+                    type="button"
+                    variant="ghost"
+                  >
+                    Add account profile
+                  </Button>
+                </dd>
+              ) : (
+                <dd>{judge.verdict.scores.audienceMatch}</dd>
+              )}
+            </div>
+            <div className="xb-judge-scores__row">
+              <dt>Reply-oriented ↔ Quote-oriented</dt>
+              <dd className="xb-judge-scores__orientation">
+                <span className="xb-judge-scores__pole">Reply-oriented</span>
+                <span className="xb-judge-scores__orientation-value">
+                  {judge.verdict.scores.replyVsQuoteOrientation}
+                </span>
+                <span className="xb-judge-scores__pole">Quote-oriented</span>
+              </dd>
+            </div>
           </dl>
           {judge.verdict.strengths.length > 0 ? (
             <div className="xb-judge-verdict__section">
@@ -685,6 +731,7 @@ function WriterPageView({
           draftReady={idea.trim().length > 0}
           judge={judge}
           onJudge={onJudge}
+          onOpenSettings={onOpenSettings}
         />
       </div>
       <Drawer

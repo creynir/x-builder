@@ -432,6 +432,33 @@ select {
   font: var(--type-data);
 }
 
+.xb-judge-scores__uncertain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+  color: var(--text-uncertain);
+  font: var(--type-body-small);
+}
+
+.xb-judge-scores__orientation {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.xb-judge-scores__pole {
+  color: var(--text-secondary);
+  font: var(--type-caption);
+}
+
+.xb-judge-scores__orientation-value {
+  text-align: center;
+  color: var(--text-heading);
+  font: var(--type-data);
+}
+
 .xb-judge-verdict__section h3 {
   margin: 0 0 var(--space-1);
   color: var(--text-heading);
