@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # RMU-005: Reach-model weights, external-link detection, repeat/status/quality multipliers
