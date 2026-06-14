@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # RMU-008: Judge rubric +5 dims, accountProfile input, judge→reach two-pass bridge
