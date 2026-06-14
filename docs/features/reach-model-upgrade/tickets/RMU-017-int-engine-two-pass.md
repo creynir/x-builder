@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # RMU-017: [INT] Engine two-pass analyze + judge bridge integration
@@ -24,3 +24,7 @@ status: in-progress
 `/drafts/judge` route → `JudgeDraftService.judge` (in-process `JudgeLlmGateway` fake — no real
 CLI); settings → judge `accountProfile` fallback. Fastify `inject`; in-process; the judge LLM
 is a true-external boundary stubbed by the in-process fake.
+
+## Pipeline Log
+
+- 2026-06-14 — **Done.** [INT] pipeline (Purple + Blue; no Red/Green). Purple (`e769c8c`) added `engine/src/server/tests/two-pass-analyze-judge-bridge-integration.test.ts` (8 tests: 4 user flows + 4 architectural invariants) via Fastify `inject` over the real `/posts/analyze`→`analyzePosts`→`computeReachModel` and `/drafts/judge`→`JudgeDraftService` paths; only the judge LLM + a temp-root settings repo stubbed. **Blue Validate Purple REJECT (cycle 1)** — invariants B (no `rangeLow`/`rangeHigh`/`midpoint`/`confidence`) and D (no `aiRating`/format-history) asserted absence against the Zod-**stripped** parsed object, so they tested "Zod strips unknown keys," not the implementation — vacuous against a facade that re-emits the legacy shim. **Purple fix (`1fdbae3`)** — identified the genuinely falsifiable seam is the response CONTRACT (the route's `parseResponseContract` guard strips before serialization, so even a normal raw-wire read is vacuous): B/D now inject a service fake that re-attaches the deleted fields (distinctive sentinels) onto a real contract-valid `DeterministicAnalysisService` base and assert absence on the RAW `JSON.parse(response.body)` wire + sentinel-not-on-wire, with anti-vacuous `status` guards. **Blue re-validate APPROVE** — independently re-ran the empirical `.passthrough()` probe (B/D FAIL when the contract re-admits the fields; 6 others stay green) then reverted (tree clean); mock honesty confirmed (fakes wrap the real service, isolated to B/D); A/C + the 4 flows unchanged. All 8 pass; engine suite **516/516**; typecheck clean; gates clean. **No concerns.** Confirmed in source: the judge bridge threads `judgeSignals` only into `computeReachModel`'s quality slot — `score`/`postCoach`/verdict never see it (invariant C); no `aiRating`/format-history strings in non-test source (invariant D).
