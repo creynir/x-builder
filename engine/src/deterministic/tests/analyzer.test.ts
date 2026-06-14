@@ -18,9 +18,15 @@ describe("analyzer", () => {
         },
       },
       prediction: {
-        confidence: expect.any(String),
+        predictedMidImpressions: expect.any(Number),
+        stallRange: { low: expect.any(Number), high: expect.any(Number) },
+        escapeProbability: expect.any(Number),
+        qualityBasis: "static",
       },
     });
+    // The legacy prediction confidence band was removed with the RMU-006 bridge;
+    // judge confidence is a separate field and is unaffected.
+    expect(result.prediction).not.toHaveProperty("confidence");
     expect(result.score.checks.find((check) => check.id === "quality_hook")).toMatchObject({
       status: "pass",
     });
