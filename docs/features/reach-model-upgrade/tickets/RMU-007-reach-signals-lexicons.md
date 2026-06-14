@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # RMU-007: Reach signals — remove tension, split trending/tribe lexicons, answer-effort → pEscape/replies
