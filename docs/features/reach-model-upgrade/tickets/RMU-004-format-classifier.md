@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # RMU-004: Format classifier — new members + corrected cascade
@@ -94,3 +94,10 @@ exhaustive.
 Empty → `other`. A bulleted A/B list is `ab_choice`, not `binary_choice`. A multi-clause
 question that also reads as a hypothetical resolves by cascade order (`fantasy_question`
 before `nuanced_question`). The classifier never returns `one_liner`/`goal_share`.
+
+## Pipeline Log
+
+- 2026-06-14 — **Done.** Standard pipeline: Red (`1302dd6`) corpus cascade + `one_liner`/`goal_share` schema-rejection + reclassified prediction pins → Blue Validate Red APPROVE (reclassification math independently recomputed) → Green (`2e94f67`) rebuilt the 17-step cascade + deleted both members (shared enum, engine `PostFormat`, `predictionFormatLabels`, `formatEngagementMultipliers`) → Blue (Validate Green) APPROVE (regexes linear on 100k inputs; pre-Green checkout = 16 fails) + Yellow (intent) APPROVE (full live-path trace; real detectors; zero orphans). Full `pnpm test` green (shared 79 / engine 383 / client 179), typecheck 5/5, lint clean, `gates.py all` clean, `rg` zero non-test hits for the deleted members.
+- Note: ticket initially self-contradicted (Implementation Details said delete; stale Scope-Boundaries line said keep) — proceeded with deletion per the epic clean-replacement principle + RMU-001/RMU-019; the Scope line was subsequently corrected.
+- Transitional consequence (flagged by Red, confirmed by Blue): reclassified single-line drafts (old `one_liner`→`wisdom_one_liner`) hit the neutral `1.0` `formatEngagementMultipliers` fill (RMU-001) on the un-rebuilt estimator → lose the `format_*` signal → confidence drops `medium`→`low`. Pinned as the new reality; **RMU-006 supersedes** it when it rebuilds the estimator/multipliers.
+- Yellow notes (non-blocking, intended): `wisdom_one_liner` (step 15) catches any surviving single line (not only "advice/truth" — descriptive prose, per "concepts not regexes"); `milestone` (step 10) requires a literal digit (consistent with legacy `goal_share`).
