@@ -15,4 +15,3 @@ skeleton.xml
 
 # WIP design doc kept on disk but out of the reach-model-upgrade epic (untracked by request).
 # Remove this line to commit it as its own change.
-docs/design-system/ui-uplift-brief.md
