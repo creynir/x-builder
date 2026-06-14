@@ -23,6 +23,48 @@ type AvailablePrediction = Extract<
 // only applies to wisdom_one_liner).
 const halvedEscapeFormats = new Set(["nuanced_question", "wisdom_one_liner", "insight_share"]);
 
+// RMU-007 reach-signal lexicons and factors. These mirror the production
+// constants exactly so the contract pins agree with the prediction-estimator
+// suite. The adjustments touch only pEscape / expectedReplies — never the
+// midpoint or ranges — so the helper applies them after the midpoint is fixed.
+const TRENDING_TOPIC_TERMS = [
+  "claude",
+  "codex",
+  "gpt",
+  "gemini",
+  "agent",
+  "agents",
+  "llm",
+  "llms",
+  "copilot",
+  "cursor",
+  "rag",
+  "mcp",
+] as const;
+const TRENDING_BONUS_PER_MATCH = 0.15;
+const TRENDING_MAX_BONUS = 0.4;
+const TRIBE_VOCATIVE_TERMS = [
+  "founder",
+  "founders",
+  "indie",
+  "solo",
+  "builder",
+  "builders",
+  "growth",
+  "shipping",
+  "launch",
+] as const;
+const TRIBE_REPLY_MULTIPLIER = 1.2;
+const ONE_WORD_ESCAPE_MULTIPLIER = 1.4;
+const ONE_WORD_REPLY_MULTIPLIER = 2.0;
+const ANSWER_EFFORT_PENALTY = 0.7;
+const SELF_DISCLOSURE_PATTERN =
+  /\$[\d,]+|\b(?:lost|burned|wasted|blew)\b[^.?!]*\$?[\d,]+|\b(?:failed|failure|broke|bankrupt)\b/i;
+
+function countWordMatches(lowerText: string, terms: readonly string[]): number {
+  return terms.filter((term) => new RegExp(`\\b${term}\\b`, "i").test(lowerText)).length;
+}
+
 function expectReachShape(
   prediction: AvailablePrediction,
   options: {
@@ -31,6 +73,9 @@ function expectReachShape(
     statusMult?: number;
     linkMult?: number;
     hasExternalLink?: boolean;
+    // The fixture text drives the RMU-007 reach-signal adjustments. When
+    // omitted, no signal adjustments apply (a neutral draft).
+    text?: string;
   },
 ): void {
   const base = prediction.baseImpressions;
@@ -44,6 +89,38 @@ function expectReachShape(
   if (halvedEscapeFormats.has(options.format)) {
     escapeProbability *= 0.5;
   }
+
+  // RMU-007 reach-signal adjustments, derived from the fixture text and composed
+  // in the same order as the production estimator: trending lift + tribe reply
+  // lift, then answer-effort (one-word lift / anecdote-or-disclosure penalty),
+  // then clamp, then the external-link cap LAST.
+  const lowerText = (options.text ?? "").trim().toLowerCase();
+  let expectedReplies = mid * replyRateTable[options.format];
+
+  const trendingMatchCount = countWordMatches(lowerText, TRENDING_TOPIC_TERMS);
+  if (trendingMatchCount > 0) {
+    escapeProbability *=
+      1 + Math.min(TRENDING_MAX_BONUS, TRENDING_BONUS_PER_MATCH * trendingMatchCount);
+  }
+
+  if (countWordMatches(lowerText, TRIBE_VOCATIVE_TERMS) > 0) {
+    expectedReplies *= TRIBE_REPLY_MULTIPLIER;
+  }
+
+  if (/\bin (?:1|one) word\b/i.test(lowerText)) {
+    escapeProbability *= ONE_WORD_ESCAPE_MULTIPLIER;
+    expectedReplies *= ONE_WORD_REPLY_MULTIPLIER;
+  }
+
+  if (
+    /\bhow did you\b|\bwhat made you\b|\band why\?/i.test(lowerText) ||
+    SELF_DISCLOSURE_PATTERN.test(lowerText)
+  ) {
+    escapeProbability *= ANSWER_EFFORT_PENALTY;
+  }
+
+  escapeProbability = Math.min(1, Math.max(0, escapeProbability));
+
   if (options.hasExternalLink) {
     escapeProbability = Math.min(escapeProbability, 0.03);
   }
@@ -62,7 +139,7 @@ function expectReachShape(
     high: Math.round(12 * base),
   });
   expect(prediction.escapeProbability).toBeCloseTo(escapeProbability, 10);
-  expect(prediction.expectedReplies).toBeCloseTo(mid * replyRateTable[options.format], 6);
+  expect(prediction.expectedReplies).toBeCloseTo(expectedReplies, 6);
   // Legacy migration bridge (removed in RMU-011): mirrors the regimes.
   expect(prediction.rangeLow).toBe(prediction.stallRange.low);
   expect(prediction.rangeHigh).toBe(prediction.escapeRange.high);
@@ -195,7 +272,14 @@ describe("production analyze contract (followers-only requests)", () => {
     }
 
     // genuine_question, score 85 (qualityMult 1.1), no link, status-neutral.
-    expectReachShape(item.prediction, { format: "genuine_question", score: 85 });
+    // The fixture text contains the trending term "agent", so pEscape carries
+    // the +0.15 single-match trending lift (0.1 -> 0.115); the midpoint and
+    // ranges are untouched by it.
+    expectReachShape(item.prediction, {
+      format: "genuine_question",
+      score: 85,
+      text: FORMAT_FIXTURES.question,
+    });
     expect(Array.isArray(item.prediction.signals)).toBe(true);
   });
 
@@ -206,7 +290,13 @@ describe("production analyze contract (followers-only requests)", () => {
       throw new Error("Expected an available prediction for the hot-take draft.");
     }
 
-    expectReachShape(item.prediction, { format: "hot_take", score: 85 });
+    // The fixture text contains the tribe term "launch", so expectedReplies
+    // carries the +20% tribe lift; pEscape and the midpoint are untouched by it.
+    expectReachShape(item.prediction, {
+      format: "hot_take",
+      score: 85,
+      text: FORMAT_FIXTURES.hotTake,
+    });
   });
 
   it("pins the two-regime reach output for a story draft", () => {
@@ -216,7 +306,11 @@ describe("production analyze contract (followers-only requests)", () => {
       throw new Error("Expected an available prediction for the story draft.");
     }
 
-    expectReachShape(item.prediction, { format: "story", score: 81 });
+    expectReachShape(item.prediction, {
+      format: "story",
+      score: 81,
+      text: FORMAT_FIXTURES.story,
+    });
   });
 
   it("damps the reach midpoint and escape probability for a wisdom one-liner that carries a link", () => {
@@ -235,6 +329,7 @@ describe("production analyze contract (followers-only requests)", () => {
       score: 78,
       statusMult: 0.3,
       hasExternalLink: true,
+      text: FORMAT_FIXTURES.link,
     });
     expect(item.prediction.escapeProbability).toBeLessThanOrEqual(0.03);
   });
@@ -251,6 +346,7 @@ describe("production analyze contract (followers-only requests)", () => {
       format: "wisdom_one_liner",
       score: 65,
       statusMult: 0.3,
+      text: FORMAT_FIXTURES.short,
     });
   });
 });
@@ -277,8 +373,10 @@ describe("production reach output (transitional legacy bridge)", () => {
     }
 
     expect(["low", "medium", "high"]).toContain(item.prediction.confidence);
-    // story format, score 85 (qualityMult 1.1), status-neutral, no link.
-    expectReachShape(item.prediction, { format: "story", score: 85 });
+    // story format, score 85 (qualityMult 1.1), status-neutral, no link. The
+    // draft carries tension/contrast words ("but", "instead", "actually") but no
+    // lexicon terms, so no reach-signal adjustment applies.
+    expectReachShape(item.prediction, { format: "story", score: 85, text: highDraft });
   });
 
   it("emits ordered two-regime ranges and a present quality basis for every representative draft", () => {
@@ -338,7 +436,13 @@ describe("production analyze contract via DeterministicAnalysisService", () => {
     }
 
     expect(item.prediction.baseSource).toBe("follower_estimate");
-    expectReachShape(item.prediction, { format: "genuine_question", score: 85 });
+    // The fixture text contains the trending term "agent": pEscape carries the
+    // +0.15 single-match trending lift; the midpoint is untouched.
+    expectReachShape(item.prediction, {
+      format: "genuine_question",
+      score: 85,
+      text: FORMAT_FIXTURES.question,
+    });
   });
 
   it("surfaces an available prediction from a trailing median even when followers are absent", () => {
