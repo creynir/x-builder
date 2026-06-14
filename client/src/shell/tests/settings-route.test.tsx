@@ -159,6 +159,28 @@ function expectChecked(html: string, label: string, checked: boolean) {
   expect(html).not.toMatch(new RegExp(`${label}[\\s\\S]*checked=""`));
 }
 
+function switchMarkup(html: string): string {
+  const match = html.match(
+    /<label class="xb-settings-route__switch"[\s\S]*?<\/label>/,
+  );
+
+  if (match === null) {
+    throw new Error("Expected a settings-route switch <label> in the markup.");
+  }
+
+  return match[0];
+}
+
+function switchInput(html: string): string {
+  const match = switchMarkup(html).match(/<input\b[^>]*>/);
+
+  if (match === null) {
+    throw new Error("Expected an <input> inside the settings-route switch.");
+  }
+
+  return match[0];
+}
+
 function createDefaultSettings(): AppSettings {
   return {
     claudeModel: "",
@@ -977,5 +999,186 @@ describe("AppShell Settings integration", () => {
     expect(text).toContain("Engine URL");
     expect(text).toContain("Storage path");
     expect(text).not.toContain("Settings workspace");
+  });
+});
+
+// PINNING SET — settings-route switch behavior preservation.
+// Every test here PASSES against the current inline `renderSwitch`/`orderedSwitches`
+// code and must keep passing after the `Switch` foundation extraction rewires it.
+// These assert observable markup/state through the public SSR driver, never the
+// internal `renderSwitch` helper, so a correct extraction leaves them green and an
+// extraction that changes the rendered switch turns them red.
+describe("SettingsRoute switch behavior (pinned)", () => {
+  it("renders the deterministic-details switch with the exact label, id/htmlFor wiring, name, and checkbox type", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(createDefaultSettings(), "defaults"),
+      ),
+    });
+
+    const html = await createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    }).load();
+    const label = switchMarkup(html);
+    const input = switchInput(html);
+
+    // Exact label text rendered inside the switch.
+    expect(textContent(label)).toContain("Show deterministic details");
+    // id <-> htmlFor wiring binds the label to the control.
+    expect(label).toContain('for="settings-showDeterministicDetails"');
+    expect(input).toContain('id="settings-showDeterministicDetails"');
+    // Form field name is preserved.
+    expect(input).toContain('name="showDeterministicDetails"');
+    // The control is a native checkbox.
+    expect(input).toContain('type="checkbox"');
+  });
+
+  it("reflects the checked state from the loaded model (checked when true)", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(
+          { ...createDefaultSettings(), showDeterministicDetails: true },
+          "defaults",
+        ),
+      ),
+    });
+
+    const html = await createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    }).load();
+
+    expect(switchInput(html)).toContain("checked=");
+    expectChecked(html, "Show deterministic details", true);
+  });
+
+  it("reflects an unchecked state from the loaded model (no checked attribute when false)", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(
+          { ...createSavedSettings(), showDeterministicDetails: false },
+          "persisted",
+        ),
+      ),
+    });
+
+    const html = await createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    }).load();
+
+    expect(switchInput(html)).not.toContain("checked=");
+    expectChecked(html, "Show deterministic details", false);
+  });
+
+  it("toggling the switch through the change path flips checked state and marks the form dirty", async () => {
+    // The settings route exposes the switch change handler as the `updateSwitch`
+    // driver call. In a browser a Space keypress on the native checkbox produces
+    // the same change event; the SSR harness has no DOM, so the logical change
+    // path is the pinnable analog of the keyboard toggle.
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(
+          { ...createSavedSettings(), showDeterministicDetails: false },
+          "persisted",
+        ),
+      ),
+    });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    });
+
+    const loadedHtml = await driver.load();
+    expectChecked(loadedHtml, "Show deterministic details", false);
+    expect(textContent(loadedHtml)).not.toContain("Unsaved changes");
+
+    const toggledOnHtml = driver.updateSwitch("showDeterministicDetails", true);
+    expectChecked(toggledOnHtml, "Show deterministic details", true);
+    expect(textContent(toggledOnHtml)).toContain("Unsaved changes");
+
+    const toggledOffHtml = driver.updateSwitch(
+      "showDeterministicDetails",
+      false,
+    );
+    expectChecked(toggledOffHtml, "Show deterministic details", false);
+    // Returning to the saved value clears dirty tracking.
+    expect(textContent(toggledOffHtml)).not.toContain("Unsaved changes");
+  });
+
+  it("persists the toggled switch value through the save boundary", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+    const apiClient = createApiClient({
+      getSettings: vi.fn(async () =>
+        settingsResponse(
+          { ...createSavedSettings(), showDeterministicDetails: false },
+          "persisted",
+        ),
+      ),
+    });
+    const driver = createDriver(createSettingsRoutePublicDriver, {
+      apiClient,
+      renderRoute: SettingsRoute,
+    });
+
+    await driver.load();
+    driver.updateSwitch("showDeterministicDetails", true);
+    await driver.save();
+
+    expect(apiClient.saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ showDeterministicDetails: true }),
+    );
+  });
+
+  it("renders the switch without aria-checked, role=switch, disabled, or tabindex (native checkbox semantics)", async () => {
+    // The current inline switch is a bare native checkbox: no aria-checked, no
+    // role="switch", never disabled, and no tabindex override. Keyboard toggling
+    // is delegated entirely to native browser checkbox behavior. Pin the ABSENCE
+    // of these attributes so the extraction cannot silently add or drop them.
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+
+    const html = await createDriver(createSettingsRoutePublicDriver, {
+      apiClient: createApiClient(),
+      renderRoute: SettingsRoute,
+    }).load();
+    const label = switchMarkup(html);
+    const input = switchInput(html);
+
+    expect(input).not.toContain("aria-checked");
+    expect(input).not.toContain('role="switch"');
+    expect(input).not.toContain("disabled");
+    expect(input).not.toContain("tabindex");
+    expect(label).toContain('class="xb-settings-route__switch"');
+  });
+
+  it("renders exactly one switch control under the switches group from orderedSwitches", async () => {
+    const { SettingsRoute, createSettingsRoutePublicDriver } =
+      await loadSettingsRoute();
+
+    const html = await createDriver(createSettingsRoutePublicDriver, {
+      apiClient: createApiClient(),
+      renderRoute: SettingsRoute,
+    }).load();
+
+    const switchLabels = html.match(
+      /<label class="xb-settings-route__switch"/g,
+    );
+    const checkboxes = html.match(/type="checkbox"/g);
+
+    expect(switchLabels).not.toBeNull();
+    expect(switchLabels).toHaveLength(1);
+    expect(checkboxes).toHaveLength(1);
+    expect(html).toContain('class="xb-settings-route__switches"');
   });
 });
