@@ -586,19 +586,20 @@ describe("JudgePanel audience-match row", () => {
 
   it("offers an Add-account-profile ghost button wired to onOpenSettings when audience-match is null", () => {
     const onOpenSettings = vi.fn();
-    const element = (
-      <JudgePanel
-        judge={{
-          status: "ready",
-          verdict: buildVerdict({ audienceMatch: null }),
-          model: "claude-cli",
-        }}
-        onJudge={() => {}}
-        onOpenSettings={onOpenSettings}
-        judgeReady
-        draftReady
-      />
-    );
+    // Invoke the component (cf. foundation.test.tsx Switch({…})) so the returned
+    // host tree's props.children is traversable; a non-invoked JSX element keeps
+    // its children unrendered and findByAriaLabel could never reach the button.
+    const element = JudgePanel({
+      judge: {
+        status: "ready",
+        verdict: buildVerdict({ audienceMatch: null }),
+        model: "claude-cli",
+      },
+      onJudge: () => {},
+      onOpenSettings,
+      judgeReady: true,
+      draftReady: true,
+    });
 
     // The recovery affordance is an accessible button naming the Settings target.
     const html = renderToStaticMarkup(element);
