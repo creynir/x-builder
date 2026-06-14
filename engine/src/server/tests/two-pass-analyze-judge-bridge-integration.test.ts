@@ -13,6 +13,7 @@ import {
 } from "@x-builder/shared";
 import { describe, expect, it, vi } from "vitest";
 
+import { DeterministicAnalysisService } from "../../deterministic/deterministic-analysis-service";
 import { JsonFileAppSettingsRepository } from "../settings-repository";
 import { buildServer } from "../server";
 
@@ -93,6 +94,122 @@ const analyzeDraft = async (
     await app.close();
   }
 };
+
+// The fake returns `unknown` on purpose: the legacy-field injectors below build
+// values that intentionally violate the response type (extra deleted keys), and
+// the route accepts the service output as untyped before its contract guard
+// runs. The single boundary cast to BuildServerAnalyzeOptions mirrors the
+// existing posts-analyze harness convention.
+type AnalyzePostsFake = (request: AnalyzePostsRequest) => unknown;
+
+type BuildServerAnalyzeOptions = Parameters<typeof buildServer>[0] & {
+  analyzePosts?: AnalyzePostsFake;
+};
+
+// Analyze a single draft and return the RAW wire body (parsed as plain JSON, NOT
+// through the Zod response schema). The legacy/deleted-field absence invariants
+// MUST read from this — asserting absence on the schema-parsed object would only
+// prove "Zod strips unknown keys" (a library property).
+//
+// An optional `analyzePosts` fake lets an invariant FORCE the deleted legacy
+// fields back into the service-layer output. The deletion artifact these
+// invariants guard is the response CONTRACT (the schema + the route's
+// `parseResponseContract` guard) no longer admitting the legacy shim / 0-10
+// path: with the fields deleted from the schema, a service that re-emits them
+// has them stripped before the wire, so the raw body is clean; were the schema
+// loosened to re-admit a legacy field, the injected value would survive to the
+// wire and the assertion would FAIL. That is the falsifiable seam.
+const analyzeDraftRawWireBody = async (
+  scoringContext: AnalyzePostsRequest["scoringContext"],
+  analyzePosts?: AnalyzePostsFake,
+): Promise<string> => {
+  const app = buildServer(
+    analyzePosts ? ({ analyzePosts } as BuildServerAnalyzeOptions) : {},
+  );
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/posts/analyze",
+      payload: analyzePayload(scoringContext),
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    return response.body;
+  } finally {
+    await app.close();
+  }
+};
+
+// Navigate the raw JSON wire body to the first item's nodes without going through
+// the Zod schema, so re-emitted legacy keys are still visible. Returns plain
+// `unknown`-typed records suitable for key-absence assertions.
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const rawFirstItemNodes = (
+  rawBody: string,
+): { item: Record<string, unknown>; score: unknown; prediction: unknown } => {
+  const parsed: unknown = JSON.parse(rawBody);
+
+  if (!isRecord(parsed) || !Array.isArray(parsed.items)) {
+    throw new Error("Expected a raw analyze response with an items array.");
+  }
+
+  const [firstItem] = parsed.items;
+
+  if (!isRecord(firstItem)) {
+    throw new Error("Expected a raw scored item object on the wire.");
+  }
+
+  return {
+    item: firstItem,
+    score: firstItem.score,
+    prediction: firstItem.prediction,
+  };
+};
+
+// Produces a CONTRACT-VALID scored response via the REAL deterministic service,
+// so the route's response-contract guard accepts the base. The legacy-field
+// injectors below then pollute that valid base; the guard is what must strip
+// the pollution (the falsifiable property).
+const realAnalysisService = new DeterministicAnalysisService();
+
+const realScored = (request: AnalyzePostsRequest): AnalyzePostsResponse =>
+  realAnalysisService.analyzePosts(request);
+
+// Re-attaches the deleted legacy reach mirror onto the available prediction of a
+// contract-valid response, returning a value the route will run through its
+// contract guard.
+const withLegacyPredictionFields = (
+  response: AnalyzePostsResponse,
+  legacy: Record<string, number>,
+): unknown => ({
+  items: response.items.map((item) =>
+    item.status === "scored"
+      ? { ...item, prediction: { ...item.prediction, ...legacy } }
+      : item,
+  ),
+});
+
+// Re-attaches the deleted 0-10 aiRating / format-history fields onto the scored
+// item, its score, and its prediction of a contract-valid response.
+const withLegacyAiRatingFields = (
+  response: AnalyzePostsResponse,
+  legacy: Record<string, string>,
+): unknown => ({
+  items: response.items.map((item) =>
+    item.status === "scored"
+      ? {
+          ...item,
+          ...legacy,
+          score: { ...item.score, ...legacy },
+          prediction: { ...item.prediction, ...legacy },
+        }
+      : item,
+  ),
+});
 
 describe("two-pass analyze + judge-bridge integration — user flows", () => {
   // FLOW 1: pass-1 (no judgeSignals) yields a static four-regime prediction with
@@ -294,16 +411,44 @@ describe("two-pass analyze + judge-bridge integration — architectural invarian
     expect(prediction.escapeRange.low).toBeLessThanOrEqual(prediction.escapeRange.high);
   });
 
-  // INVARIANT B: the transitional legacy shim is gone. Falsifiable: a facade
-  // leaving rangeLow/rangeHigh/midpoint/confidence on the response fails this.
-  it("emits none of the deleted legacy mirror fields on an available prediction", async () => {
-    const result = await analyzeDraft({ followers: 3600 });
-    const prediction = expectAvailable(expectScored(result.items[0]));
+  // INVARIANT B: the transitional legacy shim is GONE FROM THE CONTRACT.
+  // Asserted against the RAW wire body while a service-layer fake FORCES the
+  // deleted rangeLow/rangeHigh/midpoint/confidence mirror back onto the
+  // available prediction. With those keys deleted from the response schema, the
+  // route's contract guard strips them before the wire, so the raw body is
+  // clean. Falsifiable: were the schema loosened to re-admit any legacy mirror
+  // key (a `.passthrough()` or a re-added field), the injected value would
+  // survive to the wire and this assertion would FAIL.
+  it("strips the deleted legacy mirror fields from the wire even when the service re-emits them", async () => {
+    // Distinctive sentinel values so a re-emission is unambiguous on the wire.
+    const legacyMirror = {
+      rangeLow: 987_651,
+      rangeHigh: 987_653,
+      midpoint: 987_652,
+      confidence: 987_654,
+    };
+    const rawBody = await analyzeDraftRawWireBody({ followers: 3600 }, (request) =>
+      withLegacyPredictionFields(realScored(request), legacyMirror),
+    );
+    const { prediction } = rawFirstItemNodes(rawBody);
+
+    if (!isRecord(prediction)) {
+      throw new Error("Expected a raw prediction object on the wire.");
+    }
+
+    // Guard against a vacuous pass: confirm we are looking at the available
+    // prediction node (which is where the legacy mirror used to live).
+    expect(prediction.status).toBe("available");
 
     expect(prediction).not.toHaveProperty("rangeLow");
     expect(prediction).not.toHaveProperty("rangeHigh");
     expect(prediction).not.toHaveProperty("midpoint");
     expect(prediction).not.toHaveProperty("confidence");
+    // The distinctive sentinel values must not appear anywhere on the wire.
+    expect(rawBody).not.toContain("987651");
+    expect(rawBody).not.toContain("987652");
+    expect(rawBody).not.toContain("987653");
+    expect(rawBody).not.toContain("987654");
   });
 
   // INVARIANT C: the quality gate is untouched by the judge bridge. Running the
@@ -333,25 +478,48 @@ describe("two-pass analyze + judge-bridge integration — architectural invarian
     expect(scored2.postCoach).toEqual(scored1.postCoach);
   });
 
-  // INVARIANT D: the deleted 0-10 aiRating / format-history paths are not
-  // reachable through the contract. Falsifiable: a facade re-introducing any of
-  // those fields onto a scored item or its prediction fails this.
-  it("exposes no aiRating or format-history fields on a scored item or its prediction", async () => {
-    const result = await analyzeDraft({ followers: 2400 });
-    const item = expectScored(result.items[0]);
-    const prediction = expectAvailable(item);
-
-    for (const legacyField of [
+  // INVARIANT D: the deleted 0-10 aiRating / format-history path is GONE FROM
+  // THE CONTRACT. Asserted against the RAW wire body while a service-layer fake
+  // FORCES aiRating/format-history fields back onto the scored item, its score,
+  // and its prediction. With those keys absent from the response schema, the
+  // route's contract guard strips them before the wire. Falsifiable: were the
+  // schema loosened to re-admit the 0-10 aiRating / format-history path, the
+  // injected sentinels would survive to the wire and this assertion would FAIL.
+  it("strips the deleted aiRating / format-history fields from the wire even when the service re-emits them", async () => {
+    const legacyFieldNames = [
       "aiRating",
       "formatHistory",
       "format_history",
       "formatHistoryRating",
-    ] as const) {
+    ] as const;
+    const legacyPayload = Object.fromEntries(
+      legacyFieldNames.map((name) => [name, "LEGACY_SENTINEL_DO_NOT_LEAK"]),
+    );
+    const rawBody = await analyzeDraftRawWireBody({ followers: 2400 }, (request) =>
+      withLegacyAiRatingFields(realScored(request), legacyPayload),
+    );
+    const { item, score, prediction } = rawFirstItemNodes(rawBody);
+
+    // Guard against a vacuous pass: confirm we are looking at the scored item
+    // and its available prediction node.
+    expect(item.status).toBe("scored");
+    expect(isRecord(prediction) ? prediction.status : undefined).toBe("available");
+
+    for (const legacyField of legacyFieldNames) {
       expect(item, `scored item must not carry ${legacyField}`).not.toHaveProperty(legacyField);
-      expect(item.score, `score must not carry ${legacyField}`).not.toHaveProperty(legacyField);
-      expect(prediction, `prediction must not carry ${legacyField}`).not.toHaveProperty(
-        legacyField,
-      );
+
+      if (isRecord(score)) {
+        expect(score, `score must not carry ${legacyField}`).not.toHaveProperty(legacyField);
+      }
+
+      if (isRecord(prediction)) {
+        expect(prediction, `prediction must not carry ${legacyField}`).not.toHaveProperty(
+          legacyField,
+        );
+      }
     }
+
+    // The sentinel value must not appear anywhere on the wire either.
+    expect(rawBody).not.toContain("LEGACY_SENTINEL_DO_NOT_LEAK");
   });
 });
