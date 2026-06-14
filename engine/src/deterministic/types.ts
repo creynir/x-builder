@@ -84,7 +84,23 @@ export type PredictionSignal = {
   multiplier: number;
 };
 
+export type ReachRange = {
+  low: number;
+  high: number;
+};
+
 export type EngagementPrediction = {
+  // Two-regime reach output (RMU-006).
+  predictedMidImpressions: number;
+  stallRange: ReachRange;
+  escapeRange: ReachRange;
+  escapeProbability: number;
+  expectedReplies: number;
+  baseImpressions: number;
+  baseSource: "trailing_median" | "follower_estimate";
+  qualityBasis: "static" | "judge";
+  reachModelVersion: string;
+  // Transitional legacy mirror (removed in RMU-011).
   rangeLow: number;
   rangeHigh: number;
   midpoint: number;
@@ -92,8 +108,17 @@ export type EngagementPrediction = {
   signals: PredictionSignal[];
 };
 
+export type RepeatHistoryEntry = {
+  format: PostFormat;
+  lastPostedAt: string;
+  countLast7d: number;
+};
+
 export type AnalyzeOptions = {
   followers?: number;
+  trailingMedianImpressions?: number;
+  hasExternalLink?: boolean;
+  repeatHistory?: RepeatHistoryEntry[];
   enabled?: Partial<Record<string, boolean>>;
   varietyCheck?: VoiceCheck;
 };

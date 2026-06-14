@@ -115,23 +115,24 @@ export const reachRangeSchema = z
 
 export const availableEngagementPredictionSchema = z.object({
   status: z.literal("available"),
+  // Transitional legacy mirror (removed in RMU-011); still required as the
+  // migration bridge for consumers that read the old range shape.
   rangeLow: z.number().int().min(0),
   rangeHigh: z.number().int().min(0),
   midpoint: z.number().int().min(0),
   confidence: z.enum(["low", "medium", "high"]),
   signals: z.array(predictionSignalSchema),
-  // Transitional four-regime reach fields. The producer populates these in
-  // RMU-006 and they tighten to required in RMU-011; optional now so the
-  // untouched engine producer and existing fixtures keep compiling.
-  predictedMidImpressions: z.number().int().min(0).optional(),
-  stallRange: reachRangeSchema.optional(),
-  escapeRange: reachRangeSchema.optional(),
-  escapeProbability: z.number().min(0).max(1).optional(),
-  expectedReplies: z.number().min(0).optional(),
-  baseImpressions: z.number().int().min(0).optional(),
-  baseSource: z.enum(["trailing_median", "follower_estimate"]).optional(),
-  qualityBasis: z.enum(["static", "judge"]).optional(),
-  reachModelVersion: z.string().min(1).max(40).optional(),
+  // Two-regime reach fields. The producer always emits these since RMU-006, so
+  // they are required: a legacy-only available prediction no longer parses.
+  predictedMidImpressions: z.number().int().min(0),
+  stallRange: reachRangeSchema,
+  escapeRange: reachRangeSchema,
+  escapeProbability: z.number().min(0).max(1),
+  expectedReplies: z.number().min(0),
+  baseImpressions: z.number().int().min(0),
+  baseSource: z.enum(["trailing_median", "follower_estimate"]),
+  qualityBasis: z.enum(["static", "judge"]),
+  reachModelVersion: z.string().min(1).max(40),
 });
 
 const disabledEngagementPredictionSchema = z.object({

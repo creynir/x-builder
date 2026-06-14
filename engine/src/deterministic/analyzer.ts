@@ -1,5 +1,5 @@
 import { classifyPostFormat } from "./format-classifier.js";
-import { estimateEngagementRange } from "./prediction-estimator.js";
+import { computeReachModel } from "./prediction-estimator.js";
 import type { AnalyzeOptions, AnalyzeResult } from "./types.js";
 import { evaluateDraftVoice } from "./voice-score.js";
 
@@ -12,15 +12,15 @@ export function analyzeDraftText(
     enabled: options.enabled,
     varietyCheck: options.varietyCheck,
   });
-  const prediction =
-    options.followers === undefined
-      ? null
-      : estimateEngagementRange({
-          text,
-          score: score.value,
-          format,
-          followers: options.followers,
-        });
+  const prediction = computeReachModel({
+    text,
+    score: score.value,
+    format,
+    followers: options.followers,
+    trailingMedianImpressions: options.trailingMedianImpressions,
+    hasExternalLink: options.hasExternalLink ?? false,
+    repeatHistory: options.repeatHistory ?? [],
+  });
 
   return {
     text,

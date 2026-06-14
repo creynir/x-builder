@@ -1,101 +1,173 @@
+import { engagementPredictionWeights } from "./const/scoring-weights.js";
 import {
-  engagementPredictionWeights,
-  formatEngagementMultipliers,
-  staticScoreQualityMultipliers,
-} from "./const/scoring-weights.js";
-import {
+  escapeRangeHighCoeff,
+  escapeRangeLowCoeff,
+  externalLinkEscapeCap,
+  externalLinkMidpointMultiplier,
+  formatReachTable,
   repeatDecayBase,
   repeatDecayFloor,
+  replyRateTable,
+  stallRangeHighCoeff,
+  stallRangeLowCoeff,
   wisdomStatusDivisor,
   wisdomStatusMax,
   wisdomStatusMin,
 } from "./const/reach-model-weights.js";
-import { predictionFormatLabels } from "./format-classifier.js";
+import { reachModelVersion } from "./deterministic-analysis-constants.js";
 import { timelyTopicTerms } from "./rule-lexicon.js";
 import type {
   EngagementPrediction,
   PostFormat,
   PredictionSignal,
+  RepeatHistoryEntry,
 } from "./types.js";
 
-const fallbackStaticScoreBand =
-  staticScoreQualityMultipliers[staticScoreQualityMultipliers.length - 1]!;
-
-function chooseQualityMultiplier(score: number): {
-  signalKey: string;
-  label: string;
-  multiplier: number;
-} {
-  const scoreBand = staticScoreQualityMultipliers.find(
-    (band) => score >= band.minimumScore,
-  ) ?? fallbackStaticScoreBand;
-
-  return {
-    signalKey: "quality_voice",
-    label: `Static score ${score}`,
-    multiplier: scoreBand.multiplier,
-  };
-}
-
-function buildMultiplierLabel(label: string, multiplier: number): string {
-  return `${label} (${multiplier > 1 ? "+" : "-"}${Math.round(
-    Math.abs(multiplier - 1) * 100,
-  )}%)`;
-}
-
-export function estimateEngagementRange(input: {
+export type ReachModelInput = {
   text: string;
   score: number;
   format: PostFormat;
   followers: number | undefined;
-}): EngagementPrediction | null {
-  const {
-    text,
-    score,
-    format,
-    followers,
-  } = input;
-  const trimmedText = text.trim();
+  trailingMedianImpressions: number | undefined;
+  hasExternalLink: boolean;
+  repeatHistory: RepeatHistoryEntry[];
+};
 
-  if (
-    followers === undefined ||
-    trimmedText.length < engagementPredictionWeights.minimumTextLength
-  ) {
+// Formats whose escape probability is halved relative to the table value: they
+// trade on resonance over reach, so their escape ceiling is deliberately lower.
+const halvedEscapeFormats = new Set<PostFormat>([
+  "nuanced_question",
+  "wisdom_one_liner",
+  "insight_share",
+]);
+
+/**
+ * Resolves the reach base. A supplied trailing median wins (zero counts as a
+ * present value); otherwise the follower-estimate machinery scales 400
+ * impressions per thousand followers, clamped to [80, 4000]. The base is
+ * floored to at least one impression.
+ */
+function resolveBase(input: ReachModelInput): {
+  base: number;
+  baseSource: EngagementPrediction["baseSource"];
+} | null {
+  if (input.trailingMedianImpressions !== undefined) {
+    return {
+      base: Math.max(1, Math.round(input.trailingMedianImpressions)),
+      baseSource: "trailing_median",
+    };
+  }
+
+  if (input.followers === undefined) {
     return null;
   }
 
-  const lowerText = trimmedText.toLowerCase();
-  const signals: PredictionSignal[] = [];
   const followerScale = Math.min(
     engagementPredictionWeights.maximumFollowerScale,
     Math.max(
       engagementPredictionWeights.minimumFollowerScale,
-      followers / 1000,
+      input.followers / 1000,
     ),
   );
-  const baseImpressions =
+  const base =
     engagementPredictionWeights.baseImpressionsPerThousandFollowers * followerScale;
-  const qualitySignal = chooseQualityMultiplier(score);
 
-  if (qualitySignal.multiplier !== 1) {
-    signals.push({
-      signal_key: qualitySignal.signalKey,
-      label: buildMultiplierLabel(qualitySignal.label, qualitySignal.multiplier),
-      multiplier: qualitySignal.multiplier,
-    });
+  return {
+    base: Math.max(1, Math.round(base)),
+    baseSource: "follower_estimate",
+  };
+}
+
+/**
+ * Assembles the two-regime reach model from the RMU-005 weight tables and
+ * multiplier helpers. Returns `null` when neither a follower count nor a
+ * trailing median is available to anchor the base, and when the draft text is
+ * below the minimum length.
+ */
+export function computeReachModel(
+  input: ReachModelInput,
+): EngagementPrediction | null {
+  if (input.text.trim().length < engagementPredictionWeights.minimumTextLength) {
+    return null;
   }
 
-  const formatMultiplier = formatEngagementMultipliers[format] ?? 1;
+  const resolved = resolveBase(input);
 
-  if (formatMultiplier !== 1) {
-    signals.push({
-      signal_key: `format_${format}`,
-      label: `${predictionFormatLabels[format] ?? "Other"} format ${
-        formatMultiplier > 1 ? "+" : ""
-      }${Math.round((formatMultiplier - 1) * 100)}%`,
-      multiplier: formatMultiplier,
-    });
+  if (resolved === null) {
+    return null;
   }
+
+  const { base, baseSource } = resolved;
+
+  const formatMultiplier = formatReachTable[input.format].p50Multiplier;
+  const qualityMultiplier = staticQualityCompression(input.score);
+  const linkMultiplier = input.hasExternalLink ? externalLinkMidpointMultiplier : 1;
+  const repeatMultiplier = computeRepeatMultiplier(input.repeatHistory, input.format);
+  const statusMultiplier = computeStatusMultiplier(input.format, input.followers);
+
+  const mid = Math.max(
+    1,
+    base *
+      formatMultiplier *
+      qualityMultiplier *
+      linkMultiplier *
+      repeatMultiplier *
+      statusMultiplier,
+  );
+  const predictedMidImpressions = Math.round(mid);
+
+  let escapeProbability = formatReachTable[input.format].escapeProbability;
+
+  if (halvedEscapeFormats.has(input.format)) {
+    escapeProbability *= 0.5;
+  }
+
+  if (input.hasExternalLink) {
+    escapeProbability = Math.min(escapeProbability, externalLinkEscapeCap);
+  }
+
+  const stallRange = {
+    low: Math.round(Math.min(stallRangeLowCoeff * base, mid)),
+    high: Math.round(Math.max(stallRangeLowCoeff * base, stallRangeHighCoeff * mid)),
+  };
+  const escapeRange = {
+    low: Math.round(escapeRangeLowCoeff * base),
+    high: Math.round(escapeRangeHighCoeff * base),
+  };
+  const expectedReplies = mid * replyRateTable[input.format];
+
+  const signals = collectReachSignals(input.text);
+  const confidence = deriveConfidence(signals.length, input.score);
+
+  return {
+    predictedMidImpressions,
+    stallRange,
+    escapeRange,
+    escapeProbability,
+    expectedReplies,
+    baseImpressions: base,
+    baseSource,
+    qualityBasis: "static",
+    reachModelVersion,
+    // Transitional legacy mirror (removed in RMU-011).
+    rangeLow: stallRange.low,
+    rangeHigh: escapeRange.high,
+    midpoint: predictedMidImpressions,
+    confidence,
+    signals,
+  };
+}
+
+/**
+ * Text-derived reach signals that survive the two-regime rebuild: timely
+ * wording and a tension/contradiction marker. These feed the transitional
+ * confidence ladder and the legacy mirror's `signals` array. None of them carry
+ * ranking, trend, or imported-data copy.
+ */
+function collectReachSignals(text: string): PredictionSignal[] {
+  const trimmedText = text.trim();
+  const lowerText = trimmedText.toLowerCase();
+  const signals: PredictionSignal[] = [];
 
   const timelyTermCount = timelyTopicTerms.filter((term) =>
     new RegExp(`\\b${term}\\b`, "i").test(lowerText),
@@ -110,13 +182,17 @@ export function estimateEngagementRange(input: {
       );
 
     signals.push({
-      signal_key: "zeitgeist",
+      signal_key: "timely_wording",
       label: "Timely wording",
       multiplier: timelyMultiplier,
     });
   }
 
-  if (/\b(but|yet|never|actually|instead|however|rather|despite|supposed to)\b/i.test(trimmedText)) {
+  if (
+    /\b(but|yet|never|actually|instead|however|rather|despite|supposed to)\b/i.test(
+      trimmedText,
+    )
+  ) {
     signals.push({
       signal_key: "tension_contradiction",
       label: "Tension / contradiction +25%",
@@ -124,32 +200,32 @@ export function estimateEngagementRange(input: {
     });
   }
 
-  const midpointRaw = signals.reduce(
-    (value, signal) => value * signal.multiplier,
-    baseImpressions,
-  );
-  const uncertainty =
-    signals.length >= engagementPredictionWeights.highConfidenceSignalCount
-      ? engagementPredictionWeights.highSignalUncertainty
-      : signals.length >= engagementPredictionWeights.mediumConfidenceSignalCount
-        ? engagementPredictionWeights.mediumSignalUncertainty
-        : engagementPredictionWeights.lowSignalUncertainty;
-  const confidence =
-    signals.length >= engagementPredictionWeights.highConfidenceSignalCount &&
-    score >= engagementPredictionWeights.highConfidenceScoreMinimum
-      ? "high"
-      : signals.length >= engagementPredictionWeights.mediumConfidenceSignalCount &&
-          score >= engagementPredictionWeights.mediumConfidenceScoreMinimum
-        ? "medium"
-        : "low";
+  return signals;
+}
 
-  return {
-    rangeLow: Math.round(midpointRaw * (1 - uncertainty)),
-    rangeHigh: Math.round(midpointRaw * (1 + uncertainty)),
-    midpoint: Math.round(midpointRaw),
-    confidence,
-    signals,
-  };
+/**
+ * Transitional confidence ladder (bridge only, removed in RMU-011). Derives a
+ * low/medium/high band from the surviving signal count and the static score.
+ */
+function deriveConfidence(
+  signalCount: number,
+  score: number,
+): EngagementPrediction["confidence"] {
+  if (
+    signalCount >= engagementPredictionWeights.highConfidenceSignalCount &&
+    score >= engagementPredictionWeights.highConfidenceScoreMinimum
+  ) {
+    return "high";
+  }
+
+  if (
+    signalCount >= engagementPredictionWeights.mediumConfidenceSignalCount &&
+    score >= engagementPredictionWeights.mediumConfidenceScoreMinimum
+  ) {
+    return "medium";
+  }
+
+  return "low";
 }
 
 /**
@@ -175,12 +251,6 @@ export function staticQualityCompression(score: number): number {
 
   return 0.6;
 }
-
-type RepeatHistoryEntry = {
-  format: PostFormat;
-  lastPostedAt: string;
-  countLast7d: number;
-};
 
 /**
  * Decays reach for a format the author has posted recently. The decay base
