@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # RMU-013: Two-pass judge→refine orchestration
@@ -71,3 +71,8 @@ during refine; no number tween; card height stable.
 
 Judge ready but draft text changed before refine starts → no-op. Rapid re-judge → latest
 `requestId` wins. Refine when the prediction is disabled → no-op (nothing to refine).
+
+## Pipeline Log
+
+- 2026-06-14 — **Done.** Standard pipeline, single clean cycle: Red (`82e03a0`) 18 failing tests — a new workflow suite `writer-two-pass-refine.test.ts` (16: two-scalar extraction + no-leak, prediction replacement + single-prediction, stale-guard drop + latest-requestId-wins, pass-2-failure keeps static + `routeErrorOrigin="analysis"`, three no-op gates, verdict-before-refine orchestration, `applyIdeaChange`/`applyFollowerDraftChange` → `skipped`) + 2 SSR render tests in `writer-page-advanced-context.test.tsx` (AC3 running badge in the `aria-live` region, AC6 zero-trace diff) → Blue Validate Red APPROVE (anti-rubber-stamp confirmed the leak/stale-guard/zero-trace tests have teeth) → Green (`20df9c3`) `runTwoPassRefine` (judge-ready+scored-draft gate, `nextRefineRequestId`, two-scalar extract, `analyzePosts` re-issue with `scoringContext.judgeSignals`, stale-guard, prediction replace with server `qualityBasis:"judge"`, failure → analysis error + static kept), `runJudgeDraft` chains refine after publishing the verdict, `applyIdeaChange`/`applyFollowerDraftChange` reset → `skipped`, "Refining reach…" `Badge variant="info"` in the `aria-live` region, threaded optional `judgeSignals` through `scoringContextFromAdvanced`→`candidateAnalysisRequest`→`requestAnalysis` (pass-1 omits it), driver `judge` entry → Blue (Validate Green) APPROVE + Yellow APPROVE — **no concerns**. Full client suite **237 passed / 0 failed**, typecheck + lint clean, gates clean. Production-reachable: `onJudge`→`judgeDraft`→`runJudgeDraft`→`runTwoPassRefine` (not driver-only). `qualityBasis` is server-derived (client never fabricates). RMU-011/012 untouched; zero diff/delta trace.
+- **Concern C5 (orchestrator scope decision → epic-end triage):** RMU-013 item 3 lists `applyAdvancedContextChange` among the reducers resetting `refinement → "skipped"`, but RMU-010 already shipped it as `→ "idle"` with a passing owned test (`writer-advanced-context.test.ts:141`). Resolved by keeping the shipped `idle` contract (the `skipped` reset applies only to `applyIdeaChange` + `applyFollowerDraftChange`); `idle` and `skipped` are behavior-equivalent for item 3's stated goal (neither is `running`/`refined`, so no stale refine fires), and AC4's stale-guard provides the real protection. Architect to reconcile the intended label for `applyAdvancedContextChange` at triage (keep `idle`, or surface a distinct `skipped` semantic if a future "reach not refined — draft changed" affordance is wanted).
