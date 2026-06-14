@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # RMU-005: Reach-model weights, external-link detection, repeat/status/quality multipliers
@@ -62,3 +62,8 @@ Helpers return the specified values; `detectExternalLink` distinguishes media ho
 → status multiplier falls back to `1` (handled by RMU-006's base logic). A deprecated
 `one_liner`/`goal_share` entry in `repeatHistory` simply won't match the new detected
 format → `repeatMult = 1` (safe no-op).
+
+## Pipeline Log
+
+- 2026-06-14 — **Done.** Standard pipeline (purely additive): Red (`3934b57`) pinned exact table values + helper outputs + exhaustiveness (`buildReachInput()` added to shared `test-helpers.ts`) → Blue Validate Red APPROVE (arithmetic verified) → Green (`ca1a35e`) added `const/reach-model-weights.ts` (`formatReachTable`, `replyRateTable`, 11 coefficients, all `// CALIBRATE`) + `detectExternalLink` + `staticQualityCompression`/`computeRepeatMultiplier`/`computeStatusMultiplier` → Blue (Validate Green) + Yellow (intent) both APPROVE. `estimateEngagementRange` byte-untouched (not wired — RMU-006); full `pnpm test` green (engine 454 / client 179 / shared 79), typecheck 5/5, lint clean, gates clean.
+- Notes for RMU-006 (non-blocking): `detectExternalLink` matches media hosts by exact string (a `www.pic.twitter.com` subdomain would be treated external); old `staticScoreQualityMultipliers`/`formatEngagementMultipliers` remain live until RMU-006 deletes them.
