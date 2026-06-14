@@ -8,6 +8,7 @@ import type {
   GenerateIdeaResponse,
   JudgeDraftRequest,
   JudgeDraftResponse,
+  JudgeVerdict,
 } from "@x-builder/shared";
 
 import {
@@ -38,9 +39,12 @@ type WriterPageProps = {
 
 // The public driver gains an advanced-context method in this work. It is declared
 // alongside the existing surface so a missing method fails the type-shaped import,
-// not just the assertion.
+// not just the assertion. The two-pass refine work adds a `judge` entry that runs
+// the judge then the refine pass; declared here so a missing wiring fails the
+// type-shaped import.
 type WriterPagePublicDriver = {
   generate: () => Promise<string>;
+  judge: () => Promise<string>;
   render: () => string;
   scoreDraft: () => Promise<string>;
   updateAdvancedContext: (patch: AdvancedContextPatch) => Promise<string>;
@@ -472,5 +476,168 @@ describe("advanced context edge cases", () => {
     expect(request?.scoringContext.repeatHistory).toHaveLength(1);
     expect(entry?.lastPostedAt.trim().length).toBeGreaterThan(0);
     expect(repeatHistoryEntrySchema.safeParse(entry).success).toBe(true);
+  });
+});
+
+const refineDraftText =
+  "A scored draft that should pick up a judge-refined reach estimate.";
+
+const refineVerdict: JudgeVerdict = {
+  verdict: "slight_rework",
+  confidence: "medium",
+  scores: {
+    overall: 78,
+    replies: 80,
+    profileClicks: 72,
+    impressions: 65,
+    bookmarkValue: 60,
+    dwellProxy: 70,
+    voiceMatch: 85,
+    negativeRisk: 10,
+    answerEffort: 55,
+    strangerAnswerability: 48,
+    statusDependency: 30,
+    replyVsQuoteOrientation: 62,
+    audienceMatch: 41,
+  },
+  headline: "Strong hook, weak closer.",
+  strengths: ["Concrete claim up front"],
+  improvements: ["Trim the middle paragraph"],
+};
+
+const refineJudgeResponse: JudgeDraftResponse = {
+  status: "judged",
+  verdict: refineVerdict,
+  model: "claude-cli",
+  judgedAt: "2026-06-10T12:00:00.000Z",
+};
+
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (reason?: unknown) => void = () => undefined;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
+// Slices the markup to the aria-live evaluation region so refining-indicator
+// assertions never accidentally match copy elsewhere on the page.
+function evaluationRegionHtml(html: string) {
+  const start = html.indexOf('aria-label="Studio evaluation"');
+  expect(start).toBeGreaterThanOrEqual(0);
+  const regionStart = html.lastIndexOf("<section", start);
+  expect(regionStart).toBeGreaterThanOrEqual(0);
+  const end = html.indexOf("</section>", start);
+  expect(end).toBeGreaterThan(regionStart);
+
+  return html.slice(regionStart, end + "</section>".length);
+}
+
+// An analyze stub that returns an available static prediction on the first
+// (scoreDraft) call and a deferred response on the refine pass, so the running
+// state is renderable while pass-2 is held open.
+function createTwoPassAnalyze(refine: Promise<AnalyzePostsResponse>) {
+  let call = 0;
+  return vi.fn<WriterApiClient["analyzePosts"]>(async (request) => {
+    call += 1;
+    if (call === 1) {
+      return buildAnalyzeResponse(request, {
+        "draft-post": scoredItem(
+          { id: "draft-post", text: request.items[0]?.text ?? refineDraftText },
+          { prediction: availablePrediction({ qualityBasis: "static" }) },
+        ),
+      });
+    }
+    return refine;
+  });
+}
+
+function refinedAnalyzeResponse(): AnalyzePostsResponse {
+  return {
+    items: [
+      scoredItem(
+        { id: "draft-post", text: refineDraftText },
+        {
+          prediction: availablePrediction({
+            qualityBasis: "judge",
+            predictedMidImpressions: 4200,
+          }),
+        },
+      ),
+    ],
+  };
+}
+
+// A full api client carrying a real judge stub (createApiClient leaves judgeDraft
+// stubbed with no return), so the two-pass flow can run end-to-end.
+function createTwoPassApiClient(
+  analyzePosts: WriterApiClient["analyzePosts"],
+): WriterApiClient {
+  return {
+    analyzePosts,
+    generateIdea: vi.fn(async () => defaultIdeaResponse()),
+    judgeDraft: vi.fn(async () => refineJudgeResponse),
+  };
+}
+
+describe("two-pass refining indicator", () => {
+  it("shows a refining-reach badge in the aria-live region while the refine pass runs", async () => {
+    const module = await loadWriterPage();
+    const refine = createDeferred<AnalyzePostsResponse>();
+    const analyzePosts = createTwoPassAnalyze(refine.promise);
+    const driver = createDriver(module, {
+      apiClient: createTwoPassApiClient(analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: module.WriterPage,
+    });
+
+    driver.updateFollowers("2400");
+    driver.updateIdea(refineDraftText);
+    await driver.scoreDraft();
+
+    // Judge runs, publishes the verdict, then fires the refine pass which is held
+    // open by the deferred analyze — so the model is in the running state.
+    const html = await driver.judge();
+    const region = evaluationRegionHtml(html);
+
+    // The refining badge sits inside the polite live region.
+    expect(region).toContain("Refining reach");
+    // The deterministic prediction stays visible underneath (no skeleton blanket).
+    expect(region).toContain("Expected reach");
+
+    refine.resolve(refinedAnalyzeResponse());
+    await refine.promise;
+  });
+
+  it("leaves no static-vs-judge delta marker in the rendered output once refined", async () => {
+    const module = await loadWriterPage();
+    const analyzePosts = createTwoPassAnalyze(
+      Promise.resolve(refinedAnalyzeResponse()),
+    );
+    const driver = createDriver(module, {
+      apiClient: createTwoPassApiClient(analyzePosts),
+      onOpenSettings: vi.fn(),
+      renderPage: module.WriterPage,
+    });
+
+    driver.updateFollowers("2400");
+    driver.updateIdea(refineDraftText);
+    await driver.scoreDraft();
+
+    const html = await driver.judge();
+    const text = textContent(html).toLowerCase();
+
+    // The refine REPLACES the prediction — pre/post-judge reach are different
+    // scales, so the UI never renders a delta between a static and a judge reach.
+    expect(text).not.toContain("delta");
+    expect(text).not.toContain("vs static");
+    expect(text).not.toContain("static prediction");
+    expect(html).not.toContain("xb-reach-regime__diff");
+    // The refined judge prediction did land (so the absence of a diff is a real
+    // zero-trace, not just an unrefined draft).
+    expect(html).toContain("Refined with judge signal");
   });
 });
