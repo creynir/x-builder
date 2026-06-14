@@ -5,6 +5,7 @@ import {
   deriveJudgeVerdict,
   judgeDraftRequestSchema,
   judgeDraftResponseSchema,
+  judgeScoresSchema,
   judgeVerdictSchema,
 } from "../../index.js";
 
@@ -17,6 +18,17 @@ const scores = {
   dwellProxy: 70,
   voiceMatch: 85,
   negativeRisk: 10,
+};
+
+// The full RMU-001 score set: the existing eight dimensions plus the five new
+// behavioral dimensions, with audienceMatch present-but-nullable on the wire.
+const extendedScores = {
+  ...scores,
+  answerEffort: 55,
+  strangerAnswerability: 48,
+  statusDependency: 30,
+  replyVsQuoteOrientation: 62,
+  audienceMatch: null,
 };
 
 const validVerdict = {
@@ -129,5 +141,99 @@ describe("judge schemas", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe("judge score dimension widening", () => {
+  it("retains the four new numeric dimensions and an explicit null audience match", () => {
+    const result = judgeScoresSchema.safeParse(extendedScores);
+
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      throw new Error("Expected the extended judge score set to parse.");
+    }
+    expect(result.data).toMatchObject({
+      answerEffort: 55,
+      strangerAnswerability: 48,
+      statusDependency: 30,
+      replyVsQuoteOrientation: 62,
+      audienceMatch: null,
+    });
+  });
+
+  it("accepts a numeric audience match when a profile is supplied", () => {
+    const result = judgeScoresSchema.safeParse({ ...extendedScores, audienceMatch: 70 });
+
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      throw new Error("Expected a numeric audience match to parse.");
+    }
+    expect(result.data.audienceMatch).toBe(70);
+  });
+
+  it("rejects scores that omit audienceMatch entirely since it is nullable, not optional", () => {
+    const { audienceMatch: _audienceMatch, ...withoutAudienceMatch } = extendedScores;
+
+    expect(judgeScoresSchema.safeParse(withoutAudienceMatch).success).toBe(false);
+  });
+
+  it("rejects each new dimension when out of the 0..100 integer range", () => {
+    expect(judgeScoresSchema.safeParse({ ...extendedScores, answerEffort: 101 }).success).toBe(false);
+    expect(
+      judgeScoresSchema.safeParse({ ...extendedScores, strangerAnswerability: -1 }).success,
+    ).toBe(false);
+    expect(
+      judgeScoresSchema.safeParse({ ...extendedScores, statusDependency: 50.5 }).success,
+    ).toBe(false);
+    expect(judgeScoresSchema.safeParse({ ...extendedScores, audienceMatch: 101 }).success).toBe(false);
+  });
+
+  it("parses a full verdict carrying the extended score set", () => {
+    const result = judgeVerdictSchema.safeParse({ ...validVerdict, scores: extendedScores });
+
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      throw new Error("Expected a verdict with the extended score set to parse.");
+    }
+    expect(result.data.scores).toMatchObject({
+      answerEffort: 55,
+      audienceMatch: null,
+    });
+  });
+});
+
+describe("judge draft request account profile", () => {
+  it("parses a draft request that omits the optional account profile", () => {
+    const parsed = judgeDraftRequestSchema.parse({ text: "A draft worth judging." });
+
+    expect(parsed.accountProfile).toBeUndefined();
+  });
+
+  it("retains a supplied account profile", () => {
+    const result = judgeDraftRequestSchema.safeParse({
+      text: "A draft worth judging.",
+      accountProfile: "Indie hacker shipping a local-first writing tool.",
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      throw new Error("Expected a draft request with an account profile to parse.");
+    }
+    expect(result.data.accountProfile).toBe(
+      "Indie hacker shipping a local-first writing tool.",
+    );
+  });
+
+  it("rejects a whitespace-only account profile", () => {
+    expect(
+      judgeDraftRequestSchema.safeParse({ text: "A draft.", accountProfile: "   \n\t " }).success,
+    ).toBe(false);
+  });
+
+  it("rejects an account profile longer than 600 characters", () => {
+    expect(
+      judgeDraftRequestSchema.safeParse({ text: "A draft.", accountProfile: "a".repeat(601) })
+        .success,
+    ).toBe(false);
   });
 });
