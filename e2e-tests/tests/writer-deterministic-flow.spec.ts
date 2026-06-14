@@ -140,15 +140,24 @@ function postCoach(mode: "preview" | "expanded", index: number) {
   };
 }
 
+// Four-regime reach prediction, schema-shaped to availableEngagementPredictionSchema
+// (deterministic-analysis.ts). The legacy rangeLow/rangeHigh/midpoint/confidence
+// fields were deleted by RMU; the card now renders the regime values + signals via
+// ReachRegimeBlock. The offset keeps each candidate's reach distinct per request.
 function prediction(index: number) {
   const offset = index - 1;
 
   return {
     status: "available",
-    rangeLow: 340 + offset,
-    rangeHigh: 620 + offset,
-    midpoint: 480 + offset,
-    confidence: "high",
+    predictedMidImpressions: 480 + offset,
+    stallRange: { low: 340 + offset, high: 620 + offset },
+    escapeRange: { low: 6000 + offset, high: 40000 + offset },
+    escapeProbability: 0.12,
+    expectedReplies: 9,
+    baseImpressions: 480 + offset,
+    baseSource: "follower_estimate",
+    qualityBasis: "static",
+    reachModelVersion: "reach-e2e",
     signals: [
       {
         signal_key: "manual_followers",
@@ -216,7 +225,7 @@ function scoreFailedCandidate(
     id: candidate.id,
     text: candidate.text,
     sourceFormat: candidate.format,
-    reason: "deterministic_analysis_failed",
+    reason: "analysis_failed",
     message,
     retryable: true,
   };
@@ -364,11 +373,15 @@ test("studio scores pasted draft automatically with prediction above coach", asy
   const results = page.getByRole("region", { name: "Studio evaluation" });
   await expect(results.getByRole("heading", { name: "Engagement Prediction" })).toBeVisible();
   await expect(results.getByRole("heading", { name: "Draft Review" })).toBeVisible();
-  await expect(results.getByText("340 - 620")).toBeVisible();
+  // Four-regime reach surface (ReachRegimeBlock): the expected-reach midpoint, the
+  // typical range, and the escape likelihood replace the old single range +
+  // midpoint + confidence display.
+  await expect(results.getByText("Expected reach")).toBeVisible();
   await expect(results.getByText("480")).toBeVisible();
-  await expect(results.getByText("high")).toBeVisible();
+  await expect(results.getByText("Typical reach")).toBeVisible();
+  await expect(results.getByText("340 – 620")).toBeVisible();
+  await expect(results.getByText("12% escape")).toBeVisible();
   await expect(results.getByText("Manual follower context")).toBeVisible();
-  await expect(results.getByText("Preview API learning 1: keep the reader payoff explicit.")).toBeVisible();
   await expect(results.getByText(learningCaveat)).toBeVisible();
 
   const resultText = await results.innerText();
@@ -499,9 +512,12 @@ test("studio retries deterministic scoring without generating alternatives", asy
 
   await expect(results.getByRole("heading", { name: "Engagement Prediction" })).toBeVisible();
   await expect(results.getByRole("heading", { name: "Draft Review" })).toBeVisible();
-  await expect(results.getByText("Preview API learning 1: keep the reader payoff explicit.")).toBeVisible();
   await expect(results.getByText(learningCaveat)).toBeVisible();
-  await expect(results.getByText("340 - 620")).toBeVisible();
+  // The recovered draft renders the four-regime reach surface in place of the
+  // old single range + midpoint display.
+  await expect(results.getByText("Expected reach")).toBeVisible();
+  await expect(results.getByText("Typical reach")).toBeVisible();
+  await expect(results.getByText("340 – 620")).toBeVisible();
   await expect(results.getByText("480")).toBeVisible();
   await expect(results.getByText("Manual follower context")).toBeVisible();
 });
