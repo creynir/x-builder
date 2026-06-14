@@ -16,6 +16,14 @@ Greenfield judge→reach bridge (the old 0-10 `aiRating` path was deleted in RMU
    `audienceMatch` (given `accountProfile`; explicit `null` when no profile is provided),
    `replyVsQuoteOrientation` (0-100 display-only: 100 = built to collect replies, 0 = built
    to be quote-tweeted). `audienceMatch` allows `null` in the output schema.
+   **Tighten the schema (this ticket is the producer).** The 5 dims were `.optional()` at
+   RMU-001 because the judge emitted only the 8 existing dims; the judge now always emits all
+   13, so tighten in `judgeScoresSchema`: the 4 behavioral dims (`answerEffort`,
+   `strangerAnswerability`, `statusDependency`, `replyVsQuoteOrientation`) → **required**, and
+   `audienceMatch` → `judgeScoreValue.nullable()` (**required on the wire, explicit `null`**
+   when no profile — the "nullable, NOT optional" end state). Add the test that a full verdict
+   carrying the new dims must include the 4 behavioral dims and a present (possibly `null`)
+   `audienceMatch`.
 2. **`accountProfile` input.** `JudgeDraftService.judge(text, accountProfile?)`; the
    `/drafts/judge` route reads `accountProfile` from the request, falling back to the
    persisted `settings.accountProfile` (RMU-009). Pass it into the structured-prompt
