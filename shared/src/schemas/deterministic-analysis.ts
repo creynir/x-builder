@@ -172,37 +172,18 @@ export const judgeSignalsSchema = z.object({
   replies: z.number().int().min(0).max(100),
 });
 
-// repeatHistory and willAttachMedia are filled to neutral defaults at parse
-// time but stay optional on the inferred type, so a caller building a request
-// still only has to supply followers — the way scoringContext was consumed
-// before the reach-model widening.
-export type ScoringContext = {
-  followers?: number;
-  trailingMedianImpressions?: number;
-  repeatHistory?: RepeatHistoryEntry[];
-  plannedHourUtc?: number;
-  willAttachMedia?: boolean;
-  accountAgeYears?: number;
-  judgeSignals?: JudgeSignals;
-};
-
-export const scoringContextSchema = z
-  .object({
-    followers: z.number().int().positive().optional(),
-    trailingMedianImpressions: z.number().int().min(0).optional(),
-    repeatHistory: z.array(repeatHistoryEntrySchema).max(40).optional(),
-    plannedHourUtc: z.number().int().min(0).max(23).optional(),
-    willAttachMedia: z.boolean().optional(),
-    accountAgeYears: z.number().int().min(0).max(50).optional(),
-    judgeSignals: judgeSignalsSchema.optional(),
-  })
-  .transform(
-    (context): ScoringContext => ({
-      ...context,
-      repeatHistory: context.repeatHistory ?? [],
-      willAttachMedia: context.willAttachMedia ?? false,
-    }),
-  );
+// Optional-until-producer: repeatHistory and willAttachMedia carry no schema
+// default. A {followers}-only context round-trips unchanged; consumers apply
+// use-time defaults (RMU-006).
+export const scoringContextSchema = z.object({
+  followers: z.number().int().positive().optional(),
+  trailingMedianImpressions: z.number().int().min(0).optional(),
+  repeatHistory: z.array(repeatHistoryEntrySchema).max(40).optional(),
+  plannedHourUtc: z.number().int().min(0).max(23).optional(),
+  willAttachMedia: z.boolean().optional(),
+  accountAgeYears: z.number().int().min(0).max(50).optional(),
+  judgeSignals: judgeSignalsSchema.optional(),
+});
 
 export const analyzePostsRequestSchema = z.object({
   items: z.array(analyzePostsRequestItemSchema).min(1).max(10),
@@ -254,6 +235,7 @@ export type ReachRange = z.infer<typeof reachRangeSchema>;
 export type EngagementPrediction = z.infer<typeof engagementPredictionSchema>;
 export type RepeatHistoryEntry = z.infer<typeof repeatHistoryEntrySchema>;
 export type JudgeSignals = z.infer<typeof judgeSignalsSchema>;
+export type ScoringContext = z.infer<typeof scoringContextSchema>;
 export type AnalyzePostsRequest = z.infer<typeof analyzePostsRequestSchema>;
 export type AnalyzedPostItem = z.infer<typeof analyzedPostItemSchema>;
 export type AnalyzePostsResponse = z.infer<typeof analyzePostsResponseSchema>;

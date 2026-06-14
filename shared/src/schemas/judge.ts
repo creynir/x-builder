@@ -13,41 +13,26 @@ const judgeScoreValue = z.number().int().min(0).max(100);
 // why a post scores the way it does. Modelled on the x-post-performance rubric.
 // voiceMatch is generic ("authentic human voice, not AI-slop"), NOT tied to any
 // individual's voice profile.
-// The four behavioral dimensions are populated by a later reach-model ticket, so
-// a legacy eight-dimension verdict is still valid. But once any behavioral
-// dimension is present, audienceMatch must be present too (nullable, not
-// optional): null when no account profile anchors the audience fit, a 0..100
-// score when one does. A behavioral score set that omits audienceMatch is
-// incomplete, not legacy.
-const behavioralScoreKeys = [
-  "answerEffort",
-  "strangerAnswerability",
-  "statusDependency",
-  "replyVsQuoteOrientation",
-] as const;
-
-export const judgeScoresSchema = z
-  .object({
-    overall: judgeScoreValue,
-    replies: judgeScoreValue,
-    profileClicks: judgeScoreValue,
-    impressions: judgeScoreValue,
-    bookmarkValue: judgeScoreValue,
-    dwellProxy: judgeScoreValue,
-    voiceMatch: judgeScoreValue,
-    negativeRisk: judgeScoreValue,
-    answerEffort: judgeScoreValue.optional(),
-    strangerAnswerability: judgeScoreValue.optional(),
-    statusDependency: judgeScoreValue.optional(),
-    replyVsQuoteOrientation: judgeScoreValue.optional(),
-    audienceMatch: judgeScoreValue.nullable().optional(),
-  })
-  .refine(
-    (scores) =>
-      !behavioralScoreKeys.some((key) => scores[key] !== undefined) ||
-      scores.audienceMatch !== undefined,
-    "audienceMatch is required (nullable) once the behavioral dimensions are present.",
-  );
+// The five behavioral dimensions are plain optional until the producer lands:
+// the four numeric dimensions plus audienceMatch (nullable when present — null
+// when no account profile anchors audience fit, a 0..100 score when one does).
+// The tightening (four behavioral required, audienceMatch nullable-required)
+// moves to RMU-008.
+export const judgeScoresSchema = z.object({
+  overall: judgeScoreValue,
+  replies: judgeScoreValue,
+  profileClicks: judgeScoreValue,
+  impressions: judgeScoreValue,
+  bookmarkValue: judgeScoreValue,
+  dwellProxy: judgeScoreValue,
+  voiceMatch: judgeScoreValue,
+  negativeRisk: judgeScoreValue,
+  answerEffort: judgeScoreValue.optional(),
+  strangerAnswerability: judgeScoreValue.optional(),
+  statusDependency: judgeScoreValue.optional(),
+  replyVsQuoteOrientation: judgeScoreValue.optional(),
+  audienceMatch: judgeScoreValue.nullable().optional(),
+});
 
 export const judgeVerdictLabelSchema = z.enum([
   "post_now",
