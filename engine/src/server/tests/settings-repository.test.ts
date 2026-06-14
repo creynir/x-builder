@@ -149,4 +149,96 @@ describe("JSON file app settings repository", () => {
       }
     });
   });
+
+  describe("account profile persistence", () => {
+    const accountProfile = "30-40s founders, SaaS/AI/devtools, mostly non-US";
+
+    it("round-trips the saved account profile back through a fresh repository load", async () => {
+      await withTempRoot(async (root) => {
+        const JsonFileAppSettingsRepository = await loadJsonFileAppSettingsRepository();
+        const writer = new JsonFileAppSettingsRepository({ root });
+
+        const settingsToSave = appSettingsSchema.parse({
+          ...writer.defaults(),
+          accountProfile,
+        });
+        const saveResponse = appSettingsResponseSchema.parse(await writer.save(settingsToSave));
+
+        const reader = new JsonFileAppSettingsRepository({ root });
+        const loadResponse = appSettingsResponseSchema.parse(await reader.load());
+
+        expect(saveResponse.settings.accountProfile).toBe(accountProfile);
+        expect(loadResponse.source).toBe("persisted");
+        expect(loadResponse.settings.accountProfile).toBe(accountProfile);
+      });
+    });
+
+    it("loads an old persisted file without an account profile as undefined without throwing", async () => {
+      await withTempRoot(async (root) => {
+        const JsonFileAppSettingsRepository = await loadJsonFileAppSettingsRepository();
+        // An "old" file written before the account profile field existed: it has no
+        // accountProfile key at all. The load must succeed (no migration, no throw).
+        await writeFile(
+          join(root, "settings.json"),
+          JSON.stringify({
+            settings: {
+              engineBaseUrl: "http://127.0.0.1:4173",
+              storagePath: "/tmp/x-builder-no-profile",
+              judgeProvider: "codex-cli",
+              showDeterministicDetails: true,
+            },
+            source: "persisted",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          }),
+          "utf8",
+        );
+
+        const repository = new JsonFileAppSettingsRepository({ root });
+        const response = appSettingsResponseSchema.parse(await repository.load());
+
+        expect(response.source).toBe("persisted");
+        expect(response.settings.accountProfile).toBeUndefined();
+      });
+    });
+
+    it("persists the trimmed account profile when the saved value has surrounding whitespace", async () => {
+      await withTempRoot(async (root) => {
+        const JsonFileAppSettingsRepository = await loadJsonFileAppSettingsRepository();
+        const writer = new JsonFileAppSettingsRepository({ root });
+
+        const settingsToSave = appSettingsSchema.parse({
+          ...writer.defaults(),
+          accountProfile: `  ${accountProfile}  `,
+        });
+        await writer.save(settingsToSave);
+
+        const reader = new JsonFileAppSettingsRepository({ root });
+        const response = appSettingsResponseSchema.parse(await reader.load());
+
+        expect(response.settings.accountProfile).toBe(accountProfile);
+      });
+    });
+
+    it("persists a whitespace-only account profile as an empty trimmed string", async () => {
+      await withTempRoot(async (root) => {
+        const JsonFileAppSettingsRepository = await loadJsonFileAppSettingsRepository();
+        const writer = new JsonFileAppSettingsRepository({ root });
+
+        // The settings schema trims but does not require a minimum length, so a
+        // whitespace-only profile collapses to "" rather than being rejected. The
+        // judge treats "" as "no profile" — that judge behavior is covered elsewhere;
+        // here we only pin the persisted/trimmed value.
+        const settingsToSave = appSettingsSchema.parse({
+          ...writer.defaults(),
+          accountProfile: "   \n\t  ",
+        });
+        await writer.save(settingsToSave);
+
+        const reader = new JsonFileAppSettingsRepository({ root });
+        const response = appSettingsResponseSchema.parse(await reader.load());
+
+        expect(response.settings.accountProfile).toBe("");
+      });
+    });
+  });
 });
