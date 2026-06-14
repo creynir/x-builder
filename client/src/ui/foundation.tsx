@@ -1,5 +1,6 @@
 import type {
   ButtonHTMLAttributes,
+  ChangeEvent,
   CSSProperties,
   HTMLAttributes,
   InputHTMLAttributes,
@@ -110,6 +111,16 @@ export type KeyValueListProps = HTMLAttributes<HTMLDListElement> & {
   emptyMessage?: string;
   loading?: boolean;
   disabled?: boolean;
+};
+
+export type SwitchProps = {
+  id: string;
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  name?: string;
+  disabled?: boolean;
+  className?: string;
 };
 
 function cx(...classes: Array<string | false | null | undefined>) {
@@ -455,6 +466,32 @@ export function KeyValueList({
         </div>
       ))}
     </dl>
+  );
+}
+
+export function Switch({
+  checked,
+  className = "xb-settings-route__switch",
+  disabled,
+  id,
+  label,
+  name,
+  onChange,
+}: SwitchProps): ReactElement {
+  return (
+    <label className={className} htmlFor={id}>
+      <span className="xb-settings-route__switch-label">{label}</span>
+      <input
+        checked={checked}
+        disabled={disabled}
+        id={id}
+        name={name}
+        onChange={(event: ChangeEvent<HTMLInputElement>) => {
+          onChange(event.target.checked);
+        }}
+        type="checkbox"
+      />
+    </label>
   );
 }
 

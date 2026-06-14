@@ -17,7 +17,7 @@ import type {
 import { judgeProviderIdSchema, judgeProviderLabels } from "@x-builder/shared";
 
 import { ApiClientError } from "../api/engine-api-client";
-import { Alert, Badge } from "../ui/foundation";
+import { Alert, Badge, Switch } from "../ui/foundation";
 
 type TextSettingsFieldName = Extract<
   keyof AppSettings,
@@ -350,21 +350,16 @@ function renderSwitch({
   name: SwitchSettingsFieldName;
   onChange: (field: SwitchSettingsFieldName, value: boolean) => void;
 }): ReactElement {
-  const id = fieldId(name);
-
   return (
-    <label className="xb-settings-route__switch" htmlFor={id}>
-      <span className="xb-settings-route__switch-label">{label}</span>
-      <input
-        checked={checked}
-        id={id}
-        name={name}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => {
-          onChange(name, event.target.checked);
-        }}
-        type="checkbox"
-      />
-    </label>
+    <Switch
+      checked={checked}
+      id={fieldId(name)}
+      label={label}
+      name={name}
+      onChange={(value) => {
+        onChange(name, value);
+      }}
+    />
   );
 }
 
