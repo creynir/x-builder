@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # RMU-012: Five new judge dimensions + null `audienceMatch` recovery state
@@ -69,3 +69,7 @@ AA contrast verified.
 
 Dims at 0 and 100; `replyVsQuoteOrientation` at 0 (fully quote) and 100 (fully reply);
 a legacy verdict missing the new dims renders gracefully (omit the new rows).
+
+## Pipeline Log
+
+- 2026-06-14 — **Done.** Standard pipeline, two Red rejection cycles (both test-code defects, no impl thrash): Red (`27d813f`) 8 failing render/wiring tests + the 0-not-dropped guard, 211 passing. **Blue REJECT cycle 1** — `scoresList` helper (`judge.test.tsx:414`) returned `match[1]` (`string | undefined`) from a `=> string` helper → TS2322 under `noUncheckedIndexedAccess`, un-greenable independent of the impl gap → Red fix (`1ac44f7`) narrowed via the sibling `escapeBadge?.[1]` pattern → Blue APPROVE. Green then surfaced a **second** defect (orchestrator-verified before routing): the null-recovery wiring test (`:587`) bound `element` to a **non-invoked** `<JudgePanel/>` JSX element, whose `props.children` is unrendered, so `findByAriaLabel`→`flattenElements` threw "Expected an element with aria-label" for ANY implementation — un-satisfiable. **Red fix cycle 2** (`711b0ff`) bound `element = JudgePanel({…})` (invoked), mirroring `foundation.test.tsx:471`'s `Switch({…})`; Blue re-APPROVE (with a calibration note owning the two-cycle miss — for traversal/handler-wiring tests, distinguish a render-assertion failure from a harness-throw failure). Green (`f5d1eb0`): `onOpenSettings?` optional prop on `JudgePanel` (required would break the 18 existing JudgePanel tests via TS2741; threaded as **required** end-to-end `WriterPage`→`WriterPageView`→`JudgePanel`, so production is always wired), `judgeAuxiliaryRows` (3 numeric dims) + the `audienceMatch` number/null branch (`Button variant="ghost"`, aria-label "Add account profile in Settings", `--text-uncertain`) + the display-only `replyVsQuoteOrientation` pole scale (three `<span>`s, no ScoreBar/progressbar/enum), plus token-driven CSS (`xb-judge-scores__uncertain`/`__orientation`/`__pole`/`__orientation-value`). Full client suite **219 passed / 0 failed**, typecheck + lint clean, gates clean (scope/ticket-ids/stubs/slop/ui-tokens). Blue (Validate Green) APPROVE + Yellow APPROVE — **no concerns**. 13 rows render; 8 legacy rows byte-unchanged; null `audienceMatch` recovery button wired to `onOpenSettings`; orientation is a labeled numeric scale. No RMU-013 refine logic present (zero-trace confirmed).
