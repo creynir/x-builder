@@ -405,13 +405,13 @@ describe("JudgePanel", () => {
 // scoped to the scores list and never accidentally match the summary or
 // critique sections elsewhere on the panel.
 const scoresList = (html: string): string => {
-  const match = html.match(/<dl class="xb-judge-scores">([\s\S]*?)<\/dl>/);
+  const inner = html.match(/<dl class="xb-judge-scores">([\s\S]*?)<\/dl>/)?.[1];
 
-  if (match === null) {
+  if (inner === undefined) {
     throw new Error("Expected an xb-judge-scores <dl> in the rendered panel.");
   }
 
-  return match[1];
+  return inner;
 };
 
 // Every score row labels itself with a single <dt>; counting them is the
