@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # RMU-006: Two-regime reach output + expectedReplies + base override + disabled-guard fix
