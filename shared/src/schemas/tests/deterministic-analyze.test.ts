@@ -402,27 +402,28 @@ describe("scoring context schema", () => {
     expect(judgeSignalsSchema).toBeDefined();
   });
 
-  it("parses a legacy followers-only context and applies the new defaults", () => {
+  it("round-trips a followers-only context unchanged without injecting optional defaults", () => {
     const parsed = scoringContextSchema.parse({ followers: 2400 });
 
     expect(parsed.followers).toBe(2400);
-    expect(parsed.repeatHistory).toEqual([]);
-    expect(parsed.willAttachMedia).toBe(false);
+    expect(parsed.repeatHistory).toBeUndefined();
+    expect(parsed.willAttachMedia).toBeUndefined();
     expect(parsed.trailingMedianImpressions).toBeUndefined();
     expect(parsed.plannedHourUtc).toBeUndefined();
     expect(parsed.accountAgeYears).toBeUndefined();
     expect(parsed.judgeSignals).toBeUndefined();
   });
 
-  it("parses an analyze request whose scoring context carries only followers and fills the widened defaults", () => {
+  it("round-trips an analyze request whose scoring context carries only followers without filling optional defaults", () => {
     const parsed = analyzePostsRequestSchema.parse({
       items: [{ id: "candidate-1", text: "Ship the smaller version that creates proof." }],
       scoringContext: { followers: 2400 },
       presentation: {},
     });
 
-    expect(parsed.scoringContext.repeatHistory).toEqual([]);
-    expect(parsed.scoringContext.willAttachMedia).toBe(false);
+    expect(parsed.scoringContext.followers).toBe(2400);
+    expect(parsed.scoringContext.repeatHistory).toBeUndefined();
+    expect(parsed.scoringContext.willAttachMedia).toBeUndefined();
     expect(parsed.scoringContext.trailingMedianImpressions).toBeUndefined();
     expect(parsed.scoringContext.plannedHourUtc).toBeUndefined();
     expect(parsed.scoringContext.accountAgeYears).toBeUndefined();

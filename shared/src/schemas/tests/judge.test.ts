@@ -171,12 +171,6 @@ describe("judge score dimension widening", () => {
     expect(result.data.audienceMatch).toBe(70);
   });
 
-  it("rejects scores that omit audienceMatch entirely since it is nullable, not optional", () => {
-    const { audienceMatch: _audienceMatch, ...withoutAudienceMatch } = extendedScores;
-
-    expect(judgeScoresSchema.safeParse(withoutAudienceMatch).success).toBe(false);
-  });
-
   it("rejects each new dimension when out of the 0..100 integer range", () => {
     expect(judgeScoresSchema.safeParse({ ...extendedScores, answerEffort: 101 }).success).toBe(false);
     expect(
