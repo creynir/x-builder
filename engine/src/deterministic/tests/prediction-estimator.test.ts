@@ -59,6 +59,33 @@ describe("computeReachModel", () => {
     expect(prediction.escapeRange.low).toBeLessThanOrEqual(prediction.escapeRange.high);
   });
 
+  it.each([
+    // base = baseImpressionsPerThousandFollowers(400) · clamp(followers/1000, 0.2, 10)
+    //      = clamp(0.4·followers, 80, 4000)
+    [5000, 2000], // mid-range: followerScale 5 -> 400·5
+    [100, 80], // clamp floor: followerScale 0.1 -> clamped to 0.2 -> 400·0.2
+    [50000, 4000], // clamp cap: followerScale 50 -> clamped to 10 -> 400·10
+  ])(
+    "pins the follower-estimate base to its absolute value for %s followers",
+    (followers, expectedBase) => {
+      const prediction = computeReachModel(
+        buildReachInput({
+          followers,
+          trailingMedianImpressions: undefined,
+          format: "cta_farm",
+          score: QUALITY_SCORE,
+        }),
+      );
+
+      if (prediction === null) {
+        throw new Error("Expected an available reach prediction.");
+      }
+
+      expect(prediction.baseSource).toBe("follower_estimate");
+      expect(prediction.baseImpressions).toBe(expectedBase);
+    },
+  );
+
   it("uses the trailing median as the base when followers are absent", () => {
     const input = buildReachInput({
       followers: undefined,
