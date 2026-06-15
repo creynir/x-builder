@@ -1,0 +1,83 @@
+tools/calibration/src/bin/normalize.ts
+  s_77ae33ba9cc0c3::t_ec76f1274b795d 1
+docs/features/README.md
+  s_a39251df82ba63::t_89ba0ca37562d6 46
+tools/calibration/src/validate.ts
+  s_77ae33ba9cc0c3::t_b39db5987dda3f 72-73,78-95,98,100-105
+docs/features/founder-story-reach/tickets/FSR-003-no-amplifier-static-verification.md
+  s_a39251df82ba63::t_fa90fcfaecd3fd 1-25,28-34,41-49,52-55
+  s_a39251df82ba63::t_feba96255acb53 26-27,35-40,50-51
+tools/calibration/bin-shims/x-cal-fit.js
+  s_77ae33ba9cc0c3::t_4c273105981994 2-5
+  s_77ae33ba9cc0c3::t_107bd3540f97ee 1
+tools/calibration/src/bin/predict.ts
+  s_77ae33ba9cc0c3::t_ec76f1274b795d 1
+tools/calibration/package.json
+  s_77ae33ba9cc0c3::t_ec76f1274b795d 9-12
+  s_77ae33ba9cc0c3::t_107bd3540f97ee 26
+tools/calibration/src/schema.ts
+  s_77ae33ba9cc0c3::t_ec76f1274b795d 2,24
+docs/features/founder-story-reach/tickets/FSR-002-founder-story-classifier-label-weights.md
+  s_a39251df82ba63::t_fa90fcfaecd3fd 1-139
+tools/calibration/bin-shims/package.json
+  s_77ae33ba9cc0c3::t_107bd3540f97ee 1-12
+tools/calibration/bin-shims/x-cal-normalize.js
+  s_77ae33ba9cc0c3::t_4c273105981994 2-5
+  s_77ae33ba9cc0c3::t_107bd3540f97ee 1
+docs/features/founder-story-reach/tickets/FSR-004-int-analyze-api-founder-story.md
+  s_a39251df82ba63::t_fa90fcfaecd3fd 1-33
+docs/features/founder-story-reach/tickets/FSR-006-doc-future-amplifier-note.md
+  s_a39251df82ba63::t_fa90fcfaecd3fd 1-45
+tools/calibration/src/bin/fit.ts
+  s_77ae33ba9cc0c3::t_ec76f1274b795d 1
+tools/calibration/src/tests/bin.test.ts
+  s_77ae33ba9cc0c3::t_992c768788e3df 12,15-20,35-52,55
+  s_77ae33ba9cc0c3::t_ebf177c810433c 1-11,13-14,21-34,53-54,56-58
+tools/calibration/src/tests/validate.test.ts
+  s_77ae33ba9cc0c3::t_ebf177c810433c 73-85
+tools/calibration/bin-shims/x-cal-validate.js
+  s_77ae33ba9cc0c3::t_107bd3540f97ee 1
+  s_77ae33ba9cc0c3::t_4c273105981994 2-5
+docs/features/founder-story-reach/README.md
+  s_a39251df82ba63::t_fa90fcfaecd3fd 1-62
+tools/calibration/bin-shims/x-cal-predict.js
+  s_77ae33ba9cc0c3::t_107bd3540f97ee 1
+  s_77ae33ba9cc0c3::t_4c273105981994 2-5
+docs/features/founder-story-reach/tickets/FSR-001-runtime-taxonomy-contract.md
+  s_a39251df82ba63::t_fa90fcfaecd3fd 1-14,18-48,51-57,63-67,70-76,86-88,92-93
+  s_a39251df82ba63::t_f02b7d62096018 15-17,49-50,58-62,68-69,77-85,89-91
+tools/calibration/src/tests/schema.test.ts
+  s_77ae33ba9cc0c3::t_ebf177c810433c 61-69
+docs/features/founder-story-reach/tickets/README.md
+  s_a39251df82ba63::t_fa90fcfaecd3fd 1-14
+docs/features/founder-story-reach/tickets/FSR-005-e2e-studio-detected-format-smoke.md
+  s_a39251df82ba63::t_fa90fcfaecd3fd 1-32
+tools/calibration/src/bin/validate.ts
+  s_77ae33ba9cc0c3::t_ec76f1274b795d 1
+tools/calibration/src/normalize.ts
+  s_77ae33ba9cc0c3::t_562b586248689a 184-185,189-193,205-212,214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "6b60d570ba8c6806221893260e242ae0188a52d3",
+  "prompts": {},
+  "sessions": {
+    "s_77ae33ba9cc0c3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ec7d1-22f5-7ba2-bddf-5c5b3331dc67",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    },
+    "s_a39251df82ba63": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecc02-1444-7542-9377-b3479389a76a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
