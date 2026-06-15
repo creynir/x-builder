@@ -1,0 +1,72 @@
+e2e-tests/tests/writer-deterministic-flow.spec.ts
+  s_b4bc5fdb21a31e::t_57f19bb0a64b72 8,48-51,58,70
+  s_b4bc5fdb21a31e::t_000586322ca5df 280-287
+  s_b4bc5fdb21a31e::t_b754999a644b0e 354,514,563,642
+  s_b4bc5fdb21a31e::t_e5ed6b42c5b0fa 415-507
+client/src/features/writer/deterministic/components.tsx
+  s_b4bc5fdb21a31e::t_820dd692deef86 4,44-51,780
+engine/src/deterministic/format-classifier.ts
+  s_b4bc5fdb21a31e::t_820dd692deef86 9
+  s_b4bc5fdb21a31e::t_f9b4149925f135 51-56,124-135,144,149,154,165,170,175
+docs/features/founder-story-reach/tickets/FSR-002-founder-story-classifier-label-weights.md
+  s_b4bc5fdb21a31e::t_688945aabb91ef 2,140-145
+docs/features/founder-story-reach/tickets/FSR-005-e2e-studio-detected-format-smoke.md
+  s_b4bc5fdb21a31e::t_688945aabb91ef 2,33-37
+engine/src/deterministic/tests/format-classifier.test.ts
+  s_b4bc5fdb21a31e::t_ede474521c1313 216-252
+docs/how-to/estimate-post-reach.md
+  s_b4bc5fdb21a31e::t_9cfa632f3640a3 12-16
+engine/src/deterministic/types.ts
+  s_b4bc5fdb21a31e::t_820dd692deef86 8
+shared/src/schemas/tests/no-founder-story-amplifier-policy.test.ts
+  s_b4bc5fdb21a31e::t_f8552f3d0240a8 1-109
+docs/features/founder-story-reach/tickets/FSR-001-runtime-taxonomy-contract.md
+  s_b4bc5fdb21a31e::t_688945aabb91ef 2,94-98
+docs/features/founder-story-reach/tickets/FSR-003-no-amplifier-static-verification.md
+  s_b4bc5fdb21a31e::t_688945aabb91ef 2,56-60
+client/src/features/writer/tests/deterministic-components.test.tsx
+  s_b4bc5fdb21a31e::t_8758c09c59754a 900-919
+docs/features/founder-story-reach/tickets/FSR-004-int-analyze-api-founder-story.md
+  s_b4bc5fdb21a31e::t_688945aabb91ef 2,34-39
+shared/src/schemas/tests/deterministic-analyze.test.ts
+  s_b4bc5fdb21a31e::t_f93dee414c103f 416-419,466-484,657-667
+client/src/features/writer/writer-page.tsx
+  s_b4bc5fdb21a31e::t_6fd6cbdfead498 712
+  s_b4bc5fdb21a31e::t_9438d2afaa53fb 201,207,213-230
+tools/calibration/src/fit.ts
+  s_b4bc5fdb21a31e::t_d158c072a735db 31,51
+docs/features/reach-model-upgrade/README.md
+  s_b4bc5fdb21a31e::t_9cfa632f3640a3 82-88
+shared/src/schemas/deterministic-analysis.ts
+  s_b4bc5fdb21a31e::t_820dd692deef86 14
+docs/features/reach-model-upgrade/reach-model-reference.md
+  s_b4bc5fdb21a31e::t_9cfa632f3640a3 27,35-38
+engine/src/server/tests/posts-analyze.test.ts
+  s_b4bc5fdb21a31e::t_8b53b836b4d99c 329-381
+engine/src/deterministic/tests/prediction-estimator.test.ts
+  s_b4bc5fdb21a31e::t_03bfd94a16101d 287-321
+engine/src/deterministic/tests/reach-model-weights.test.ts
+  s_b4bc5fdb21a31e::t_d0aa0f68737615 27,62,102,117
+docs/features/founder-story-reach/README.md
+  s_b4bc5fdb21a31e::t_688945aabb91ef 2,63-69
+docs/features/founder-story-reach/tickets/FSR-006-doc-future-amplifier-note.md
+  s_b4bc5fdb21a31e::t_688945aabb91ef 2,46-52
+engine/src/deterministic/const/reach-model-weights.ts
+  s_b4bc5fdb21a31e::t_d0aa0f68737615 24,48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "8fcde0f9688cb625845d9b5c9c7f6585f7469f2f",
+  "prompts": {},
+  "sessions": {
+    "s_b4bc5fdb21a31e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eccf0-35bd-7933-a98f-0618cc77dd8c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
