@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { detectedPostFormatSchema } from "@x-builder/shared";
 
 /**
  * The calibration input contract: one row per original post. Mirrors the
@@ -20,7 +21,7 @@ export const CalibrationRowSchema = z.object({
   followers: z.number(),
   followers_at_post: z.number(),
   trailing_median_imps: z.number().nullable(),
-  detected_format: z.string(),
+  detected_format: detectedPostFormatSchema,
   repeat_count: z.number(),
   days_since_same_format: z.number(),
   has_external_link: z.boolean().nullable(),

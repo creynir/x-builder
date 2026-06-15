@@ -1,0 +1,12 @@
+{
+  "name": "@x-builder/calibration-bin-shims",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "x-cal-normalize": "./x-cal-normalize.js",
+    "x-cal-predict": "./x-cal-predict.js",
+    "x-cal-fit": "./x-cal-fit.js",
+    "x-cal-validate": "./x-cal-validate.js"
+  }
+}

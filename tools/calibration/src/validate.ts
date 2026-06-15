@@ -69,22 +69,40 @@ function spearman(xs: number[], ys: number[]): number {
 }
 
 // Mann-Whitney AUC with ½-credit for ties: P(score(pos) > score(neg)), counting
-// each tie as half a win. Hand-rolled pair comparison (no stats library).
+// each tie as half a win. Computed from averaged ranks instead of all
+// positive/negative pairs, so large calibration corpora stay linearithmic.
 function mannWhitneyAuc(positives: number[], negatives: number[]): number | null {
   if (positives.length === 0 || negatives.length === 0) {
     return null;
   }
-  let wins = 0;
-  for (const pos of positives) {
-    for (const neg of negatives) {
-      if (pos > neg) {
-        wins += 1;
-      } else if (pos === neg) {
-        wins += 0.5;
+
+  const labeled = [
+    ...positives.map((score) => ({ isPositive: true, score })),
+    ...negatives.map((score) => ({ isPositive: false, score })),
+  ].sort((a, b) => a.score - b.score);
+  let positiveRankSum = 0;
+  let i = 0;
+
+  while (i < labeled.length) {
+    let j = i;
+    while (j + 1 < labeled.length && labeled[j + 1]?.score === labeled[i]?.score) {
+      j += 1;
+    }
+
+    const meanRank = (i + 1 + (j + 1)) / 2;
+    for (let k = i; k <= j; k += 1) {
+      if (labeled[k]?.isPositive === true) {
+        positiveRankSum += meanRank;
       }
     }
+    i = j + 1;
   }
-  return wins / (positives.length * negatives.length);
+
+  const positiveCount = positives.length;
+  const negativeCount = negatives.length;
+  const u = positiveRankSum - (positiveCount * (positiveCount + 1)) / 2;
+
+  return u / (positiveCount * negativeCount);
 }
 
 // Look up a fitted format's weights by its (string) detected_format without an

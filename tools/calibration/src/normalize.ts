@@ -181,10 +181,16 @@ export function normalizeExportToRows(
 
   const formatCounts = new Map<string, number>();
   const lastFormatDay = new Map<string, number>();
+  const sortedTimes = sorted.map((post) => Date.parse(post.time));
+  let trailingWindowStart = 0;
 
   const rows: CalibrationRow[] = [];
 
-  for (const post of sorted) {
+  for (let index = 0; index < sorted.length; index += 1) {
+    const post = sorted[index];
+    if (post === undefined) {
+      continue;
+    }
     const postMs = Date.parse(post.time);
     const dayIndex = dayIndexOf(post);
     const format = classifyPostFormat(post.text);
@@ -196,11 +202,16 @@ export function normalizeExportToRows(
     // post sits past a full 14-day window from the account's first post.
     let trailingMedian: number | null = null;
     if (dayIndex >= TRAILING_WINDOW_DAYS) {
+      const windowStartMs = postMs - TRAILING_WINDOW_DAYS * DAY_MS;
+      while (
+        trailingWindowStart < index &&
+        (sortedTimes[trailingWindowStart] ?? 0) < windowStartMs
+      ) {
+        trailingWindowStart += 1;
+      }
+
       const windowImps = sorted
-        .filter((other) => {
-          const otherMs = Date.parse(other.time);
-          return otherMs < postMs && otherMs >= postMs - TRAILING_WINDOW_DAYS * DAY_MS;
-        })
+        .slice(trailingWindowStart, index)
         .map((other) => other.impressions);
       if (windowImps.length > 0) {
         trailingMedian = median(windowImps);

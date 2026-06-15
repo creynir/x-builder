@@ -114,6 +114,9 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
+      '@x-builder/calibration-bin-shims':
+        specifier: file:./bin-shims
+        version: file:tools/calibration/bin-shims
       tsx:
         specifier: ^4.19.0
         version: 4.22.4
@@ -790,6 +793,10 @@ packages:
 
   '@vitest/utils@3.2.6':
     resolution: {integrity: sha512-lI23nIs4bnT3T8NIoh+vFaz5s2/DdP0Jgt2jxwgWljvwn82cLJtyi/If+fjFyoLMGIOz0U/fKvWE0d4jsNQEfg==}
+
+  '@x-builder/calibration-bin-shims@file:tools/calibration/bin-shims':
+    resolution: {directory: tools/calibration/bin-shims, type: directory}
+    hasBin: true
 
   abstract-logging@2.0.1:
     resolution: {integrity: sha512-2BjRTZxTPvheOvGbBslFSYOUkr+SjPtOnrLP33f+VIWLzezQpZcqVg7ja3L4dBXmzzgwT+a029jRx5PCi3JuiA==}
@@ -1906,6 +1913,8 @@ snapshots:
       '@vitest/pretty-format': 3.2.6
       loupe: 3.2.1
       tinyrainbow: 2.0.0
+
+  '@x-builder/calibration-bin-shims@file:tools/calibration/bin-shims': {}
 
   abstract-logging@2.0.1: {}
 

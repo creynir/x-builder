@@ -70,6 +70,19 @@ describe("validateLeaveOneAccountOut reports hand-computable Spearman and AUC me
     expect(report.escapeAuc).toBeCloseTo(2 / 3, 10);
   });
 
+  it("keeps the same AUC on a larger tied-score distribution", () => {
+    const rows = loadTypedRows("loao-auc-rows.jsonl").flatMap((row, index) =>
+      Array.from({ length: 200 }, (_, copy) => ({
+        ...row,
+        postId: `${row.postId}-${index}-${copy}`,
+      })),
+    );
+
+    const report = validateLeaveOneAccountOut(rows);
+
+    expect(report.escapeAuc).toBeCloseTo(2 / 3, 10);
+  });
+
   it("excludes accounts with fewer than 14 days of posts from the escape fit", () => {
     // Every row here has a null escape_label (the < 14-day window case), so no
     // positives/negatives exist for the escape fit. The AUC must report null

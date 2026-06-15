@@ -58,4 +58,13 @@ describe("CalibrationRow schema fixes the calibration input contract", () => {
     const parsed = CalibrationRowSchema.safeParse({ ...validRow, impressions: "lots" });
     expect(parsed.success).toBe(false);
   });
+
+  it("rejects unknown detected_format values instead of silently dropping them later", () => {
+    const parsed = CalibrationRowSchema.safeParse({
+      ...validRow,
+      detected_format: "mystery_format",
+    });
+
+    expect(parsed.success).toBe(false);
+  });
 });

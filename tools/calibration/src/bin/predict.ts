@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { readFileSync, writeFileSync } from "node:fs";
 
 import { analyzeDraftText } from "@x-builder/engine";
