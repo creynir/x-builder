@@ -1,0 +1,77 @@
+e2e-tests/tests/support/engine-stub.ts
+  s_caf8bd66959f13::t_6f5233b50dee22 133-134
+client/src/features/writer/tests/judge.test.tsx
+  s_77ae33ba9cc0c3::t_9f366d3f656f4f 190-210,213-222
+engine/src/server/server.ts
+  s_caf8bd66959f13::t_54df2b80708c1a 144-155,159-161,163-165,167-172,174
+  s_77ae33ba9cc0c3::t_47cdf9d79e5b30 515,517,557,559
+  s_caf8bd66959f13::t_2505eb474f4ab7 31-35,156-158
+  s_caf8bd66959f13::t_e1ec9d4c4a0f09 658
+client/src/features/writer/writer-workflow.ts
+  s_77ae33ba9cc0c3::t_4d2782280716b4 588-596,917,924,926,1350-1368,1374-1386
+engine/src/llm/tests/codex-cli-provider.test.ts
+  s_77ae33ba9cc0c3::t_107bd3540f97ee 309-310
+  s_77ae33ba9cc0c3::t_96a6aa7f1d2936 301
+  s_caf8bd66959f13::t_1309143955720a 566
+  s_77ae33ba9cc0c3::t_51a4b0ac990e29 335-343,345,347-348
+  s_caf8bd66959f13::t_b0d6a03550728c 564-565,567-591
+  s_caf8bd66959f13::t_3dcc8f202f966b 334,344,346
+engine/src/llm/tests/structured-llm-service.test.ts
+  s_77ae33ba9cc0c3::t_bcfea5882bdd08 444,456-458
+  s_77ae33ba9cc0c3::t_4e9ff1773d48d5 228-271
+engine/src/server/tests/drafts-judge.test.ts
+  s_caf8bd66959f13::t_8d7f5ff32413f7 131-173
+  s_77ae33ba9cc0c3::t_e91cea52271de4 483-508
+client/src/shell/tests/settings-route.test.tsx
+  s_77ae33ba9cc0c3::t_8b4f71e7b31b28 643-677
+  s_caf8bd66959f13::t_adec9983571df9 1102-1126,1128-1129
+  s_caf8bd66959f13::t_7fa8296ddbf44e 952,972-979,987-1037,1056,1091,1127
+e2e-tests/tests/shell-recovery-smoke.spec.ts
+  s_caf8bd66959f13::t_d89b1082f92958 61-64,173,176
+engine/src/llm/tests/judge-draft-service.test.ts
+  s_caf8bd66959f13::t_fccbb3fea47aba 84
+engine/src/llm/structured-llm-service.ts
+  s_77ae33ba9cc0c3::t_0e5de701fd40ab 153-163
+e2e-tests/tests/provider-selection-and-judge.spec.ts
+  s_caf8bd66959f13::t_3c775737ef3e01 308-336
+client/src/features/writer/tests/writer-page.test.tsx
+  s_77ae33ba9cc0c3::t_422178bd9ef81f 843
+client/src/shell/settings-route.tsx
+  s_caf8bd66959f13::t_dbc2fea2423c83 38-41,120-125,494-503,540,672-679
+  s_caf8bd66959f13::t_d200e01bb57e14 161-163,167-170
+  s_77ae33ba9cc0c3::t_c4f73ce236ad9d 860,863-878,1068-1082
+  s_caf8bd66959f13::t_dc212860f93ef9 325,332,348,367,374,389,407,413,421,437,444,465,536-538,641,649,656,664,686
+engine/src/llm/codex-cli-provider.ts
+  s_77ae33ba9cc0c3::t_107bd3540f97ee 21-23
+  s_caf8bd66959f13::t_49a92e22571d22 278,291,298-303,310,312,314-315,318-330
+  s_caf8bd66959f13::t_d65e623fd3ec44 304-309,311,313,316-317
+engine/src/llm/judge-draft-service.ts
+  s_caf8bd66959f13::t_1f310bcf370f1b 14,196-199
+  s_caf8bd66959f13::t_0371863e2b3262 148-154,219
+client/src/api/engine-api-client.ts
+  s_caf8bd66959f13::t_0849d77902617f 35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "076c240fdc6e5345c1ce06a81dc3f84e33ad7d50",
+  "prompts": {},
+  "sessions": {
+    "s_77ae33ba9cc0c3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ec7d1-22f5-7ba2-bddf-5c5b3331dc67",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    },
+    "s_caf8bd66959f13": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eca45-65bb-77d3-90f6-d596b32d5e25",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
