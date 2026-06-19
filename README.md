@@ -1,80 +1,107 @@
 # x-builder
 
-**Local X post writing workbench.** Generate, score, inspect, and refine post candidates with a deterministic engine and a local UI.
+**Local X writing workbench.** Turn a rough idea into post candidates, score them, and use your own archive as context before deciding what to publish.
 
-X Builder is an internal, local-first app for deciding what to post on X. It takes an idea, generates candidate posts in a few formats, scores them with deterministic heuristics, and shows why each candidate may or may not work before you copy or save it elsewhere.
+X Builder runs on your machine. It is not a scheduler, publisher, or hosted social media tool. It is a private studio for shaping posts: draft an idea, generate a few angles, inspect the score, run an optional judge pass, and keep a local library of your own X posts for context.
 
-## What it does
+## Quick start
 
-| Area | What it provides |
-| --- | --- |
-| Writer studio | Draft an idea and generate one-liner, mini-framework, and debate-question candidates. |
-| Deterministic scoring | Scores candidate reach, engagement, impressions, voice match, risks, and rewrite suggestions. |
-| Detail inspection | Opens score breakdowns so a candidate is not just ranked, but explainable. |
-| Manual context | Lets you add follower/context notes and recompute the score against that context. |
-| Local engine | Serves Fastify API routes for health, status, settings, generation, and post analysis. |
-| Shared contracts | Uses shared Zod schemas between the client and engine. |
-
-Scores are heuristic ranks, not predictions. The product is built as an operator console for a single founder, not as a generic social media scheduler.
-
-## How it works
-
-1. The Vite client renders the local app shell and writer studio.
-2. The Fastify engine exposes local API routes and normalizes errors.
-3. Shared Zod schemas keep browser and engine payloads aligned.
-4. The deterministic analysis service scores drafts and generated candidates.
-5. Settings are stored locally under `~/.x-builder/engine-settings`.
-
-## Local persistence
-
-Engine settings live in a single JSON file (`~/.x-builder/engine-settings/settings.json`) — deliberately, not a database. This is a single-user, local-first workbench, so the settings are a handful of config values with one writer; a relational store's queries, indexes, and concurrent transactions would buy nothing here, while the file stays human-readable and hand-editable, carries zero extra dependencies, and evolves its shape for free (the Zod schema fills new fields and strips removed ones on read — no migrations).
-
-The write path is crash-safe: settings are written to a temporary file and atomically `rename`d into place, so an interrupted save can never leave a half-written file — you keep either the old contents or the new. An unreadable or invalid file logs a warning and falls back to schema defaults rather than crashing the engine.
-
-This applies to **configuration only**. Larger, growing datasets — an imported post library, X post metrics, feedback-loop history — are expected to use a proper queryable store when those features land; the file approach is intentionally scoped to settings.
-
-## Requirements
+Requirements:
 
 - Node.js 20 or newer
 - pnpm 9.15.0 or newer
 
-If pnpm is not already available, enable it through Corepack:
+If pnpm is not already available:
 
 ```bash
 corepack enable
 corepack prepare pnpm@9.15.0 --activate
 ```
 
-## Install
+Install and start the app:
 
 ```bash
 pnpm install
-```
-
-## Run locally
-
-Start the engine and client together:
-
-```bash
 pnpm dev
 ```
 
-Default local services:
+Open the client:
 
-| Service | URL |
-| --- | --- |
-| Client | `http://127.0.0.1:5173` |
-| Engine | `http://127.0.0.1:4173` |
-| Engine health | `http://127.0.0.1:4173/health` |
-| Engine status | `http://127.0.0.1:4173/status` |
-
-The engine host and port can be changed with environment variables:
-
-```bash
-X_BUILDER_ENGINE_HOST=127.0.0.1 X_BUILDER_ENGINE_PORT=4173 pnpm --filter @x-builder/engine dev
+```txt
+http://127.0.0.1:5173
 ```
 
-To run services separately:
+The local engine runs at `http://127.0.0.1:4173`.
+
+## First run
+
+1. Open **Studio** and paste a post idea.
+2. Generate candidates, then compare the score summaries.
+3. Open a candidate to inspect the detailed Post Coach breakdown.
+4. Optional: open **Post Library**, import `data/tweets.js` from your X archive, and activate archive context.
+5. Optional: open **Settings** to configure the judge provider and account profile.
+
+## What you can do
+
+| Area | Use it for |
+| --- | --- |
+| Studio | Draft an idea and generate one-liner, mini-framework, and debate-question candidates. |
+| Post Coach | Review reach, reply potential, voice match, risk, format fit, and rewrite guidance. |
+| Draft Judge | Run a slower final-read pass through the selected local judge provider. |
+| Post Library | Import your X archive, preview stored posts, and derive context from your own writing history. |
+| Settings | Configure local readiness, judge provider, model fields, and account profile context. |
+
+Scores are heuristics, not predictions. Treat them as a structured second opinion before you post manually.
+
+## Importing your X archive
+
+X Builder can use your downloaded X archive as local context.
+
+1. Download and extract your X archive.
+2. In **Post Library**, select `data/tweets.js`.
+3. Validate the file to see importable posts, skipped records, and duplicates.
+4. Import the archive.
+5. Activate archive context to let Studio use derived signals from your posting history.
+
+The archive file does not include every useful metric. X Builder can use the records available in `tweets.js`, but impressions, bookmarks, link clicks, profile clicks, quotes, and received replies are not available from that file.
+
+## Local data
+
+X Builder stores local app data under:
+
+```txt
+~/.x-builder/engine-settings
+```
+
+Current files include:
+
+| File | Purpose |
+| --- | --- |
+| `settings.json` | App settings, judge provider choice, model fields, and account profile. |
+| `storage/post-library.json` | Imported post library, import summaries, derived insights, and active archive context. |
+
+There is no hosted account, remote database, or X publishing token in the default local setup.
+
+## Useful commands
+
+```bash
+# Start client and engine together
+pnpm dev
+
+# Run unit and integration tests
+pnpm test
+
+# Run TypeScript checks
+pnpm typecheck
+
+# Run Playwright end-to-end tests
+pnpm test:e2e
+
+# Build all packages
+pnpm build
+```
+
+To run the services separately:
 
 ```bash
 # Terminal 1
@@ -84,49 +111,58 @@ pnpm --filter @x-builder/engine dev
 pnpm --filter @x-builder/client dev
 ```
 
-## Test and verify
-
-```bash
-# Unit and integration tests, excluding Playwright e2e
-pnpm test
-
-# TypeScript checks across workspaces
-pnpm typecheck
-
-# Playwright e2e tests
-pnpm test:e2e
-
-# Build all packages
-pnpm build
-```
-
 ## Workspace layout
 
 ```txt
 client/      React + Vite local UI
-engine/      Fastify engine and deterministic analysis service
-shared/      Shared Zod schemas and TypeScript contracts
+engine/      Fastify API, scoring, archive import, settings, and judge routes
+shared/      Zod schemas and TypeScript contracts shared by client and engine
 e2e-tests/   Playwright browser tests
-docs/        Product, design, feature, and architecture notes
-tools/       Developer tooling notes and scripts
+docs/        Feature maps, specs, architecture notes, and ticket docs
+tools/       Internal tooling notes and calibration helpers
+```
+
+## Local services
+
+| Service | URL |
+| --- | --- |
+| Client | `http://127.0.0.1:5173` |
+| Engine | `http://127.0.0.1:4173` |
+| Health | `http://127.0.0.1:4173/health` |
+| Status | `http://127.0.0.1:4173/status` |
+
+The engine host and port can be changed with environment variables:
+
+```bash
+X_BUILDER_ENGINE_HOST=127.0.0.1 X_BUILDER_ENGINE_PORT=4173 pnpm --filter @x-builder/engine dev
 ```
 
 ## API surface
 
-The local engine currently exposes:
+The UI is the primary way to use X Builder. The local engine also exposes these routes for development and tests:
 
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Basic engine liveness check. |
-| `GET` | `/status` | Engine, deterministic scorer, Codex judge, and storage readiness. |
+| `GET` | `/status` | Engine, judge, and storage readiness. |
 | `GET` | `/settings` | Load local app settings. |
-| `PATCH` | `/settings` | Persist local app settings. |
-| `POST` | `/ideas/generate` | Generate candidate posts from an idea. |
-| `POST` | `/posts/analyze` | Run deterministic scoring for post candidates. |
+| `PATCH` | `/settings` | Save local app settings. |
+| `POST` | `/ideas/generate` | Generate post candidates from an idea. |
+| `POST` | `/posts/analyze` | Score post candidates. |
+| `POST` | `/drafts/judge` | Judge a selected draft with the configured provider. |
+| `POST` | `/archive/tweets/validate` | Validate a selected `tweets.js` archive file. |
+| `POST` | `/archive/tweets/import` | Import posts from a validated archive file. |
+| `GET` | `/archive/imports/latest` | Load the latest archive import summary. |
+| `GET` | `/archive/posts` | Page through imported library posts. |
+| `GET` | `/archive/insights/latest` | Load derived archive insights. |
+| `POST` | `/archive/context/activate` | Activate archive context for Studio. |
+| `POST` | `/archive/context/deactivate` | Deactivate archive context. |
+| `GET` | `/archive/context/active` | Load the active archive context. |
 
 ## Current limitations
 
-- Codex judge readiness is represented in status, but automatic Codex judging is not wired as the default runtime path yet.
-- The generated candidates are deterministic placeholders while the full LLM writer path is still being built.
-- X import, publishing, and analytics feedback loops are documented in `docs/features/` but are not complete product flows yet.
-- This is a local internal app; it does not include hosted auth, multi-user storage, or deployment automation.
+- X Builder does not publish to X.
+- Scores estimate post quality signals; they do not predict real reach.
+- The default candidate generator is deterministic while the richer writer path is still evolving.
+- The **Voice** route exists in navigation but is still a placeholder.
+- Archive context is based on what `tweets.js` contains, so deeper analytics need another data source.
