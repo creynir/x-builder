@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # XOB-001: [CHORE] Workspace — add `playwright` runtime + `@x-builder/runner` + `@x-builder/overlay` packages
