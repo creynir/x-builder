@@ -1,5 +1,5 @@
 ---
-status: shaping
+status: todo
 ---
 
 # X Overlay Browser
@@ -7,6 +7,107 @@ status: shaping
 Purpose: move X Builder from a separate writer studio into an assistive overlay that runs directly on top of X, so users can inspect posts, draft replies, score ideas, and apply archive-derived context where the work already happens.
 
 This document is shape-giving input for the next `arch-recon` run. It records the current product direction, research findings, comparison criteria, and open architecture questions. It is not a final architecture spec, product-flow map, or ticket breakdown.
+
+## Shaping Decisions (2026-06-21 — pre-recon)
+
+These decisions were taken with the maintainer immediately before kicking off `arch-recon`. **Where they conflict with statements further down or with the locked design-system aesthetic, these win.**
+
+### Audience
+
+- Build for a **generic single user (anyone)**, not for the maintainer specifically. Still local-first, single-user, no auth, no hosting.
+
+### Feed / metrics capture (reduces the need for the official X API and removes manual follower entry)
+
+- Capture the **user's own authored posts and their public metrics** (impressions, likes, reposts, replies, etc.) from the live, logged-in X session.
+- **Mechanism is an open architecture fork for recon to weigh:**
+  - (a) **DOM extraction** of rendered post cards, vs
+  - (b) **observe/replay X's internal GraphQL** — the same request the profile/timeline already issues to fetch "last ~20 authored posts." This is X's *internal page API*, **not** the official paid X API that the Non-Goals rule out.
+- Each session yields ~20 posts. **Store locally and accumulate across sessions** (union grows over time → richer corpus for the judge's "suggest next post").
+- **Profile-level metrics (follower count, etc.) are captured automatically** → the overlay flow does **not** ask the user to type follower count. This removes the current `ManualScoringContextPanel` friction.
+- **New derived feature — repetition / cooldown detection:** detect when a topic or post type is being posted too often and surface it in recommendations (e.g. "you posted this angle X times in the last Y days — give it a cooldown").
+- **Policy line recon must draw:** passively reading GraphQL responses the page already fetches (and DOM already rendered) is "analyze visible content." Actively crafting authenticated GraphQL calls / paginating to harvest is closer to the "automated scripting of the X website" that X's automation rules warn against. Recon must locate v1 on the safe side and document the boundary.
+
+### v1 surface — three overlay affordances
+
+1. **Settings button** — persistent, anchored to a top corner (recon/design picks left vs right). Opens overlay settings: archive upload → voice extraction, judge provider + readiness, active context.
+2. **Compose / post-modal experience** — X's composer is effectively its own route/modal; this is the centerpiece:
+   - On open: show a **static-engine "waiting" state** (empty metric slots), an **LLM "waiting"** indicator, and **3–4 "generate a post" buttons** for different categories/formats.
+   - On the user typing: **static-engine metrics appear fast**, then a **pulsing "judge running"** indicator, then the **judge metrics fill in**.
+   - On a generate-button click: produce a draft in the chosen category/format; thereafter the flow is identical to manual typing (the LLM may be pre-run before the draft is returned — a refinement, not required for v1).
+   - Profile metrics are auto-available → **no manual follower input**.
+3. **Suggest-post button** — uses the stored, accumulated authored-post history to suggest the next post, accounting for cooldown / repetition.
+
+- **Cross-cutting — metric-explainer UX:** both the static-engine metrics and the LLM-judge metrics must be made legible — explain what each metric means and how to read it. (Users currently don't understand what the judge returns.) Applies to the overlay and, where cheap, the fallback studio.
+- **Deferred to "later"** (explicitly out of v1): reply-assist ("Should I reply?" + reply angles), draft scoring while typing on *other people's* posts, thread-level and profile-level context extraction.
+
+### UI direction — neon
+
+- The overlay uses a **neon** visual language. This **intentionally overrides** the locked "dark cool-neutral ops console, no gradients/glow" aesthetic in `docs/design-system/ui-uplift-brief.md` — **for the overlay surface**.
+- The design agent should **produce 2–3 real, injectable HTML neon mockups** rendered over a mock X post card, considered against X's three themes (Default/white, Dim/navy, Lights Out/black), so the maintainer can **compare them visually before committing**. No single neon variant is pre-selected.
+
+### Runner language / packaging
+
+- **Open — recon decides.** Weigh Node-first (reuse the existing pnpm/Turbo workspace + engine directly, `npx`/`pnpm` onboarding) against Python-first (the `uvx x-builder` one-command story, two-language split). Recommend with justification; the maintainer approves.
+
+---
+
+# Epic: X Overlay Browser v1
+
+> Status: `todo`. Architecture cleared by arch-recon (system + UI architects, validator APPROVE_WITH_CONCERNS after two reconciliation cycles + a delta-validation pass). Full architecture outputs in `architecture/`. Tickets in `tickets/` (build-order index in `tickets/README.md`). Ticket ID prefix: **`XOB-`**.
+
+## Architecture Context
+
+*Re-read before every ticket. Precise and complete by design.*
+
+**Shape.** A new Node package **`@x-builder/runner`** imports **`@x-builder/engine`** in-process, drives a Playwright **`launchPersistentContext`** Chromium (dedicated profile `~/.x-builder/browser-profile/`, log in once), injects a prebuilt overlay bundle (**`@x-builder/overlay`**, `dist/overlay.iife.js`) via **`addInitScript`**, and bridges overlay→engine over **`page.exposeFunction`** (CDP pipe — **no x.com CORS**; the engine's `defaultCorsAllowedOrigins` is untouched and serves only the `/writer` fallback). The MV3-era seam is a `FetchEngineTransport` implementing the same interface; v1 ships only the Playwright transport. `/writer` SPA is **strangler-demoted to fallback** — fully functional, no route deleted.
+
+**Transport (the seam, in `@x-builder/shared`).** One **`EngineTransport`** interface, **17 methods**, each bound `__xbuilder_<method>`, structured-clone JSON only: `getOverlayReadiness`, `getStatus`, `getSettings`, `updateSettings`, `validateArchive`, `importArchive`, `getActiveContext`, `activateContext`, `deactivateContext`, `analyzePosts`, `judgeDraft`, `generateIdeas`, `suggestPost`, `getCooldown`, `getCaptureSummary`, `getGenerateCategories`, `applyJudgeSuggestions`. The overlay consumes only this (via `useTransport()`), never `fetch`.
+
+**Feed capture (observe-only).** The runner's `GraphQlCaptureObserver` listens via `context.on('response')` for `UserTweets`/`UserTweetsAndReplies`/`UserByScreenName` (match by **operation-name substring** — queryIds rotate), `await response.json()`, and `XGraphQlNormalizer` (tolerate-and-skip) → `LiveCaptureService.ingest`. **No crafted GraphQL, no auth-header replay, no auto-pagination, no auto-scroll** — only the ~20 the user's own navigation loaded. Posts accumulate across sessions via the existing `PostLibraryRepository.upsertPosts` (merges by `platform:platformPostId`). Captured profile metrics → auto-fed to scoring; **no manual follower input**.
+
+**Storage v2.** `postLibraryStoreSchema` bumped to `schemaVersion: 2`: widen `metricSnapshots`/`sourceRefs` to discriminated unions admitting `"x_live_capture"` (live metrics: impressions/likes/reposts/replies/quotes/bookmarks), add `profileSnapshots[]`, one-time forward migration in `loadStore`. Existing archive data validates unchanged. `better-sqlite3` (declared, unused) is the post-v1 scale path; v1 stays JSON.
+
+**Reach + cooldown.** `LiveContextResolver.mergeAnalysisRequest` injects live `followers`/`trailingMedianImpressions`/`repeatHistory` into `scoringContext` (then the existing `ArchiveStudioContextResolver`); `resolveBase` auto-prefers `trailing_median`. `RepetitionWindowService` computes a real rolling window over `post.createdAt` (the existing `computeRepeatMultiplier`/`RepeatHistoryEntry` were half-built — numeric damping only), surfaced as a **visible** per-item `cooldown` signal on `AnalyzePostsResponse.items[]` and via `GET /capture/cooldown`. Canonical `cooldownSignalSchema {format, countInWindow, windowDays, lastPostedAt?, status, message}`.
+
+**Generate / judge / improve.** `generateIdeas` is extended additively (`idea?`, `format?: detectedPostFormatSchema`; arity unchanged); the by-format path is **LLM-backed (`writer_variants`) and runs a generate→judge refine** via the same `JudgeDraftService`, so candidates return with `verdict?`+`approved?` (pre-approved). `applyJudgeSuggestions({text}) → {text, verdict, approved, improvedOverOriginal}` ("Apply all suggestions" auto-improve) rewrites applying the judge's `improvements`+`annotations`, re-judges, and **never makes a post worse** (rewrite overall ≤ original → returns the original, `improvedOverOriginal:false`). The judge now also emits span-level **`annotations: [{quote, severity, recommendation}]`** (`judgeVerdictSchema`, `.default([])` → legacy contract preserved). `SuggestPostService` (`POST /posts/suggest`) ranks the corpus deterministically (cooldown-excluded) → one LLM pass. `deriveApproved(verdict)` = `overall ≥ 70`, in `@x-builder/shared` — single source of "approved"; same `JudgeDraftService`+provider backs generate-refine, apply, and the UI `judgeDraft` for consistency.
+
+**Overlay UI — compose cockpit.** Aurora Glass (teal-glass, **harmonious-but-distinct** from X; settings launcher top-left). One shadow-DOM React root via `addInitScript`; `adoptedStyleSheets`; centralized `XSelectors` + `MutationObserver` with silent degrade. Three rect-anchored zones around X's (never-injected) compose modal: **LEFT** `ComposeGenerateRail` (dynamic categories from `getGenerateCategories()`), **RIGHT** `StaticEngineColumn` (static metrics + recommendations from the deterministic Post Coach), **UNDER ~20px** `JudgeStrip`. Collapses to one column < ~1180px.
+
+**Provenance + the two whole-post states (engine STATELESS; all overlay-side).** A post is in exactly one state, never mixed. `ProvenanceController` pins the exact `text` returned by `generateIdeas`/`applyJudgeSuggestions` as the **green anchor** (L3) and byte-compares the live composer text (L5): equal → **generated** (whole-post **green** wash, "✓ Judge approved" via `deriveApproved`, **no blue**, Apply-all hidden); differ → **user-written** (no green, judge `annotations` shown as **blue** spans via `CompositionHighlightLayer` Range→`getClientRects`, verdict + Apply-all shown). Any edit flips generated→user-written. Apply/generate are the only anchor-setters → the system never re-improves its own output (loop-prevented). Highlight colors: green `hsl(150 72% 50%)`, blue `hsl(205 96% 62%)` (distinct from X's `#1d9bf0`); graceful degrade mandatory.
+
+**X policy boundary (in scope vs out).** In: analyze visible content, observe already-fetched GraphQL, suggest/score/judge, fill the composer **after an explicit user click**. Out (zero code): crafted/authenticated GraphQL, auto-pagination/scroll-to-harvest, auto-post/like/follow/repost/DM, reading private areas, automating the user's default Chrome profile. Documented in the `[DOC]` ticket.
+
+**Deferred (zero-trace in v1):** reply-assist ("Should I reply?"/reply angles), draft scoring on other people's posts, thread/profile context extraction, LLM-extracted *theme* categories (Tier 2), MV3 extension, hosted backend, SQLite store.
+
+## API Endpoints
+
+- `POST /ideas/generate` — *extended additively*: `{idea?, format?, voiceProfileId?, useKnownPostIds?}` → 3 candidates each with optional `{verdict?, approved?}` (by-format = LLM + generate→judge refine; idea-only path unchanged).
+- `POST /drafts/judge` — *extended additively*: response `verdict.annotations: [{quote, severity, recommendation}]` (`.default([])`).
+- `POST /drafts/apply-suggestions` — `{text}` → `{text, verdict, approved, improvedOverOriginal}` (auto-improve, never-worse guard).
+- `POST /posts/analyze` — *extended additively*: per-item `cooldown?: CooldownSignal`; engine runs `LiveContextResolver` before `ArchiveStudioContextResolver`.
+- `POST /posts/suggest` — `SuggestPostRequest` → `SuggestPostResponse`.
+- `GET /capture/cooldown?windowDays=7` → `CooldownReport`.
+- `GET /capture/summary` → `CaptureSummary` (for the `/writer` fallback; overlay uses the in-process binding).
+- `GET /generate/categories` → `GenerateCategory[]` (fallback; overlay uses the binding).
+- Capture ingestion is **in-process** (`LiveCaptureService.ingest`), not HTTP, in v1.
+- Unchanged: `/health`, `/status`, `/settings`, `/archive/*`. CORS allowlist unchanged (overlay uses `exposeFunction`).
+
+## Component Breakdown
+
+- **Engine** — `LiveCaptureService` (ingest + summary), `RepetitionWindowService`, `LiveContextResolver`, `GenerateCategoryService`, `GenerateIdeasService` (by-format + refine), `ApplyJudgeSuggestionsService`, `SuggestPostService`; extends `JudgeDraftService` (annotations), `post-library-repository` (v2), `deriveApproved` in shared. All exported from `engine/src/index.ts` for in-process use.
+- **Runner** (`@x-builder/runner`) — `RunnerApp`, `BrowserController`, `ExposeFunctionTransport` (binds 17), `GraphQlCaptureObserver`, `XGraphQlNormalizer`; composes `getOverlayReadiness` (engine subsystems + observer capture-state).
+- **Overlay** (`@x-builder/overlay`) — shadow host + `OverlayRuntime`; `OverlayTransportProvider`/`useTransport`; `XSelectors`+`AnchorLayer`; `SettingsAffordance`/`SettingsPanel`; `MetricExplainer`; `CompositionHighlightLayer`; `ProvenanceController`; `ComposeCockpit` (`ComposeGenerateRail`, `StaticEngineColumn`, `JudgeStrip`); `SuggestAffordance`/`SuggestCard`.
+- **Shared** (`@x-builder/shared`) — `engine-transport`, `x-live-capture`, `cooldown`, `suggest-post`, `generate-category`, `apply-judge-suggestions`, `overlay-readiness`, judge `annotations`, `deriveApproved`; additive edits to `shell`/`deterministic-analysis`/`judge`.
+
+## Dependencies
+
+- New runtime dep: `playwright` (in `@x-builder/runner`). `@playwright/test` already in `e2e-tests`.
+- External: the user's own logged-in X session (dedicated Chromium profile). No X OAuth/API key, no hosted backend.
+- Reuses wholesale: `JudgeDraftService`, `StructuredLlmService`, judge provider registry/resolver, `DeterministicAnalysisService`, `ArchiveImportService`/`ArchiveDerivedContextService`/`ArchiveStudioContextResolver`, `JsonFilePostLibraryRepository.upsertPosts`, `JsonFileAppSettingsRepository`, `classifyPostFormat`, `computeRepeatMultiplier`/`RepeatHistoryEntry`, `deriveJudgeVerdict`.
+
+## Sub-Tickets Overview
+
+See `tickets/README.md` for the build order. 32 tickets: `[CHORE]`+`[FND]` foundations (workspace, shared contracts, store v2) → engine services (capture, cooldown, generate-category, live-context, capture-summary, judge-annotations, generate-refine, apply-suggestions, suggest) → runner (normalizer, browser/app, transport bindings, observer+readiness) → overlay (`[FND]` host + neon tokens, `[FND]` transport seam + anchor, settings, explainer, `[FND]` highlight layer, provenance, generate rail, static column, judge strip ×2, suggest, cockpit assembly) → `[INT]` + `[E2E]` → `[DOC]`.
 
 ## Pivot Summary
 
