@@ -45,6 +45,7 @@ const verdict: JudgeVerdict = {
   headline: "Strong hook, weak closer.",
   strengths: ["Concrete claim up front"],
   improvements: ["Trim the middle paragraph"],
+  annotations: [],
 };
 
 const judgedResponse: JudgeDraftResponse = {

@@ -28,6 +28,7 @@ const verdictResponse: JudgeDraftResponse = {
     headline: "Strong, specific, reply-friendly.",
     strengths: ["Concrete claim up front"],
     improvements: ["Trim the middle paragraph"],
+    annotations: [],
   },
   model: "codex-cli",
   judgedAt: "2026-06-10T12:00:00.000Z",

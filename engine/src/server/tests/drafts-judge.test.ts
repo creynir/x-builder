@@ -65,6 +65,7 @@ const verdict: JudgeVerdict = {
   headline: "Solid hook, weak closer.",
   strengths: ["Clear, concrete claim"],
   improvements: ["Cut the last sentence"],
+  annotations: [],
 };
 
 const judgedOutcome = {

@@ -268,6 +268,7 @@ function createShellApiClient(
         headline: "Fixture verdict.",
         strengths: [],
         improvements: [],
+        annotations: [],
       },
       model: "codex-cli",
       judgedAt: "2026-06-06T12:10:00.000Z",

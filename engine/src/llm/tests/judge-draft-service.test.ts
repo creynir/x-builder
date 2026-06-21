@@ -31,6 +31,7 @@ const verdict: JudgeVerdict = {
   headline: "Strong, specific, reply-friendly.",
   strengths: ["Concrete claim up front"],
   improvements: ["Trim the middle paragraph"],
+  annotations: [],
 };
 
 const successResult: StructuredLlmProviderResult<JudgeVerdict> = {
