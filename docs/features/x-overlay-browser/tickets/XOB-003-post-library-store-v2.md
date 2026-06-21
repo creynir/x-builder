@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # XOB-003: [FND] [RFR] Post-library store **v2** — widen source unions, `profileSnapshots`, forward migration
