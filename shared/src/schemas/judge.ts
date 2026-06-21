@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+export const judgeAnnotationSchema = z.object({
+  quote: z.string().min(1).max(280),
+  severity: z.enum(["suggestion", "warning"]),
+  recommendation: z.string().min(1).max(240),
+});
+
 export const judgeDraftRequestSchema = z.object({
   // Trim like generateIdeaRequestSchema: a whitespace-only draft must not reach
   // the (slow, paid) judge.
@@ -49,6 +55,7 @@ export const judgeVerdictSchema = z.object({
   headline: z.string().min(1).max(160),
   strengths: z.array(z.string().min(1).max(240)).max(5),
   improvements: z.array(z.string().min(1).max(240)).max(5),
+  annotations: z.array(judgeAnnotationSchema).max(12).default([]),
 });
 
 export const judgeDraftResponseSchema = z.object({
@@ -58,12 +65,18 @@ export const judgeDraftResponseSchema = z.object({
   judgedAt: z.string().datetime(),
 });
 
+export type JudgeAnnotation = z.infer<typeof judgeAnnotationSchema>;
 export type JudgeDraftRequest = z.infer<typeof judgeDraftRequestSchema>;
 export type JudgeScores = z.infer<typeof judgeScoresSchema>;
 export type JudgeVerdictLabel = z.infer<typeof judgeVerdictLabelSchema>;
 export type JudgeConfidence = z.infer<typeof judgeConfidenceSchema>;
 export type JudgeVerdict = z.infer<typeof judgeVerdictSchema>;
 export type JudgeDraftResponse = z.infer<typeof judgeDraftResponseSchema>;
+
+// Returns true when the verdict is approved for posting (post_now or slight_rework).
+// Single source of "approved" — producers and overlay must derive identically.
+export const deriveApproved = (verdict: JudgeVerdict): boolean =>
+  verdict.verdict === "post_now" || verdict.verdict === "slight_rework";
 
 // Derive the verdict band from the overall score so the verdict label and the
 // score can never disagree. Bands follow the x-post-performance interpretation.

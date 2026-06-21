@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { detectedPostFormatSchema } from "./post-formats.js";
+import { judgeVerdictSchema } from "./judge.js";
 
 const localEngineUrlMessage = "Engine base URL must use http(s) localhost or 127.0.0.1.";
 
@@ -130,20 +132,28 @@ export const appSettingsResponseSchema = z.object({
   updatedAt: z.string().datetime().optional(),
 });
 
-export const generateIdeaRequestSchema = z.object({
-  idea: z
-    .string()
-    .trim()
-    .min(1, "Idea is required.")
-    .max(4_000, "Idea must be 4,000 characters or fewer."),
-  voiceProfileId: z.string().min(1).max(120).optional(),
-  useKnownPostIds: z.array(z.string().min(1).max(240)).default([]).optional(),
-});
+export const generateIdeaRequestSchema = z
+  .object({
+    idea: z
+      .string()
+      .trim()
+      .min(1, "Idea is required.")
+      .max(4_000, "Idea must be 4,000 characters or fewer.")
+      .optional(),
+    format: detectedPostFormatSchema.optional(),
+    voiceProfileId: z.string().min(1).max(120).optional(),
+    useKnownPostIds: z.array(z.string().min(1).max(240)).default([]).optional(),
+  })
+  .refine((v) => v.idea !== undefined || v.format !== undefined, {
+    message: "At least one of idea or format must be provided.",
+  });
 
 export const generatedIdeaCandidateSchema = z.object({
   id: z.string().min(1).max(120),
   format: z.enum(["one-liner", "mini-framework", "debate-question"]),
   text: z.string().min(1).max(8_000),
+  verdict: judgeVerdictSchema.optional(),
+  approved: z.boolean().optional(),
 });
 
 export const generateIdeaResponseSchema = z.object({
