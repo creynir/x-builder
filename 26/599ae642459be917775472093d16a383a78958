@@ -1,0 +1,21 @@
+docs/features/x-overlay-browser/README.md
+  s_dc30d675344377::t_10875cf2c61c7c 1-232
+docs/features/README.md
+  s_dc30d675344377::t_10875cf2c61c7c 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "26599ae642459be917775472093d16a383a78958",
+  "prompts": {},
+  "sessions": {
+    "s_dc30d675344377": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019edfd7-80c3-77b1-81ce-ae8bebc6e45d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "creynir <creynir@gmail.com>"
+    }
+  }
+}
