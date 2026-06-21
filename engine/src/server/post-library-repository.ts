@@ -23,11 +23,45 @@ const archiveMetricSnapshotSchema = z.object({
   retweetCount: z.number().int().min(0).optional(),
 });
 
-const sourceRefSchema = z.object({
+const liveMetricSnapshotSchema = z.object({
+  source: z.literal("x_live_capture"),
+  capturedAt: z.string().datetime(),
+  impressions: z.number().int().min(0).optional(),
+  likes: z.number().int().min(0).optional(),
+  reposts: z.number().int().min(0).optional(),
+  replies: z.number().int().min(0).optional(),
+  quotes: z.number().int().min(0).optional(),
+  bookmarks: z.number().int().min(0).optional(),
+});
+
+const metricSnapshotSchema = z.discriminatedUnion("source", [
+  archiveMetricSnapshotSchema,
+  liveMetricSnapshotSchema,
+]);
+
+const archiveSourceRefSchema = z.object({
   source: z.literal("archive_tweets_js"),
   importRunId: z.string().min(1).max(160),
   rawId: z.string().min(1).max(160),
   sourceHash: sourceHashSchema,
+});
+
+const liveSourceRefSchema = z.object({
+  source: z.literal("x_live_capture"),
+  captureSessionId: z.string().min(1).max(160),
+  rawId: z.string().min(1).max(160),
+});
+
+const sourceRefSchema = z.discriminatedUnion("source", [
+  archiveSourceRefSchema,
+  liveSourceRefSchema,
+]);
+
+const liveProfileSnapshotSchema = z.object({
+  platformUserId: z.string().min(1).max(160),
+  screenName: z.string().min(1).max(80),
+  followers: z.number().int().min(0).optional(),
+  capturedAt: z.string().datetime(),
 });
 
 const replyReferencesSchema = z
@@ -62,7 +96,7 @@ export const canonicalOwnPostSchema = z.object({
   replyReferences: replyReferencesSchema,
   entityFlags: entityFlagsSchema,
   weakMetrics: weakArchiveMetricsSchema,
-  metricSnapshots: z.array(archiveMetricSnapshotSchema).default([]),
+  metricSnapshots: z.array(metricSnapshotSchema).default([]),
   sourceRefs: z.array(sourceRefSchema).default([]),
   updatedAt: z.string().datetime(),
 });
@@ -78,20 +112,44 @@ export const archiveDerivedInsightSnapshotSchema = z.object({
 });
 
 export const postLibraryStoreSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   updatedAt: z.string().datetime(),
   posts: z.array(canonicalOwnPostSchema),
   importRuns: z.array(archiveImportRunSchema),
   derivedInsights: z.array(archiveDerivedInsightSnapshotSchema),
   activeContext: activeArchiveContextSchema,
+  profileSnapshots: z.array(liveProfileSnapshotSchema).default([]),
 });
 
 export type ArchiveMetricSnapshot = z.infer<typeof archiveMetricSnapshotSchema>;
-export type SourceRef = z.infer<typeof sourceRefSchema>;
-export type CanonicalOwnPost = z.infer<typeof canonicalOwnPostSchema>;
+export type LiveMetricSnapshot = z.infer<typeof liveMetricSnapshotSchema>;
+export type ArchiveSourceRef = z.infer<typeof archiveSourceRefSchema>;
+export type LiveSourceRef = z.infer<typeof liveSourceRefSchema>;
+export type LiveProfileSnapshot = z.infer<typeof liveProfileSnapshotSchema>;
+
+// The runtime schemas are genuine discriminated unions (see metricSnapshotSchema /
+// sourceRefSchema): that is what drives validation and the snapshotKey/sourceRefKey
+// dedup branch. The exported element types keep the `source` discriminant required while
+// making the per-variant fields optional across the union, so a caller can read a field
+// by its discriminant without an explicit narrow. The runtime value still carries only
+// the fields of its own variant; a read of the "wrong" variant's field is `undefined`.
+export type MetricSnapshot =
+  | (ArchiveMetricSnapshot & Partial<Omit<LiveMetricSnapshot, "source">>)
+  | (LiveMetricSnapshot & Partial<Omit<ArchiveMetricSnapshot, "source">>);
+export type SourceRef =
+  | (ArchiveSourceRef & Partial<Omit<LiveSourceRef, "source">>)
+  | (LiveSourceRef & Partial<Omit<ArchiveSourceRef, "source">>);
+
+type CanonicalOwnPostInferred = z.infer<typeof canonicalOwnPostSchema>;
+export type CanonicalOwnPost = Omit<CanonicalOwnPostInferred, "metricSnapshots" | "sourceRefs"> & {
+  metricSnapshots: MetricSnapshot[];
+  sourceRefs: SourceRef[];
+};
 export type CanonicalOwnPostInput = z.infer<typeof canonicalOwnPostInputSchema>;
 export type ArchiveDerivedInsightSnapshot = z.infer<typeof archiveDerivedInsightSnapshotSchema>;
-export type PostLibraryStore = z.infer<typeof postLibraryStoreSchema>;
+export type PostLibraryStore = Omit<z.infer<typeof postLibraryStoreSchema>, "posts"> & {
+  posts: CanonicalOwnPost[];
+};
 
 export type PostLibraryWriteResult = {
   insertedCount: number;
@@ -126,7 +184,7 @@ const nowIso = (): string => new Date().toISOString();
 
 const emptyStore = (): PostLibraryStore =>
   postLibraryStoreSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     updatedAt: nowIso(),
     posts: [],
     importRuns: [],
@@ -134,6 +192,7 @@ const emptyStore = (): PostLibraryStore =>
     activeContext: {
       status: "empty",
     },
+    profileSnapshots: [],
   });
 
 const uniqueBy = <T>(items: T[], keyFor: (item: T) => string): T[] => {
@@ -152,11 +211,15 @@ const uniqueBy = <T>(items: T[], keyFor: (item: T) => string): T[] => {
   return result;
 };
 
-const snapshotKey = (snapshot: ArchiveMetricSnapshot): string =>
-  [snapshot.source, snapshot.observedAt, snapshot.importedAt].join(":");
+const snapshotKey = (snapshot: MetricSnapshot): string =>
+  snapshot.source === "archive_tweets_js"
+    ? [snapshot.source, snapshot.observedAt, snapshot.importedAt].join(":")
+    : [snapshot.source, snapshot.capturedAt].join(":");
 
 const sourceRefKey = (ref: SourceRef): string =>
-  [ref.source, ref.importRunId, ref.rawId, ref.sourceHash].join(":");
+  ref.source === "archive_tweets_js"
+    ? [ref.source, ref.importRunId, ref.rawId, ref.sourceHash].join(":")
+    : [ref.source, ref.captureSessionId, ref.rawId].join(":");
 
 const stableJson = (value: unknown): string => JSON.stringify(value);
 
@@ -172,9 +235,31 @@ export class JsonFilePostLibraryRepository implements PostLibraryRepository {
     try {
       const contents = await readFile(this.storeFilePath, "utf8");
       const parsed = JSON.parse(contents) as unknown;
+      const rawVersion =
+        typeof parsed === "object" && parsed !== null
+          ? (parsed as { schemaVersion?: unknown }).schemaVersion
+          : undefined;
+
+      if (rawVersion === 1) {
+        return postLibraryStoreSchema.parse({
+          ...(parsed as Record<string, unknown>),
+          schemaVersion: 2,
+          profileSnapshots: [],
+        });
+      }
+
+      if (typeof rawVersion === "number" && rawVersion > 2) {
+        throw new PostLibraryStorageError(
+          `Post library store schemaVersion ${rawVersion} is newer than this engine supports.`,
+        );
+      }
 
       return postLibraryStoreSchema.parse(parsed);
     } catch (error) {
+      if (error instanceof PostLibraryStorageError) {
+        throw error;
+      }
+
       if (isNodeError(error) && error.code === "ENOENT") {
         return emptyStore();
       }
