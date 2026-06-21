@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-001: [CHORE] Workspace — add `playwright` runtime + `@x-builder/runner` + `@x-builder/overlay` packages
@@ -145,3 +145,10 @@ packages present and empty.
   on macOS/Linux.
 - Lockfile churn: ensure only the intended `playwright` runtime entry is added; do not
   inadvertently bump `@playwright/test`.
+
+## Pipeline Log
+
+- **Green** (`59f7842`): scaffolded `@x-builder/runner` (playwright ^1.50 → 1.60.0, `x-builder` no-op bin) + `@x-builder/overlay` (vite IIFE → `dist/overlay.iife.js`); added `@x-builder/runner` to root devDeps so pnpm hoists the bin. All verification green.
+- **Gates**: `[suppressions]` (2 new tsconfigs), `[slop]` (bin console.log) — both ruled false-positive leads by Blue (new package configs extend base; print is spec-mandated). `[ticket-ids]`/`[stubs]`/`[ui-tokens]` clean.
+- **Blue (Validate Green, chore)**: APPROVE. Verified all 5 verification commands; ruled root `package.json` devDep justified-and-minimal for the `npx x-builder` AC; lockfile adds only `playwright` runtime (`@playwright/test` untouched); IIFE self-contained; zero-trace holds. 0 rejection cycles.
+- Status → **done**.

@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # XOB-002: [FND] Shared contracts — `EngineTransport` (17) + all v1 delta schemas + `deriveApproved`
