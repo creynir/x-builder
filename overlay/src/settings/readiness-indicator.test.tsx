@@ -1,13 +1,14 @@
 // @x-builder/overlay — ReadinessIndicator tests (browser mode)
 //
-// Maps OverlayReadiness SubsystemStatus.state → Badge variants, and surfaces a
-// warning Alert when capture is paused / layout-changed OR when the selector
-// miss count crosses its threshold.
+// Maps OverlayReadiness SubsystemStatus.state (the real shared ReadinessState
+// enum) → Badge variants, and surfaces a warning Alert when capture is paused /
+// layout-changed OR when the selector miss count crosses its threshold. Judge
+// readiness is surfaced here (via readiness.llm), NOT as a settings field.
 
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render } from "vitest-browser-react";
 
-import { makeOverlayReadiness } from "../testing/fixtures";
+import { makeOverlayReadiness, subsystem } from "../testing/fixtures";
 import { mountShadowHost, type ShadowHostHandle } from "../testing/shadow-host";
 import { ReadinessIndicator } from "./readiness-indicator";
 
@@ -77,7 +78,7 @@ describe("ReadinessIndicator — capture warning alert", () => {
   });
 });
 
-describe("ReadinessIndicator — Badge variant mapping", () => {
+describe("ReadinessIndicator — Badge variant mapping (real ReadinessState)", () => {
   /** Collect the variant markers rendered on the readiness badges. */
   function badgeMarkers(root: HTMLElement): string[] {
     return Array.from(root.querySelectorAll("[data-variant]")).map(
@@ -88,57 +89,37 @@ describe("ReadinessIndicator — Badge variant mapping", () => {
   it('maps state "ready" → success', () => {
     const root = mountIndicator({
       readiness: makeOverlayReadiness({
-        staticEngine: {
-          state: "ready",
-          label: "Static engine ready",
-          retryable: false,
-          checkedAt: "2026-06-21T00:00:00.000Z",
-        },
+        staticEngine: subsystem({ state: "ready", label: "Static engine ready" }),
       }),
       selectorMissCount: 0,
     });
     expect(badgeMarkers(root)).toContain("success");
   });
 
-  it('maps state "warming" → warning', () => {
+  it('maps state "partial" → warning', () => {
     const root = mountIndicator({
       readiness: makeOverlayReadiness({
-        llm: {
-          state: "warming",
-          label: "Judge warming",
-          retryable: true,
-          checkedAt: "2026-06-21T00:00:00.000Z",
-        },
+        llm: subsystem({ state: "partial", label: "Judge partial" }),
       }),
       selectorMissCount: 0,
     });
     expect(badgeMarkers(root)).toContain("warning");
   });
 
-  it('maps state "degraded" → danger', () => {
+  it('maps state "unavailable" → danger', () => {
     const root = mountIndicator({
       readiness: makeOverlayReadiness({
-        llm: {
-          state: "degraded",
-          label: "Judge degraded",
-          retryable: true,
-          checkedAt: "2026-06-21T00:00:00.000Z",
-        },
+        llm: subsystem({ state: "unavailable", label: "Judge unavailable" }),
       }),
       selectorMissCount: 0,
     });
     expect(badgeMarkers(root)).toContain("danger");
   });
 
-  it('maps state "unavailable" → danger', () => {
+  it('maps state "failed" → danger', () => {
     const root = mountIndicator({
       readiness: makeOverlayReadiness({
-        llm: {
-          state: "unavailable",
-          label: "Judge unavailable",
-          retryable: true,
-          checkedAt: "2026-06-21T00:00:00.000Z",
-        },
+        llm: subsystem({ state: "failed", label: "Judge failed" }),
       }),
       selectorMissCount: 0,
     });

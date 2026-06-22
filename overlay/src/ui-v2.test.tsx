@@ -22,6 +22,7 @@ import { Button } from "../../client/src/ui/v2/button";
 import { IconButton } from "../../client/src/ui/v2/icon-button";
 import { Input } from "../../client/src/ui/v2/input";
 import { KeyValueList } from "../../client/src/ui/v2/key-value-list";
+import { Select } from "../../client/src/ui/v2/select";
 import { Skeleton } from "../../client/src/ui/v2/skeleton";
 import { Switch } from "../../client/src/ui/v2/switch";
 
@@ -163,15 +164,62 @@ describe("v2 Input", () => {
   it("renders the controlled value and emits onChange on input", () => {
     const onChange = vi.fn();
     const root = mount(
-      <Input value="openai" aria-label="Judge provider" onChange={onChange} />,
+      <Input value="hello" aria-label="Search known posts" onChange={onChange} />,
     );
 
     const input = root.querySelector("input") as HTMLInputElement;
-    expect(input.value).toBe("openai");
+    expect(input.value).toBe("hello");
 
-    input.value = "anthropic";
+    input.value = "world";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     expect(onChange).toHaveBeenCalled();
+  });
+});
+
+describe("v2 Select", () => {
+  it("renders a native select reflecting the value and the option set", () => {
+    const root = mount(
+      <Select
+        value="codex-cli"
+        aria-label="Judge provider"
+        onChange={() => {}}
+        options={[
+          { value: "codex-cli", label: "Codex judge" },
+          { value: "claude-cli", label: "Claude judge" },
+          { value: "cursor-cli", label: "Cursor judge" },
+        ]}
+      />,
+    );
+
+    const select = root.querySelector("select") as HTMLSelectElement;
+    expect(select).not.toBeNull();
+    expect(select.value).toBe("codex-cli");
+    expect(Array.from(select.options).map((o) => o.value)).toEqual([
+      "codex-cli",
+      "claude-cli",
+      "cursor-cli",
+    ]);
+  });
+
+  it("emits onChange with the chosen value", () => {
+    const onChange = vi.fn();
+    const root = mount(
+      <Select
+        value="codex-cli"
+        aria-label="Judge provider"
+        onChange={onChange}
+        options={[
+          { value: "codex-cli", label: "Codex judge" },
+          { value: "claude-cli", label: "Claude judge" },
+        ]}
+      />,
+    );
+
+    const select = root.querySelector("select") as HTMLSelectElement;
+    select.value = "claude-cli";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(onChange).toHaveBeenCalledWith("claude-cli");
   });
 });
 

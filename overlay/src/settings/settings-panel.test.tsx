@@ -3,8 +3,8 @@
 // Covers the CaptureSummary→KeyValueList rendering and the Visual-AC structural
 // contract: the panel surface is built from the Aurora Glass tokens
 // (--xb-surface-panel / --xb-glass-blur / --xb-border-edge / --radius-lg) and
-// the readiness Badge variant mapping (ready→success, warming→warning,
-// degraded/unavailable→danger). Rendered into a real token-seeded shadow root so
+// the readiness Badge variant mapping (ready→success, partial→warning,
+// unavailable/failed→danger). Rendered into a real token-seeded shadow root so
 // the var() references actually resolve.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +14,7 @@ import {
   makeAppSettings,
   makeCaptureSummary,
   makeOverlayReadiness,
+  subsystem,
 } from "../testing/fixtures";
 import { mountShadowHost, tokenValue, type ShadowHostHandle } from "../testing/shadow-host";
 import { SettingsPanel } from "./settings-panel";
@@ -105,21 +106,11 @@ describe("SettingsPanel — readiness Badge variant mapping (Visual AC)", () => 
     expect(markers(root)).toContain("success");
   });
 
-  it("maps warming → warning and degraded/unavailable → danger", () => {
+  it("maps partial → warning and unavailable → danger", () => {
     const root = mountPanel({
       readiness: makeOverlayReadiness({
-        staticEngine: {
-          state: "warming",
-          label: "Static engine warming",
-          retryable: false,
-          checkedAt: "2026-06-21T00:00:00.000Z",
-        },
-        llm: {
-          state: "unavailable",
-          label: "Judge unavailable",
-          retryable: true,
-          checkedAt: "2026-06-21T00:00:00.000Z",
-        },
+        staticEngine: subsystem({ state: "partial", label: "Static engine partial" }),
+        llm: subsystem({ state: "unavailable", label: "Judge unavailable" }),
       }),
     });
     const m = markers(root);

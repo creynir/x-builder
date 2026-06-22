@@ -13,8 +13,10 @@ import { cleanup, render } from "vitest-browser-react";
 
 import { FakeEngineTransport } from "../testing/fake-transport";
 import {
+  makeActiveContext,
   makeAppSettings,
   makeCaptureSummary,
+  makeEmptyContext,
   makeOverlayReadiness,
 } from "../testing/fixtures";
 import { mountShadowHost, type ShadowHostHandle } from "../testing/shadow-host";
@@ -35,7 +37,7 @@ function mountAffordance(transport: FakeEngineTransport): HTMLElement {
   return harness.mount;
 }
 
-/** Build a fully-resolving transport seeded with the spec's envelope shapes. */
+/** Build a fully-resolving transport seeded with the real shared shapes. */
 function readyTransport(overrides: Partial<FakeEngineTransport> = {}): FakeEngineTransport {
   return new FakeEngineTransport({
     getSettings: () =>
@@ -45,6 +47,17 @@ function readyTransport(overrides: Partial<FakeEngineTransport> = {}): FakeEngin
       } as never),
     getOverlayReadiness: () => Promise.resolve(makeOverlayReadiness() as never),
     getCaptureSummary: () => Promise.resolve(makeCaptureSummary() as never),
+    getActiveContext: () => Promise.resolve(makeActiveContext() as never),
+    activateContext: () =>
+      Promise.resolve({
+        activeContext: makeActiveContext(),
+        eligibility: { eligible: true, blockingReasons: [], warningReasons: [] },
+      } as never),
+    deactivateContext: () =>
+      Promise.resolve({
+        activeContext: makeEmptyContext(),
+        eligibility: { eligible: true, blockingReasons: [], warningReasons: [] },
+      } as never),
     updateSettings: (next) =>
       Promise.resolve({ settings: next, source: "persisted" } as never),
     ...overrides,
@@ -200,16 +213,69 @@ describe("SettingsAffordance — soft focus containment", () => {
   });
 });
 
-describe("ActiveContextToggle — optimistic echo + rollback", () => {
-  it("flips checked immediately on toggle (optimistic)", async () => {
+describe("ActiveContextToggle — activate / deactivate transport flow", () => {
+  it("seeds checked from getActiveContext() status === 'active' and calls deactivateContext on toggle off", async () => {
+    const deactivateSpy = vi.fn(() =>
+      Promise.resolve({
+        activeContext: makeEmptyContext(),
+        eligibility: { eligible: true, blockingReasons: [], warningReasons: [] },
+      } as never),
+    );
     const transport = readyTransport({
-      getSettings: () =>
-        Promise.resolve({
-          settings: makeAppSettings({ activeContext: false }),
-          source: "persisted",
-        } as never),
+      getActiveContext: () => Promise.resolve(makeActiveContext() as never),
+      deactivateContext: deactivateSpy as never,
+    });
+    const root = mountAffordance(transport);
+
+    launcher(root).click();
+    const sw = await vi.waitFor(() => {
+      const el = panel(root)!.querySelector('[role="switch"]');
+      expect(el).not.toBeNull();
+      // status: "active" → checked
+      expect(el!.getAttribute("aria-checked")).toBe("true");
+      return el as HTMLElement;
+    });
+
+    sw.click();
+
+    await vi.waitFor(() => {
+      expect(deactivateSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("seeds unchecked from status === 'empty' and calls activateContext on toggle on", async () => {
+    const activateSpy = vi.fn(() =>
+      Promise.resolve({
+        activeContext: makeActiveContext(),
+        eligibility: { eligible: true, blockingReasons: [], warningReasons: [] },
+      } as never),
+    );
+    const transport = readyTransport({
+      getActiveContext: () => Promise.resolve(makeEmptyContext() as never),
+      activateContext: activateSpy as never,
+    });
+    const root = mountAffordance(transport);
+
+    launcher(root).click();
+    const sw = await vi.waitFor(() => {
+      const el = panel(root)!.querySelector('[role="switch"]');
+      expect(el).not.toBeNull();
+      expect(el!.getAttribute("aria-checked")).toBe("false");
+      return el as HTMLElement;
+    });
+
+    sw.click();
+
+    await vi.waitFor(() => {
+      expect(activateSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("flips checked immediately on toggle (optimistic echo, before the transport resolves)", async () => {
+    const transport = readyTransport({
+      getActiveContext: () => Promise.resolve(makeEmptyContext() as never),
       // Never resolves: proves the echo is optimistic, not transport-confirmed.
-      updateSettings: () => new Promise(() => {}),
+      activateContext: () => new Promise(() => {}),
     });
     const root = mountAffordance(transport);
 
@@ -230,14 +296,10 @@ describe("ActiveContextToggle — optimistic echo + rollback", () => {
     });
   });
 
-  it("reverts the checked state when updateSettings rejects", async () => {
+  it("reverts the checked state when activateContext rejects", async () => {
     const transport = readyTransport({
-      getSettings: () =>
-        Promise.resolve({
-          settings: makeAppSettings({ activeContext: false }),
-          source: "persisted",
-        } as never),
-      updateSettings: () => Promise.reject(new Error("persist failed")),
+      getActiveContext: () => Promise.resolve(makeEmptyContext() as never),
+      activateContext: () => Promise.reject(new Error("activation failed")),
     });
     const root = mountAffordance(transport);
 
@@ -245,6 +307,7 @@ describe("ActiveContextToggle — optimistic echo + rollback", () => {
     const sw = await vi.waitFor(() => {
       const el = panel(root)!.querySelector('[role="switch"]');
       expect(el).not.toBeNull();
+      expect(el!.getAttribute("aria-checked")).toBe("false");
       return el as HTMLElement;
     });
 
@@ -259,40 +322,40 @@ describe("ActiveContextToggle — optimistic echo + rollback", () => {
   });
 });
 
-describe("SettingsAffordance — updateSettings read-current-then-send-FULL", () => {
-  it("unwraps the envelope and sends the FULL settings object with one field changed", async () => {
+describe("JudgeProviderSection — read-current-then-send-FULL updateSettings", () => {
+  it("unwraps the envelope and sends the FULL real AppSettings with judgeProvider changed", async () => {
     const updateSpy = vi.fn(
       (next: unknown) => Promise.resolve({ settings: next, source: "persisted" }) as never,
     );
+    const current = makeAppSettings({ judgeProvider: "codex-cli" });
     const transport = readyTransport({
+      // ENVELOPE: the component unwraps `.settings`.
       getSettings: () =>
-        Promise.resolve({
-          // ENVELOPE: the component unwraps `.settings`.
-          settings: { judgeProvider: "openai", activeContext: true, judgeReady: true },
-          source: "persisted",
-        } as never),
+        Promise.resolve({ settings: current, source: "persisted" } as never),
       updateSettings: updateSpy as never,
     });
     const root = mountAffordance(transport);
 
     launcher(root).click();
-    const sw = await vi.waitFor(() => {
-      const el = panel(root)!.querySelector('[role="switch"]');
+
+    // The provider control is a Select over the three JudgeProviderId values.
+    const select = await vi.waitFor(() => {
+      const el = panel(root)!.querySelector("select");
       expect(el).not.toBeNull();
-      expect(el!.getAttribute("aria-checked")).toBe("true");
-      return el as HTMLElement;
+      expect((el as HTMLSelectElement).value).toBe("codex-cli");
+      return el as HTMLSelectElement;
     });
 
-    sw.click();
+    select.value = "claude-cli";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
 
     await vi.waitFor(() => {
       expect(updateSpy).toHaveBeenCalledTimes(1);
     });
-    // FULL object, one field flipped — not a partial patch.
+    // FULL real AppSettings object, only judgeProvider changed — not a partial.
     expect(updateSpy).toHaveBeenCalledWith({
-      judgeProvider: "openai",
-      activeContext: false,
-      judgeReady: true,
+      ...current,
+      judgeProvider: "claude-cli",
     });
   });
 });

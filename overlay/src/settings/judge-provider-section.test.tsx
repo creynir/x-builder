@@ -1,11 +1,13 @@
 // @x-builder/overlay — JudgeProviderSection tests (browser mode)
 //
-// The section renders an Input seeded from AppSettings.judgeProvider and, on
-// blur/submit, asks its parent to persist the changed provider. The
-// read-current-then-send-FULL merge happens in SettingsAffordance (covered
-// there); here we pin that the leaf surfaces the current value through an Input
-// and reports the edited value upward.
+// The section renders a Select over the three JudgeProviderId values, seeded
+// from AppSettings.judgeProvider and labelled via `judgeProviderLabels`. On
+// change it reports the chosen provider id upward; the read-current-then-send-
+// FULL merge (full real AppSettings) happens in SettingsAffordance (covered
+// there). Here we pin the leaf: it surfaces the current id and the labels, and
+// reports the chosen id.
 
+import { judgeProviderLabels } from "@x-builder/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "vitest-browser-react";
 
@@ -28,22 +30,35 @@ afterEach(() => {
 });
 
 describe("JudgeProviderSection", () => {
-  it("renders an Input seeded with the current judgeProvider value", () => {
-    const root = mountSection({ value: "openai", onCommit: vi.fn() });
-    const input = root.querySelector("input") as HTMLInputElement;
-    expect(input).not.toBeNull();
-    expect(input.value).toBe("openai");
+  it("renders a Select seeded with the current judgeProvider id", () => {
+    const root = mountSection({ value: "codex-cli", onCommit: vi.fn() });
+    const select = root.querySelector("select") as HTMLSelectElement;
+    expect(select).not.toBeNull();
+    expect(select.value).toBe("codex-cli");
   });
 
-  it("commits the edited provider string on blur", () => {
+  it("offers the three provider ids with their human labels", () => {
+    const root = mountSection({ value: "codex-cli", onCommit: vi.fn() });
+    const select = root.querySelector("select") as HTMLSelectElement;
+
+    const optionValues = Array.from(select.options).map((o) => o.value);
+    expect(new Set(optionValues)).toEqual(
+      new Set(["codex-cli", "claude-cli", "cursor-cli"]),
+    );
+    // Labels come from the shared single source of truth.
+    expect(root.textContent).toContain(judgeProviderLabels["codex-cli"]);
+    expect(root.textContent).toContain(judgeProviderLabels["claude-cli"]);
+    expect(root.textContent).toContain(judgeProviderLabels["cursor-cli"]);
+  });
+
+  it("commits the chosen provider id on change", () => {
     const onCommit = vi.fn();
-    const root = mountSection({ value: "openai", onCommit });
+    const root = mountSection({ value: "codex-cli", onCommit });
 
-    const input = root.querySelector("input") as HTMLInputElement;
-    input.value = "anthropic";
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("blur", { bubbles: true }));
+    const select = root.querySelector("select") as HTMLSelectElement;
+    select.value = "cursor-cli";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
 
-    expect(onCommit).toHaveBeenCalledWith("anthropic");
+    expect(onCommit).toHaveBeenCalledWith("cursor-cli");
   });
 });

@@ -1,77 +1,49 @@
 // @x-builder/overlay — settings-affordance fixture builders (test-only)
 //
 // Lightweight factory functions for the data the settings affordance consumes.
-// They mirror the shapes the feature spec pins down in its Data Models block
-// (the overlay UI layer's view of AppSettings / OverlayReadiness / CaptureSummary)
-// rather than re-deriving the full Zod schemas from `@x-builder/shared` — the
-// spec's settings panel reads a trimmed `AppSettings` carrying `judgeProvider`,
-// `judgeReady`, and `activeContext`. Keeping the type local to the overlay test
-// suite avoids Zod duplication and keeps the fixtures self-contained.
+// They produce the REAL shared shapes from `@x-builder/shared` (no re-derived
+// Zod, no invented fields): the settings panel reads/writes the real
+// `AppSettings`, the readiness indicator reads `OverlayReadiness`, the capture
+// summary card reads `CaptureSummary`, and the active-context toggle reads
+// `ActiveArchiveContext`. Active context is the archive-context activation — NOT
+// a settings field — and judge readiness is surfaced via OverlayReadiness.llm.
 
-/**
- * The settings shape the affordance reads/writes. This is the UI-layer view the
- * feature spec prescribes: the `updateSettings` read-current-then-send-FULL
- * pattern round-trips exactly this object. Distinct from the broader engine
- * `AppSettings` — the overlay only surfaces these three fields plus an optional
- * account profile.
- */
-export interface AppSettings {
-  judgeProvider: string;
-  judgeReady: boolean;
-  activeContext: boolean;
-  accountProfile?: string;
-}
-
-/** A subsystem readiness state as surfaced to the readiness indicator. */
-export type ReadinessState =
-  | "ready"
-  | "warming"
-  | "degraded"
-  | "unavailable"
-  | "unknown";
-
-export interface SubsystemStatus {
-  state: ReadinessState;
-  label: string;
-  message?: string;
-  retryable: boolean;
-  checkedAt: string;
-  details?: unknown;
-}
-
-export type CaptureReadinessState = "ok" | "paused" | "layout_changed";
-
-export interface OverlayReadiness {
-  staticEngine: SubsystemStatus;
-  llm: SubsystemStatus;
-  capture: {
-    state: CaptureReadinessState;
-    label: string;
-    message?: string;
-    lastCaptureAt?: string;
-    checkedAt: string;
-  };
-}
-
-export interface CaptureSummary {
-  postsCaptured: number;
-  lastCaptureAt?: string;
-  followers?: number;
-  screenName?: string;
-  profileCapturedAt?: string;
-}
+import type {
+  ActiveArchiveContext,
+  AppSettings,
+  CaptureSummary,
+  OverlayReadiness,
+  ReadinessState,
+  SubsystemStatus,
+} from "@x-builder/shared";
 
 const ISO_NOW = "2026-06-21T00:00:00.000Z";
 
 /**
- * Build an `AppSettings` view object. Defaults to the "ideal" state: an OpenAI
- * judge, ready, with active context on. Override any field per test.
+ * Build a real `AppSettings` object (the full shared shape). Defaults to a valid
+ * persisted-style configuration: a Codex judge, local engine URL, a storage
+ * path, deterministic details on. Override any field per test. There is no
+ * `judgeReady` or `activeContext` field — those are readiness / archive-context
+ * concerns, not settings.
  */
 export function makeAppSettings(overrides: Partial<AppSettings> = {}): AppSettings {
   return {
-    judgeProvider: "openai",
-    judgeReady: true,
-    activeContext: true,
+    engineBaseUrl: "http://127.0.0.1:4319",
+    storagePath: "/home/user/.x-builder",
+    judgeProvider: "codex-cli",
+    showDeterministicDetails: true,
+    ...overrides,
+  };
+}
+
+/** Build a `SubsystemStatus` with the real defaults filled in. */
+export function subsystem(
+  overrides: Partial<SubsystemStatus> & { state: ReadinessState; label: string },
+): SubsystemStatus {
+  return {
+    retryable: true,
+    checkedAt: ISO_NOW,
+    details: {},
     ...overrides,
   };
 }
@@ -81,18 +53,8 @@ export function makeOverlayReadiness(
   overrides: Partial<OverlayReadiness> = {},
 ): OverlayReadiness {
   return {
-    staticEngine: {
-      state: "ready",
-      label: "Static engine ready",
-      retryable: false,
-      checkedAt: ISO_NOW,
-    },
-    llm: {
-      state: "ready",
-      label: "Judge ready",
-      retryable: true,
-      checkedAt: ISO_NOW,
-    },
+    staticEngine: subsystem({ state: "ready", label: "Static engine ready" }),
+    llm: subsystem({ state: "ready", label: "Judge ready" }),
     capture: {
       state: "ok",
       label: "Capture ok",
@@ -108,7 +70,32 @@ export function makeCaptureSummary(
 ): CaptureSummary {
   return {
     postsCaptured: 42,
-    lastCaptureAt: "2026-06-21",
+    lastCaptureAt: ISO_NOW,
     ...overrides,
   };
+}
+
+/**
+ * Build an `ActiveArchiveContext` in the "active" status (toggle on). The
+ * toggle's `checked` derives from `status === "active"`.
+ */
+export function makeActiveContext(
+  overrides: Partial<Extract<ActiveArchiveContext, { status: "active" }>> = {},
+): ActiveArchiveContext {
+  return {
+    status: "active",
+    sourceImportId: "import-1",
+    activatedAt: ISO_NOW,
+    scoringContextPatch: {},
+    judgeHints: [],
+    provenance: "archive-import",
+    confidence: "high",
+    counts: { posts: 42, originals: 30, replies: 12 },
+    ...overrides,
+  };
+}
+
+/** The empty (deactivated) archive context — toggle off. */
+export function makeEmptyContext(): ActiveArchiveContext {
+  return { status: "empty" };
 }
