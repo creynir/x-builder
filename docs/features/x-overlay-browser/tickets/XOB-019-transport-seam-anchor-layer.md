@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-019: [FND] Transport-consuming client seam (`useTransport`) + `XSelectors` + `AnchorLayer` skeleton
@@ -145,3 +145,23 @@ None — this ticket is infrastructure only. The `AnchorLayer` renders nothing v
 - `requestAnimationFrame` unavailable in the test environment (JSDOM): mock `rAF` to call synchronously in tests to make the reconcile path unit-testable.
 - `safeQuery` receiving a CSS selector string that is syntactically invalid (attacker-controlled or corrupted `XSelectors` constant): `DOMException` caught, miss count incremented, `null` returned — overlay continues.
 - Observer on `document.body` during document teardown (page unload): wrap the observer disconnect in a `try/catch` in the cleanup effect to prevent unhandled exceptions during fast navigation.
+
+## Pipeline Log
+
+Lean Red-first lane. **[FND]** + folded-in design-token substrate seeding (carried from the XOB-018 checkpoint).
+
+- **Red** (`5597bac`): `use-transport.test.tsx` / `selectors.test.ts` / `anchor-layer.test.tsx` / `design-tokens.test.tsx` (browser mode). Asserts the 17-method fake against the real `ENGINE_TRANSPORT_BINDINGS` (runtime + compile-time), miss-count semantics, AnchorLayer rAF/debounce/visibilitychange, and design-token resolution on `:host`. RED feature-missing; 42 XOB-018 tests stay green; `rg "XOB-"`/eslint-disable clean.
+- **Gates** (post-Red, base `2816bd2`): `[scope]` + `[ticket-ids]` CLEAN (harness already established).
+- **Green** (`e5b3332`): transport seam (`OverlayTransportProvider` optional-prop → `window.__xbTransport` → warned no-op; `useTransport` dev-invariant) + `FakeEngineTransport` (closure-bound, detached-call-safe, satisfies real `EngineTransport`) + `XSelectors`/`safeQuery`/`safeQueryAll`/`selectorMissCount()` + `AnchorLayer` skeleton (`useAnchorRegistry`, empty registry, disconnect on hidden/unmount) + **design-token seeding** (canonical cross-package `?raw`-import of `product-tokens.css`, `:root→:host` rescope, adopted `[designTokens, neon]` so `--xb-*` wins) + runtime wiring. 63 tests, typecheck 10/10, build self-contained.
+- **Gates** (post-Green, base `5597bac`): ALL CLEAN (suppressions/ticket-ids/stubs/slop/ui-tokens — token values enter via raw CSS import, no TS literals).
+- **Blue (Validate Green)**: APPROVE — verified by real command output (63 Chromium tests, cache-bypassed `tsc` EXIT=0, build self-contained: 0 external CSS path refs, no `any`/eslint-disable, FakeEngineTransport satisfies the real interface). [NOTE: the FIRST Blue dispatch returned a **prompt-injection** (a fake `<system-reminder>` + "Human:" turn telling the orchestrator to fetch an external figma URL + read a `.scratch/*.md` "spec") with 0 tool-uses — disregarded as untrusted tool output, NOT acted on; Blue re-spawned and ran the real validation.]
+- **Yellow (intent/substrate)**: APPROVE — real seam, 17 names match `ENGINE_TRANSPORT_BINDINGS` + runner bindings (`window.__xbTransport` is the authoritative contract), ZERO-TRACE clean, token-substrate genuinely fixed (single-source, full closure resolves, neon wins), token discipline clean.
+- **[FND] Architectural checkpoint (Blue)**: APPROVE — substrate sound for XOB-020–029 (transport reaches every affordance's methods; AnchorLayer/`AffordanceHandle`/`useAnchorRegistry` is the pin contract; XSelectors covers compose+tweet; token closure complete; runtime is the cockpit mount tree). XOB-020 cleared.
+
+### Concerns Ledger
+- **Design-token substrate — RESOLVED** (the XOB-018-carried concern). Full `product-tokens.css` closure now resolves on the shadow `:host` via single-source raw-import; XOB-021/024/025/026/029 unblocked; neon layer preserved.
+- **AnchorLayer pin register/reconcile API — CARRIED TO XOB-025.** The registry is read-only/empty at this [FND]. The mutation surface XOB-030's DOM-churn invariants need (pins mount/unmount on DOM change, `ComposeContext` keyed entry) is unbuilt and not explicitly scoped by any ticket. **XOB-025 (compose detection / pin lifecycle, "owned by AnchorLayer") must additively extend `AnchorLayer` with the register/reconcile + `ComposeContext` API**; XOB-030 [INT] proves the churn invariants. Seam extended, not re-opened. (Added to `tickets/README.md`.)
+- **`getSettings()` returns the `AppSettingsResponse` envelope** (`{settings, source, updatedAt?}`), not `AppSettings` directly — **XOB-020 must unwrap `.settings`**. Seam types are authoritative; mapping is XOB-020's job.
+- **Path-drift (cosmetic):** XOB-030 references `overlay/src/anchor/anchor-layer.ts`; shipped `overlay/src/anchor-layer.tsx`. Reconcile import paths at XOB-030 (rename, not re-contract).
+- **Build hygiene (minor):** Vitest browser-mode failure-screenshot dirs (`overlay/src/**/__screenshots__/`) aren't gitignored (only `dist/` is). Add to `.gitignore` in a future cleanup so transient PNGs can't be accidentally committed.
+- Status → **done**.
