@@ -1,8 +1,10 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # XOB-022: [FND] `CompositionHighlightLayer` — Range→`getClientRects` positioning, graceful degrade
+
+> **Test approach (supersedes the "JSDOM + mocked rects" wording in Test Strategy):** tests run in the **real Chromium browser-mode harness** (XOB-018), so `Range`/`getClientRects()`/`getBoundingClientRect()` are REAL — this is exactly why browser mode was chosen (jsdom returns all-zero/empty rects, which would make this component untestable). Assert STRUCTURAL/relative correctness (highlight count, spans within the composer bounds, severity token classes, the `getLayerOrigin` offset math, graceful-degrade paths) rather than brittle exact pixels. For the deterministic "multi-line quote → N spans" case, force a real wrap (narrow composer + long quote) OR locally override `Range.getClientRects` to return N rects (testing the rect→span mapping, not layout) — implementer's choice. Consume the shared `JudgeAnnotation` type (`{quote, severity, recommendation}` — matches `judgeAnnotationSchema`, no drift).
 
 ## Implementation Details
 
