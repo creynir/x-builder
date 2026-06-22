@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-026: JudgeStrip — waiting→pulse→fill + generate-refine entry path (UNDER cockpit zone)
@@ -193,3 +193,24 @@ const approvedVerdict = makeJudgeVerdict({ scores: { overall: 85 } }); // → ve
 - **LLM warming (judge not yet ready on first open):** `unavailable` state shown with hint to wait or check Settings.
 
 **Cross-deps:** XOB-021 (MetricExplainer), XOB-023 (ProvenanceController — determines generated/user_written for entry path), XOB-024 (ComposeGenerateRail — generate click triggers refine entry), XOB-025 (StaticEngineColumn — static fills before judge kicks).
+
+## Pipeline Log
+
+Lane: rgb-tdd lean Red-first (Red self-validates → Green → combined Blue+Yellow). Not `[FND]`.
+
+| Station | Commit | Result |
+|---|---|---|
+| pre-Red SHA | `28279b8` | base (after reconciliations: `ProvenanceState` bare string `provenance==="generated"`, reuse `makeJudgeVerdict`, ScoreBar judge-identity at container level not bar-tint, browser-mode harness) |
+| Red (failing tests, self-validated) | `b2091f9` | ~15 tests (9 cases + edges); scope CLEAN; ticket-ids 1 benign comment match; module-not-found failure. Introduced the `data-judge-pulse="animated"` stable pulse hook + a reference-Button computed-bg comparison for "never primary CTA". |
+| pre-Green SHA | `b2091f9` | base |
+| Green (impl) | `6372856` | 1 file (`overlay/src/judge/judge-strip.tsx` + internal sub-components); 262/262 overlay tests pass; typecheck green; `gates.py all` 1 ui-tokens lead (keyframe glow-radius literal — accepted, see F1). |
+| Blue (validate Green) | — | **APPROVE** — no test modification; exactly 13 ScoreBars; "✓ Judge approved" full conjunction (provenance+judged+`deriveApproved`, no bespoke threshold); named `@keyframes` gated SEPARATELY under `prefers-reduced-motion` (not just the duration var); aria-live announce is a derived string (no effect). ui-tokens keyframe literal = legitimate spec-mandated animation endpoint. |
+| Yellow (intent/wiring) | — | **APPROVE** — presentational (no transport/machine); generate-refine entry never re-judges its own approved output; single approval authority; zero-trace (no Apply-all/blue/green/auto-improve; `applyState` accepted-but-unused); additive judge identity, never CTA. |
+
+### Concerns Ledger
+
+| # | Concern | Owner | Resolution |
+|---|---|---|---|
+| F1 | **Pulse keyframe glow-radius literals** (`box-shadow: 0 0 4px … ↔ var(--xb-glow-judge)`'s 12px) are hardcoded px. This is spec-mandated (§5.4 "glow radius 4px ↔ 10px") — a fixed `--xb-glow-judge` token can't express two animation endpoints; the color channel stays tokenized (`var(--xb-judge)`). No behavior issue; ui-tokens gate is a lead, not a verdict. | optional v2/neon-sheet nicety | Extract `--xb-pulse-glow-min`/`--xb-pulse-glow-max` (or a 4px-radius token) to fully tokenize both endpoints. Cosmetic; non-blocking. (Note: upper endpoint reuses `--xb-glow-judge`'s 12px, slightly above the spec's approximate 10px — token-reuse preferred over a new literal.) |
+| F2 | **Combined running label** `"AI judge running · Running…"` reads slightly redundant — Green merged the two label strings the running AC + reduced-motion AC each require into one node. Intentional, contract-correct; no AC violated. | cosmetic | Optional copy polish in XOB-029 assembly. Non-blocking. |
+| F3 (cross-ticket) | **XOB-025's "no primary CTA" test asserts the forbidden hue as `rgb(29,155,240)`** (X's brand blue), but the v2 primary `Button` fill resolves to `--accent-9` (≈`rgb(15,142,233)`) — so that assertion would NOT catch a v2 primary button. Harmless today (XOB-025 has no primary button), but a weak assertion. XOB-026's equivalent test uses a live reference-Button computed-bg comparison (robust). | test-hardening (XOB-031 or a cleanup) | Harden XOB-025's CTA-hue assertion to compare against a live `<Button variant="primary">` computed bg (the XOB-026 approach) rather than a hardcoded brand-blue literal. Non-blocking. |
