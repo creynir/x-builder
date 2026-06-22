@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-024: ComposeGenerateRail — dynamic category buttons (LEFT cockpit zone)
@@ -77,9 +77,9 @@ No local data models; component is purely presentational over the `categories` p
 
 **Framework:** Vitest **browser mode → Playwright Chromium** via `vitest-browser-react` — the established overlay harness (XOB-018/020/021/022/023), shadow-DOM-aware. NOT jsdom (the "RTL" phrasing predates that decision).
 
-**Fixtures (owned by overlay package):**
+**Fixtures (owned by overlay package):** `overlay/src/testing/generate-categories.ts` (beside the existing `overlay/src/testing/` harness helpers).
 ```ts
-// fixtures/generate-categories.ts
+// overlay/src/testing/generate-categories.ts
 export const defaultCategories: GenerateCategory[] = [
   { id: "hot_take", label: "Hot take", format: "hot_take", basis: "default", cooldownStatus: "clear", sampleCount: 0 },
   { id: "founder_story", label: "Build-in-public", format: "founder_story", basis: "default", cooldownStatus: "clear", sampleCount: 0 },
@@ -157,3 +157,22 @@ export const cooldownCategory: GenerateCategory = {
 - **Rapid clicks:** second click while `pending` is set is blocked (button disabled); no double-generation.
 
 **Cross-deps:** XOB-019 (transport seam + `AnchorLayer`), XOB-023 (provenance — rail click triggers a generate path that sets the green anchor).
+
+## Pipeline Log
+
+Lane: rgb-tdd lean Red-first (Red self-validates → Green → combined Blue+Yellow). Not `[FND]`.
+
+| Station | Commit | Result |
+|---|---|---|
+| pre-Red SHA | `9e3ccf2` | base (after reconciliations: Spinner=`Button.loading`, defer `Tooltip`, cooldown badge from `sampleCount`+`cooldownStatus` only, browser-mode harness) |
+| Red (failing tests, self-validated) | `17bcfb8` | 12 tests; scope CLEAN; ticket-ids CLEAN; correct module-not-found failure. |
+| pre-Green SHA | `17bcfb8` | base |
+| Green (impl) | `6671a40` | 1 file (`overlay/src/compose/compose-generate-rail.tsx`); 219/219 overlay tests pass; typecheck green; `gates.py all` CLEAN; token-only styling; no `Spinner`/`Tooltip` primitive built. |
+| Blue (validate Green) | — | **APPROVE_WITH_CONCERNS** — no test modification (`17bcfb8...6671a40` test-diff empty); ghost-button-per-category; cooldown→warning Badge from `cooldownStatus`+`sampleCount`; pending→`loading`+`disabled`+`aria-busy` (siblings unaffected); full-object `onGenerate`; `basis` never leaks (cold-start parity). Concern **D1** (full-width). Cooldown Badge in Button `trailingIcon` slot is a loose-but-correct slot reuse (text-bearing, `data-variant` marker). |
+| Yellow (intent/wiring) | — | **APPROVE_WITH_CONCERNS** — 5-segment seam consumable (`onGenerate(category)` full object → parent `generateIdeas({format})` → XOB-023 green anchor); **DELETED label→format map invariant honored** (buttons derive entirely from `categories`; no hardcoded list/switch); zero-trace (no transport/generation/cooldown-calc, no `Spinner`/`Tooltip`/cockpit stubs); channel identity = generate (no `--xb-judge*`); cooldown ≠ disabled (override preserved). Concern **D1** (full-width). Also surfaced & corrected an orchestrator misstatement: the categories transport binding is `getGenerateCategories`/`__xbuilder_getGenerateCategories` (NOT `n()`) — immaterial here (rail does no transport). |
+
+### Concerns Ledger
+
+| # | Concern | Owner | Resolution |
+|---|---|---|---|
+| D1 | **Full-width pill layout is implicit.** Visual AC / Layout wants a "vertical full-width pill list," but v2 `Button` is `display:inline-flex` with no `width`/`block`/`fullWidth`/`style`/`className` prop. The rail's container is `flex-direction:column` with default `align-items:stretch`, so buttons DO stretch to the pin width (Yellow verified) — product intent is **met**, but via an implicit CSS default rather than an explicit affordance. No AC violated; no test asserts width; all 12 tests pass. | v2 `Button` enhancement (rule-of-three) / future zone tickets | Either set explicit `alignItems:"stretch"` on the rail container for intent-clarity, OR add a `block`/`fullWidth` prop to v2 `Button` when its third consumer appears. Forbidden to hack width via a primitive escape hatch (no `style`/`className` on `Button`, per the Visual-AC "don't fork the primitive" rule). DX/robustness note, not a defect. Likely recurs in XOB-025/026/028 (other zone components consuming v2 `Button` in pinned layouts) — promote to a v2 `Button block` prop if it bites a third time. |
