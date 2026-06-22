@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-023: `ProvenanceController` — two-state derived model + green anchor store
@@ -167,3 +167,24 @@ interface AnnotationEntry {
 - `setAnchor` called with whitespace-normalized text while `composerEl.textContent` preserves raw whitespace (e.g. line breaks inserted by X's contenteditable): this would produce a spurious `"user_written"` state. The anchor must be set from the *exact* text as it appears in the compositor output at the moment of application — not from the generate/apply API response alone. The write-to-composer step (XOB-024/027) must capture `composerEl.textContent` *after* the text is written and pass that to `setAnchor`.
 - Multiple rapid `setAnchor` calls (generate clicked twice quickly): the last call wins; no queue is maintained.
 - `clearAnchor` semantics: called when the compose session ends (modal closes, `ComposeContext` inactive) — `ProvenanceController` unmounts; on next mount, anchor starts `null`. If the anchor ref is held in a parent context that survives unmounts (for session persistence), `clearAnchor` must be called explicitly on compose session end to prevent stale anchors appearing in a fresh compose.
+
+## Pipeline Log
+
+Lane: rgb-tdd lean Red-first (Red self-validates → Green → combined Blue+Yellow). Not `[FND]` — no architectural checkpoint.
+
+| Station | Commit | Result |
+|---|---|---|
+| pre-Red SHA | `4eab7a4` | base |
+| Red (failing tests, self-validated) | `c825883` | 24 tests; scope CLEAN; ticket-ids: 1 benign header-comment match. Flagged `latestVerdict` interface gap (in State Levels + ACs, missing from props block) → reconciled into ticket. |
+| pre-Green SHA | `9262054` | base (after interface reconciliation) |
+| Green (impl) | `168c2a7` | 4 files; 207/207 overlay tests pass; typecheck green; `gates.py all` CLEAN; no threshold literal (calls shared `deriveApproved` only). |
+| Blue (validate Green) | — | **APPROVE_WITH_CONCERNS** — no test modification (`9262054...168c2a7` test-diff empty); two-state exclusivity structural; ref-backed anchor + stable setters; single approval authority. Concern **C1** (`flushSync`). |
+| Yellow (intent/wiring) | — | **APPROVE** — 5-segment seam consumable by XOB-022 layer; `JudgeAnnotation[]` pass-through unchanged; zero-trace clean (no out-of-scope symbols, no transport); null-composer guard correct; `onProvenanceChange` a legitimate XOB-026/027 seam. |
+
+Post-Green ticket reconciliations: `latestVerdict` added to `ProvenanceControllerProps` then relaxed to optional (`latestVerdict?: JudgeVerdict | null`) to match Red's `mountController` helper (nullish ⇒ `approved=false`; satisfies approved-parity ACs).
+
+### Concerns Ledger
+
+| # | Concern | Owner | Resolution |
+|---|---|---|---|
+| C1 | **`flushSync`-per-debounce-tick in `use-composer-text.ts`** is a deviation from the established plain-`setState` trailing-edge debounce (sibling `use-composer-rect.ts`). Production-SAFE and bounded (≤1 forced synchronous render per 80 ms debounce window, never per keystroke; satisfies the Visual AC "flip immediate on the debounce tick"), but partly a **test-accommodation**: the XOB-023 test reads a captured render-prop `ctx` variable synchronously after `flushDebounce()`, and a bare `setTimeout`+`setState` commit lands past that synchronous read. No AC/DoD violated. | XOB-023 follow-up / revisit at **XOB-029** integration | Drop `flushSync`; commit with plain `setText` (matching `use-composer-rect.ts`) and have the test observe post-tick state via the harness's `act`-aware settling or an observable DOM surface rather than the captured `ctx`. Requires touching Red's test → cannot be done unilaterally by Green; defer. Also note for XOB-029: once the controller is mounted in `ComposeCockpit`, a forced synchronous render on the debounce tick will flush any descendant highlight re-map in the same frame — fold into the single per-frame rAF snapshot (XOB-022 L2). |
