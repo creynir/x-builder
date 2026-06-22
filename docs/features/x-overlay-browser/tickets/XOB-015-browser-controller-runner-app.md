@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-015: BrowserController + RunnerApp bootstrap — persistent context, `addInitScript`, one-command, first-run install
@@ -190,3 +190,19 @@ This ticket does not own normalizer fixtures (those are XOB-014's). The runner E
 - Multiple calls to `start()` without an intervening `stop()` → second call should throw or be a no-op (guard with `this.started` flag).
 
 **Depends on:** XOB-001, XOB-002
+
+## Pipeline Log
+
+Lean Red-first lane. Build-order seam: XOB-016/017 collaborators don't exist yet, so RunnerApp takes injectable `bindTransport`/`attachObserver` seams with NO-OP production defaults (016/017 replace them) — keeps 015 buildable + testable without forward-referencing unbuilt symbols.
+
+- **Red** (`f13b8df`): `browser-controller.test.ts` (8: happy/launch-opts/install-fallback/non-zero→BrowserInstallError/no-hang/progress+failure lines/unrelated-error-propagates) + `runner-app.test.ts` (12: call-order array equality, addInitScript `{content}`, missing-bundle→OverlayBundleNotFoundError-before-bind/observer/goto, empty-pages→newPage, onBatch→ingest wiring, started-guard, stop→close). Injectable-seam surface specified for Green (`_launch`/`_install` testSeams; `launchBrowser`/`bindTransport`/`attachObserver`/`services`). RED via 2 missing modules; XOB-014 still 20/20; `rg "XOB-"` clean.
+- **Gates** (post-Red, base `3e7f466`): `[scope]` + `[ticket-ids]` CLEAN.
+- **Green** (`c56b037`): `BrowserController.launch` (real `chromium.launchPersistentContext` default + first-run install fallback + `BrowserInstallError`, no retry-loop) + `RunnerApp` (strict start() order, `existsSync` bundle guard before bind/observer/goto, `addInitScript({content})`, `pages()[0] ?? newPage()`, `onBatch → services.liveCapture.ingest`, `started` guard, `stop`) + NO-OP bind/observer defaults + `createServices` default (real `JsonFileAppSettingsRepository`/`JsonFilePostLibraryRepository`/`LiveCaptureService`) + `bin/x-builder.js` shim (SIGINT/SIGTERM). Minimal engine barrel exports (2 repo constructors + `PostLibraryStorageError` + types; server.ts untouched) + runner→`@x-builder/overlay` dep. 40 tests, typecheck 10/10, build green.
+- **Gates** (post-Green, base `f13b8df`): `[suppressions]`/`[ticket-ids]`/`[stubs]`/`[ui-tokens]` CLEAN; `[slop] console.log ×3` ruled justified (spec-mandated CLI progress/failure/ready output; bare-console is the repo convention; no eslint).
+- **Blue (Validate Green)**: APPROVE — call-order/install-fallback/guards correct, bind/observer defaults genuine no-ops, engine server diff empty, typecheck+build honest (cache-bypassed both packages), bin executable + resolves.
+- **Yellow (intent)**: APPROVE — deliverable real (real launch + install fallback + real overlay-bundle resolve), seam honesty (onBatch→ingest genuinely wired + tested), ZERO-TRACE verified (no `__xbuilder_*`/observer/GraphQL/auth/DOM/fetch; only `page.goto`), engine minimal-export only, wiring-ready for 016/017.
+
+### Concerns Ledger (non-blocking)
+- **Runner tsconfig compiles `*.test.ts` into `dist/`** (pre-existing from XOB-014; `include: src/**/*.ts`). Dead weight in the build output (bin imports only `dist/runner-app.js`, unaffected). Candidate CHORE cleanup: exclude test files from the runner build (`tsconfig` `exclude` or a separate test tsconfig).
+- **`onBatch` seam typed `(batch: unknown) => unknown`** vs XOB-017's planned `(CaptureIngestRequest) => Promise<void>` — deliberately permissive foundation seam; XOB-017 narrows it. No action.
+- Status → **done**.
