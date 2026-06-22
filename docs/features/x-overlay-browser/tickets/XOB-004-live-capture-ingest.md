@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # XOB-004: LiveCaptureService.ingest — accumulate live posts + profile
