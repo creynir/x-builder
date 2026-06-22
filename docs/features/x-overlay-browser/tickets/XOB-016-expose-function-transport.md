@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # XOB-016: ExposeFunctionTransport — bind all 17 `__xbuilder_*` to engine services in-process
