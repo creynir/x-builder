@@ -31,6 +31,8 @@ import {
   generateIdeaResponseSchema,
   judgeDraftRequestSchema,
   judgeDraftResponseSchema,
+  suggestPostRequestSchema,
+  suggestPostResponseSchema,
   subsystemStatusSchema,
   type ApiError,
   type AppSettings,
@@ -60,6 +62,7 @@ import {
 } from "../llm/judge-draft-service.js";
 import { GenerateIdeasService } from "../llm/generate-ideas-service.js";
 import { ApplyJudgeSuggestionsService } from "../llm/apply-judge-suggestions-service.js";
+import { SuggestPostService } from "../suggest/suggest-post-service.js";
 import { judgeProviderRegistry } from "../llm/judge-provider-registry.js";
 import { createSettingsJudgeProviderResolver } from "../llm/judge-provider-resolver.js";
 import { NodeProcessRunner, type ProcessRunner } from "../llm/process-runner.js";
@@ -111,6 +114,7 @@ export interface BuildServerOptions {
   postLibraryRepository?: PostLibraryRepository;
   repetitionWindowService?: RepetitionWindowService;
   generateCategoryService?: GenerateCategoryService;
+  suggestPostService?: SuggestPostService;
   judgeDraftService?: JudgeDraft;
   applyJudgeSuggestionsService?: ApplyJudgeSuggestionsService;
   liveContextResolver?: LiveContextResolver;
@@ -628,6 +632,28 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       postLibraryRepository,
       new RepetitionWindowService(postLibraryRepository),
     );
+  // Suggest rail: deterministic ranking of the live corpus + one writer-first
+  // LLM pass in the chosen lane. It reuses the SHARED repetitionWindowService so
+  // cooldown is computed against one clock and store for the request, and shares
+  // the same judge providers + settings-backed resolver as the other LLM paths,
+  // so a settings PATCH retargets it on the next call.
+  const suggestPostService =
+    options.suggestPostService ??
+    (() => {
+      const workspaceRoot = resolveWorkspaceRoot(process.cwd());
+      const providers = workspaceRoot
+        ? judgeProviderRegistry.map((entry) =>
+            entry.createProvider({ runner: new NodeProcessRunner(), workspaceRoot }),
+          )
+        : [];
+
+      return new SuggestPostService(
+        postLibraryRepository,
+        repetitionWindowService,
+        new StructuredLlmService({ providers }),
+        createSettingsJudgeProviderResolver(settingsRepository),
+      );
+    })();
   const liveCaptureService =
     options.liveCaptureService ?? new LiveCaptureService(postLibraryRepository);
   const readinessService =
@@ -986,6 +1012,22 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     }
 
     return reply.send(parseResponseContract(analyzePostsResponseSchema, result));
+  });
+
+  app.post("/posts/suggest", async (request, reply) => {
+    const input = suggestPostRequestSchema.parse(request.body);
+
+    try {
+      const result = await suggestPostService.suggest(input);
+
+      return reply.send(parseResponseContract(suggestPostResponseSchema, result));
+    } catch (error) {
+      if (error instanceof PostLibraryStorageError) {
+        throw new NormalizedApiError(libraryStorageFailedError());
+      }
+
+      throw new NormalizedApiError(generationError());
+    }
   });
 
   app.post("/drafts/judge", async (request, reply) => {
