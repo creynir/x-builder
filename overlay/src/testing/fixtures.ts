@@ -8,16 +8,107 @@
 // `ActiveArchiveContext`. Active context is the archive-context activation — NOT
 // a settings field — and judge readiness is surfaced via OverlayReadiness.llm.
 
-import type {
-  ActiveArchiveContext,
-  AppSettings,
-  CaptureSummary,
-  OverlayReadiness,
-  ReadinessState,
-  SubsystemStatus,
+import {
+  deriveJudgeVerdict,
+  type ActiveArchiveContext,
+  type AppSettings,
+  type CaptureSummary,
+  type JudgeVerdict,
+  type OverlayReadiness,
+  type ReadinessState,
+  type SubsystemStatus,
 } from "@x-builder/shared";
 
 const ISO_NOW = "2026-06-21T00:00:00.000Z";
+
+const COMPOSER_TESTID = "tweetTextarea_0";
+
+/**
+ * Build a REAL `div[data-testid="tweetTextarea_0"]` carrying a single Text node
+ * of `text`, appended to a real container in `document.body`. This is the
+ * XOB-022 inline `n(text, widthPx)` composer fixture promoted into a shared
+ * ticket-owned helper (XOB-023) so the highlight-layer suite and the provenance
+ * suite read one composer shape. Browser mode lays it out for real, so
+ * `el.textContent` and `range.getClientRects()` over its text are real; the
+ * `widthPx` knob forces a narrow box when a test needs a long quote to wrap.
+ *
+ * Returns the bare element. Callers append/teardown via their own harness (the
+ * provenance suite removes the parent container in `afterEach`); the element's
+ * parent container carries `data-xb-fixture="composer"` for bulk teardown.
+ */
+export function buildComposerFixture(text: string, widthPx = 500): HTMLDivElement {
+  const container = document.createElement("div");
+  container.dataset.xbFixture = "composer";
+  // Anchor the container so getBoundingClientRect returns a stable, non-zero box.
+  container.style.position = "absolute";
+  container.style.top = "100px";
+  container.style.left = "50px";
+  container.style.width = `${widthPx}px`;
+
+  const el = document.createElement("div");
+  el.dataset.testid = COMPOSER_TESTID;
+  el.style.width = `${widthPx}px`;
+  el.style.font = "16px/1.4 monospace";
+  el.style.whiteSpace = "pre-wrap";
+  el.style.wordBreak = "break-word";
+  el.append(document.createTextNode(text));
+
+  container.append(el);
+  document.body.append(container);
+
+  return el;
+}
+
+/**
+ * Build a REAL `JudgeVerdict` (all thirteen score dimensions, headline,
+ * strengths, improvements, annotations) — no Zod re-declaration. The `verdict`
+ * LABEL is derived from `scores.overall` via shared's `deriveJudgeVerdict`
+ * unless an explicit `verdict` override is supplied. This is load-bearing:
+ * `deriveApproved` reads the LABEL, not the raw score, so the boundary the
+ * approval ACs assert (overall 70 → true, 69 → false) only holds when the label
+ * is consistent with `overall`. Tests that want to break that consistency pass
+ * an explicit `verdict`.
+ *
+ * `overrides.scores` is merged over the default scores so a test can set only
+ * `{ overall }` and keep the other twelve dimensions valid.
+ */
+export function makeJudgeVerdict(
+  overrides: Partial<Omit<JudgeVerdict, "scores">> & {
+    scores?: Partial<JudgeVerdict["scores"]>;
+  } = {},
+): JudgeVerdict {
+  const { scores: scoreOverrides, verdict: verdictOverride, ...rest } = overrides;
+
+  const scores: JudgeVerdict["scores"] = {
+    overall: 80,
+    replies: 80,
+    profileClicks: 80,
+    impressions: 80,
+    bookmarkValue: 80,
+    dwellProxy: 80,
+    voiceMatch: 80,
+    negativeRisk: 80,
+    answerEffort: 80,
+    strangerAnswerability: 80,
+    statusDependency: 80,
+    replyVsQuoteOrientation: 80,
+    audienceMatch: null,
+    ...scoreOverrides,
+  };
+
+  return {
+    // Label-from-overall unless explicitly overridden, so deriveApproved agrees
+    // with the asserted boundary. See doc comment above.
+    verdict: verdictOverride ?? deriveJudgeVerdict(scores.overall),
+    confidence: "medium",
+    scores,
+    headline: "Solid draft with room to tighten the hook.",
+    strengths: ["Clear point of view"],
+    improvements: ["Tighten the opening line"],
+    annotations: [],
+    ...rest,
+  };
+}
 
 /**
  * Build a real `AppSettings` object (the full shared shape). Defaults to a valid
