@@ -712,9 +712,13 @@ describe("posts analyze API — live auto-context and per-item cooldown", () => 
         // A trailing median was injected, so the reach base is the median, not a
         // follower estimate.
         expect(item.prediction.baseSource).toBe("trailing_median");
-        // The cooldown field is present on the scored shape (value may be
-        // undefined for a format with no in-window signal).
-        expect("cooldown" in item).toBe(true);
+        // The only request item is a genuine_question, and the seeded corpus has
+        // no in-window genuine_question activity (the filler posts classify as
+        // wisdom_one_liner). With no signal for the item's format, cooldown is
+        // absent — the designed state (cooldownSignalSchema is optional, and the
+        // window service never emits a count-0 signal). A real present-signal case
+        // is covered by the dedicated hot_take cooldown test below.
+        expect(item).not.toHaveProperty("cooldown");
       }
     } finally {
       await app.close();
