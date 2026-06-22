@@ -150,8 +150,9 @@ const parseApiError = (payload: unknown) => apiErrorSchema.parse(payload);
 // Per-test isolation: fresh mkdtemp root + real repository + a real
 // RepetitionWindowService pinned to the deterministic clock. The service is
 // passed to buildServer via `repetitionWindowService`, the injection seam Green
-// adds to BuildServerOptions in XOB-009. Referencing it now is an expected
-// RED typecheck error (TS2353) until Green adds the option.
+// adds to BuildServerOptions. Referencing it here is the expected
+// pre-implementation (RED) state — a TS2353 typecheck error until Green adds
+// the option.
 // ---------------------------------------------------------------------------
 let root: string;
 let repository: JsonFilePostLibraryRepository;
