@@ -9,10 +9,40 @@ import {
   PostLibraryStorageError,
   postLibraryStoreSchema,
   type CanonicalOwnPostInput,
+  type MetricSnapshot,
+  type SourceRef,
 } from "../post-library-repository";
 
 const importedAt = "2026-06-16T10:00:00.000Z";
 const sourceHash = "sha256:7a2f4e9c1b3d5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcd";
+
+// Real consumers (e.g. XOB-007/008) must narrow on the `source` discriminant before
+// reading any variant-specific field. These helpers filter a union array down to a single
+// variant so the subsequent reads are statically the narrowed arm — no casts, and reads of
+// a field that belongs to the other arm become a compile error rather than `undefined`.
+const archiveSnapshots = (snapshots: readonly MetricSnapshot[]) =>
+  snapshots.filter(
+    (snapshot): snapshot is Extract<MetricSnapshot, { source: "archive_tweets_js" }> =>
+      snapshot.source === "archive_tweets_js",
+  );
+
+const liveSnapshots = (snapshots: readonly MetricSnapshot[]) =>
+  snapshots.filter(
+    (snapshot): snapshot is Extract<MetricSnapshot, { source: "x_live_capture" }> =>
+      snapshot.source === "x_live_capture",
+  );
+
+const archiveRefs = (refs: readonly SourceRef[]) =>
+  refs.filter(
+    (ref): ref is Extract<SourceRef, { source: "archive_tweets_js" }> =>
+      ref.source === "archive_tweets_js",
+  );
+
+const liveRefs = (refs: readonly SourceRef[]) =>
+  refs.filter(
+    (ref): ref is Extract<SourceRef, { source: "x_live_capture" }> =>
+      ref.source === "x_live_capture",
+  );
 
 const withTempRoot = async <T>(run: (root: string) => Promise<T>): Promise<T> => {
   const root = await mkdtemp(join(tmpdir(), "x-builder-post-library-"));
@@ -228,7 +258,7 @@ describe("JSON file post library repository", () => {
 
       expect(store.posts).toHaveLength(1);
       expect(store.posts[0]?.metricSnapshots).toHaveLength(2);
-      expect(store.posts[0]?.sourceRefs.map((ref) => ref.importRunId)).toEqual([
+      expect(archiveRefs(store.posts[0]?.sourceRefs ?? []).map((ref) => ref.importRunId)).toEqual([
         "import-1",
         "import-2",
       ]);
@@ -355,7 +385,9 @@ describe("JSON file post library repository", () => {
 
         expect(store.posts).toHaveLength(1);
         expect(store.posts[0]?.metricSnapshots).toHaveLength(1);
-        expect(store.posts[0]?.metricSnapshots[0]?.observedAt).toBe("2024-01-05T12:00:00.000Z");
+        const archived = archiveSnapshots(store.posts[0]?.metricSnapshots ?? []);
+        expect(archived).toHaveLength(1);
+        expect(archived[0]?.observedAt).toBe("2024-01-05T12:00:00.000Z");
       });
     });
 
@@ -383,9 +415,12 @@ describe("JSON file post library repository", () => {
 
         expect(store.posts).toHaveLength(1);
         expect(store.posts[0]?.metricSnapshots).toHaveLength(2);
-        expect(
-          store.posts[0]?.metricSnapshots.map((snapshot) => snapshot.observedAt).sort(),
-        ).toEqual(["2024-01-05T12:00:00.000Z", "2024-06-05T12:00:00.000Z"]);
+        const archived = archiveSnapshots(store.posts[0]?.metricSnapshots ?? []);
+        expect(archived).toHaveLength(2);
+        expect(archived.map((snapshot) => snapshot.observedAt).sort()).toEqual([
+          "2024-01-05T12:00:00.000Z",
+          "2024-06-05T12:00:00.000Z",
+        ]);
       });
     });
 
@@ -411,7 +446,9 @@ describe("JSON file post library repository", () => {
 
         expect(store.posts).toHaveLength(1);
         expect(store.posts[0]?.sourceRefs).toHaveLength(1);
-        expect(store.posts[0]?.sourceRefs[0]?.importRunId).toBe("import-1");
+        const refs = archiveRefs(store.posts[0]?.sourceRefs ?? []);
+        expect(refs).toHaveLength(1);
+        expect(refs[0]?.importRunId).toBe("import-1");
       });
     });
 
@@ -439,9 +476,9 @@ describe("JSON file post library repository", () => {
 
         expect(store.posts).toHaveLength(1);
         expect(store.posts[0]?.sourceRefs).toHaveLength(2);
-        expect(store.posts[0]?.sourceRefs.map((ref) => ref.sourceHash).sort()).toEqual(
-          [otherHash, sourceHash].sort(),
-        );
+        const refs = archiveRefs(store.posts[0]?.sourceRefs ?? []);
+        expect(refs).toHaveLength(2);
+        expect(refs.map((ref) => ref.sourceHash).sort()).toEqual([otherHash, sourceHash].sort());
       });
     });
 
@@ -538,12 +575,12 @@ describe("JSON file post library repository", () => {
         };
 
         expect(store.schemaVersion).toBe(2);
-        expect((store as unknown as { profileSnapshots: unknown[] }).profileSnapshots).toEqual([]);
+        expect(store.profileSnapshots).toEqual([]);
         expect(store.posts).toHaveLength(1);
         expect(store.posts[0]?.id).toBe(parsedFixture.posts[0]?.id);
         expect(store.posts[0]?.text).toBe(parsedFixture.posts[0]?.text);
         expect(store.posts[0]?.metricSnapshots).toEqual(parsedFixture.posts[0]?.metricSnapshots);
-        expect(store.posts[0]?.sourceRefs.map((ref) => ref.importRunId)).toEqual([
+        expect(archiveRefs(store.posts[0]?.sourceRefs ?? []).map((ref) => ref.importRunId)).toEqual([
           "import-legacy-1",
         ]);
         expect(store.posts[0]?.sourceRefs.map((ref) => ref.rawId)).toEqual([
@@ -681,30 +718,24 @@ describe("JSON file post library repository", () => {
         expect(store.schemaVersion).toBe(2);
         expect(store.posts).toHaveLength(1);
 
-        const snapshot = store.posts[0]?.metricSnapshots[0] as
-          | { source: string; capturedAt: string; impressions?: number; likes?: number }
-          | undefined;
+        const liveMetrics = liveSnapshots(store.posts[0]?.metricSnapshots ?? []);
+        expect(liveMetrics).toHaveLength(1);
+        const snapshot = liveMetrics[0];
         expect(snapshot?.source).toBe("x_live_capture");
         expect(snapshot?.capturedAt).toBe("2026-06-20T08:55:00.000Z");
         expect(snapshot?.impressions).toBe(4200);
         expect(snapshot?.likes).toBe(31);
 
-        const ref = store.posts[0]?.sourceRefs[0] as
-          | { source: string; captureSessionId?: string; rawId: string; sourceHash?: string }
-          | undefined;
+        const liveSourceRefs = liveRefs(store.posts[0]?.sourceRefs ?? []);
+        expect(liveSourceRefs).toHaveLength(1);
+        const ref = liveSourceRefs[0];
         expect(ref?.source).toBe("x_live_capture");
         expect(ref?.captureSessionId).toBe("session-1");
         expect(ref?.rawId).toBe("1900000000000000001");
-        expect(ref?.sourceHash).toBeUndefined();
+        // sourceHash exists only on the archive arm; narrowing to the live arm makes a read
+        // of it a compile error, so its absence is enforced by the type system, not asserted.
 
-        const profiles = (store as unknown as {
-          profileSnapshots: Array<{
-            platformUserId: string;
-            screenName: string;
-            followers?: number;
-            capturedAt: string;
-          }>;
-        }).profileSnapshots;
+        const profiles = store.profileSnapshots;
         expect(profiles).toHaveLength(1);
         expect(profiles[0]?.platformUserId).toBe("user-123");
         expect(profiles[0]?.screenName).toBe("founder");
@@ -938,15 +969,9 @@ describe("JSON file post library repository", () => {
         const store = await repository.loadStore();
 
         expect(store.posts).toHaveLength(1);
-        const allRefs = (store.posts[0]?.sourceRefs ?? []) as unknown as Array<{
-          source: string;
-          captureSessionId?: string;
-        }>;
-        const liveRefs = allRefs.filter((ref) => ref.source === "x_live_capture");
-        expect(liveRefs).toHaveLength(1);
-        expect(
-          (liveRefs?.[0] as { captureSessionId?: string } | undefined)?.captureSessionId,
-        ).toBe("session-3");
+        const liveSourceRefs = liveRefs(store.posts[0]?.sourceRefs ?? []);
+        expect(liveSourceRefs).toHaveLength(1);
+        expect(liveSourceRefs[0]?.captureSessionId).toBe("session-3");
       });
     });
   });
