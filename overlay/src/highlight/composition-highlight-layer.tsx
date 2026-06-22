@@ -48,6 +48,10 @@ export interface CompositionHighlightLayerProps {
   showGreen: boolean;
 }
 
+/** A stable empty-annotations singleton — passed in the green state so the
+ *  locate effect's dependency is reference-stable across re-renders. */
+const EMPTY_ANNOTATIONS: JudgeAnnotation[] = [];
+
 /** Origin offset (viewport coords) the layer's children position against. */
 export interface LayerOrigin {
   top: number;
@@ -98,10 +102,14 @@ export function CompositionHighlightLayer({
   const layerRef = useRef<HTMLDivElement | null>(null);
 
   // Track the composer's box (debounced; all-zero ⇒ null) and the located rects.
-  // In the green state the annotations are ignored entirely — pass [] so the
-  // §16.4 pipeline does no work and emits zero blue spans.
+  // In the green state the annotations are ignored entirely — pass the STABLE
+  // empty array (a frozen singleton, never a fresh `[]`) so the §16.4 pipeline
+  // does no work, emits zero blue spans, AND the `useHighlightRects` locate
+  // effect does not re-arm on every re-render (a fresh `[]` each render would
+  // re-schedule its debounce → flushSync setRects → re-render → re-arm, an
+  // infinite loop under a `runAllTimers`-style drain).
   const composerRect = useComposerRect(composerEl);
-  const highlightRects = useHighlightRects(composerEl, showGreen ? [] : annotations);
+  const highlightRects = useHighlightRects(composerEl, showGreen ? EMPTY_ANNOTATIONS : annotations);
 
   // composerEl === null ⇒ render nothing (no layer, no error).
   if (composerEl === null) {
