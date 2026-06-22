@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # XOB-011: GenerateIdeasService — By-Format LLM Generation + Generate→Judge Refine
