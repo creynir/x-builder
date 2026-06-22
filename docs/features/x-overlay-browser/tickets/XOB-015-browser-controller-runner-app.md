@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # XOB-015: BrowserController + RunnerApp bootstrap — persistent context, `addInitScript`, one-command, first-run install
