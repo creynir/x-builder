@@ -21,6 +21,7 @@ import {
   archiveTweetsImportResponseSchema,
   archiveTweetsValidateRequestSchema,
   archiveTweetsValidateResponseSchema,
+  captureSummarySchema,
   type CooldownReport,
   generateCategorySchema,
   generateIdeaRequestSchema,
@@ -40,6 +41,7 @@ import { z } from "zod";
 
 import { DeterministicAnalysisService } from "../deterministic/deterministic-analysis-service.js";
 import { RepetitionWindowService } from "../capture/repetition-window-service.js";
+import { LiveCaptureService } from "../capture/live-capture-service.js";
 import { LiveContextResolver } from "../capture/live-context-resolver.js";
 import { GenerateCategoryService } from "../suggest/generate-category-service.js";
 import {
@@ -105,6 +107,7 @@ export interface BuildServerOptions {
   generateCategoryService?: GenerateCategoryService;
   judgeDraftService?: JudgeDraft;
   liveContextResolver?: LiveContextResolver;
+  liveCaptureService?: LiveCaptureService;
 }
 
 export type EngineRuntimeConfig = {
@@ -638,6 +641,8 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       postLibraryRepository,
       new RepetitionWindowService(postLibraryRepository),
     );
+  const liveCaptureService =
+    options.liveCaptureService ?? new LiveCaptureService(postLibraryRepository);
   const readinessService =
     options.readinessService ??
     new DefaultReadinessService(
@@ -870,6 +875,20 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       const result = await generateCategoryService.getCategories();
 
       return reply.send(parseResponseContract(z.array(generateCategorySchema), result));
+    } catch (error) {
+      if (error instanceof PostLibraryStorageError) {
+        throw new NormalizedApiError(libraryStorageFailedError());
+      }
+
+      throw error;
+    }
+  });
+
+  app.get("/capture/summary", async (_request, reply) => {
+    try {
+      const result = await liveCaptureService.summary();
+
+      return reply.send(parseResponseContract(captureSummarySchema, result));
     } catch (error) {
       if (error instanceof PostLibraryStorageError) {
         throw new NormalizedApiError(libraryStorageFailedError());

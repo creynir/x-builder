@@ -1,8 +1,10 @@
 import {
+  captureSummarySchema,
   liveCapturedPostSchema,
   liveCapturedProfileSchema,
   type CaptureIngestRequest,
   type CaptureIngestResponse,
+  type CaptureSummary,
   type LiveCapturedPost,
 } from "@x-builder/shared";
 import { z } from "zod";
@@ -110,5 +112,51 @@ export class LiveCaptureService {
       profileApplied: parsed.profile !== undefined,
       corpusSize,
     };
+  }
+
+  async summary(): Promise<CaptureSummary> {
+    const store = await this.repo.loadStore();
+
+    // lastCaptureAt: the max capturedAt across every x_live_capture snapshot in
+    // the corpus. Narrowing the discriminated union on `.source` keeps the read
+    // statically the live arm, so capturedAt is always defined. Archive-only
+    // corpora yield no live snapshots and the field stays absent.
+    let lastCaptureAt: string | undefined;
+    for (const post of store.posts) {
+      for (const snapshot of post.metricSnapshots) {
+        if (snapshot.source === "x_live_capture") {
+          if (lastCaptureAt === undefined || snapshot.capturedAt > lastCaptureAt) {
+            lastCaptureAt = snapshot.capturedAt;
+          }
+        }
+      }
+    }
+
+    // Most-recent profile snapshot by capturedAt; ties resolve to the first in
+    // array order (a strictly-greater comparison never replaces an equal one).
+    let latestProfile = store.profileSnapshots[0];
+    for (const profile of store.profileSnapshots) {
+      if (latestProfile === undefined || profile.capturedAt > latestProfile.capturedAt) {
+        latestProfile = profile;
+      }
+    }
+
+    // Build the result adding ONLY the keys that are actually available, so an
+    // absent optional is genuinely missing (not a null/undefined-valued key).
+    const result: CaptureSummary = {
+      postsCaptured: store.posts.length,
+      ...(lastCaptureAt !== undefined ? { lastCaptureAt } : {}),
+      ...(latestProfile !== undefined
+        ? {
+            ...(latestProfile.followers !== undefined
+              ? { followers: latestProfile.followers }
+              : {}),
+            screenName: latestProfile.screenName,
+            profileCapturedAt: latestProfile.capturedAt,
+          }
+        : {}),
+    };
+
+    return captureSummarySchema.parse(result);
   }
 }
