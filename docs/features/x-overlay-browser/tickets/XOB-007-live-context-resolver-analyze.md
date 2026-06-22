@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # XOB-007: LiveContextResolver + /posts/analyze wiring — auto followers/median/repeatHistory + per-item cooldown
