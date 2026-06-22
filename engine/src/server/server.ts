@@ -22,7 +22,6 @@ import {
   archiveTweetsValidateRequestSchema,
   archiveTweetsValidateResponseSchema,
   type CooldownReport,
-  type CooldownSignal,
   generateCategorySchema,
   generateIdeaRequestSchema,
   generateIdeaResponseSchema,
@@ -281,25 +280,12 @@ const parseResponseContract = <T>(schema: z.ZodType<T>, value: unknown): T => {
   }
 };
 
-// A "clear" cooldown signal for a format that has no in-window posts. Every
-// scored item carries a cooldown key (the field must survive the JSON wire), so
-// a format absent from the report resolves to this zero-count clear signal.
-const clearCooldownSignal = (
-  format: CooldownSignal["format"],
-  windowDays: number,
-): CooldownSignal => ({
-  format,
-  countInWindow: 0,
-  windowDays,
-  status: "clear",
-  message: `0 ${format} posts in the last ${windowDays} days — all clear.`,
-});
-
 // Attach a per-item cooldown signal to each scored item by looking up its
-// detectedFormat in the precomputed window report. A format with no in-window
-// signal resolves to a clear signal so every scored item carries the field.
-// score_failed items are returned unchanged (no cooldown key), keeping the
-// response valid against analyzePostsResponseSchema.
+// detectedFormat in the precomputed window report. A scored item gets a cooldown
+// key ONLY when the report carries a real in-window signal for its format;
+// formats with no signal leave the key genuinely absent (the field is
+// .optional() in the contract). score_failed items are returned unchanged (no
+// cooldown key), keeping the response valid against analyzePostsResponseSchema.
 const attachCooldownSignals = (
   response: AnalyzePostsResponse,
   report: CooldownReport,
@@ -310,11 +296,11 @@ const attachCooldownSignals = (
       return item;
     }
 
-    const signal =
-      report.signals.find((candidate) => candidate.format === item.detectedFormat) ??
-      clearCooldownSignal(item.detectedFormat, report.windowDays);
+    const signal = report.signals.find(
+      (candidate) => candidate.format === item.detectedFormat,
+    );
 
-    return { ...item, cooldown: signal };
+    return signal === undefined ? item : { ...item, cooldown: signal };
   }),
 });
 
