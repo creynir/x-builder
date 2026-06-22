@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-022: [FND] `CompositionHighlightLayer` — Range→`getClientRects` positioning, graceful degrade
@@ -178,3 +178,23 @@ interface HighlightRect {
 - `getBoundingClientRect()` returns all-zero rect (composer not yet laid out or off-screen): treat as `composerEl === null` — render nothing, schedule retry on next debounce tick.
 - Rapid `annotations` prop updates (judge result arrives mid-typing): cancel pending debounce, schedule fresh re-map; the layer shows stale highlights until the new debounce tick fires (acceptable gap, ≤ 120 ms).
 - Shadow host is itself inside a CSS transform or scrolled container: `getClientRects()` returns viewport-relative rects; the layer's absolute positioning must offset from the shadow host's own `getBoundingClientRect().top/left`, not from `{0,0}`. Implement a `getLayerOrigin()` utility that returns the shadow root's host element rect.
+
+## Pipeline Log
+
+Lane: rgb-tdd lean Red-first (Red self-validates → Green → combined Blue+Yellow → `[FND]` architectural checkpoint).
+
+| Station | Commit | Result |
+|---|---|---|
+| pre-Red SHA | `d35a714` | base |
+| Red (failing tests, self-validated) | `14fb458` | scope/ticket-ids gates pass; browser-mode Chromium harness |
+| Green (impl) | `5cbf451` | 183 tests pass; typecheck 10/10; overlay build self-contained; `gates.py all` clean |
+| Blue (validate Green) | — | **APPROVE_WITH_CONCERNS** — empirically verified rendered `spanRect.left = quoteRect.left` (Δ 0px); offsets telescope through non-`{0,0}` shadow-host origin; two-state XOR enforced structurally at the data source (`useHighlightRects(el, showGreen ? [] : annotations)`), not just the render branch. Red's `span.style.left < composerRect.left` (test line 661) encodes a test-artifact, not a real invariant. |
+| Yellow (intent/wiring) | — | **APPROVE_WITH_CONCERNS** — two-state exclusivity enforced; X-policy non-invasive; zero-trace; offsetParent/transform/scroll-safe via `getLayerOrigin()`. |
+| `[FND]` architectural checkpoint (Blue) | — | **APPROVE** — `{composerEl, annotations, showGreen}` contract closed against XOB-023 (provenance drives `showGreen`) and XOB-027 (apply→green is an atomic prop flip; green branch starves the §16.4 pipeline so no stale blue underlay survives). Positioning substrate sound for XOB-029's moving modal. Refactor **deferred** (dual-origin telescopes to 0px — correct math, not luck; no downstream ticket forced to work around it; the L2 skew fix is XOB-029's natural job regardless; refactor is internal-only → zero contract churn deferring it). |
+
+### Concerns Ledger
+
+| # | Concern | Owner | Resolution |
+|---|---|---|---|
+| L1 | **Dual coordinate origin** (host-vertical / composer-horizontal). Renders 0px-correct but mixes two origins; Red's `span.style.left < composerRect.left` (test line 661) protects the artifact, not the goal. | XOB-022 follow-up cleanup | Refactor to single host origin (`rect − layerOrigin` uniform) + recalibrate Red's assertion to rendered-rect-within-composer (the invariant already correct at test lines 192–194). Internal only; no contract change. Non-blocking for XOB-023. |
+| L2 | **Transient multi-source-read skew** — `getLayerOrigin(layerRef.current)` and `useComposerRect` read on separate ticks; during modal motion they can momentarily disagree (self-healing within ≤1 debounce/frame). | **XOB-029** | Feed one per-frame snapshot (host origin + composer rect captured together) through the shared rAF rect tracker. Required by XOB-029 regardless of L1. |
