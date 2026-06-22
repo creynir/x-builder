@@ -2,13 +2,23 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { CaptureIngestRequest, LiveCapturedPost } from "@x-builder/shared";
+import {
+  apiErrorSchema,
+  captureSummarySchema,
+  type CaptureIngestRequest,
+  type CaptureSummary,
+  type LiveCapturedPost,
+} from "@x-builder/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   JsonFilePostLibraryRepository,
+  PostLibraryStorageError,
+  type CanonicalOwnPostInput,
   type MetricSnapshot,
+  type PostLibraryRepository,
 } from "../../server/post-library-repository";
+import { buildServer } from "../../server/server";
 import { LiveCaptureService } from "../live-capture-service";
 
 // The store's metricSnapshots is a TRUE discriminated union on `source`. Narrow to the
@@ -68,6 +78,120 @@ const livePost = (overrides: Partial<LiveCapturedPost> = {}): LiveCapturedPost =
 const request = (overrides: Partial<CaptureIngestRequest> = {}): CaptureIngestRequest => ({
   posts: [livePost()],
   ...overrides,
+});
+
+const parseJsonPayload = (payload: string): unknown => JSON.parse(payload);
+
+// ---------------------------------------------------------------------------
+// Canonical-post fixtures for summary(): seeded directly through upsertPosts so
+// each test controls the exact post count and the archive-vs-live snapshot mix
+// (ingest() would force every post to carry a live snapshot, which the
+// archive-only and mixed-snapshot summary cases must avoid).
+// ---------------------------------------------------------------------------
+const baseEntityFlags = {
+  hasUrls: false,
+  hasMedia: false,
+  hasHashtags: false,
+  hasMentions: false,
+} as const;
+
+let summaryIdCounter = 0;
+
+// An archive-only post: no x_live_capture snapshot, so it contributes to
+// postsCaptured but never to lastCaptureAt.
+const archiveOnlyPost = (
+  overrides: Partial<CanonicalOwnPostInput> = {},
+): CanonicalOwnPostInput => {
+  summaryIdCounter += 1;
+  const platformPostId = `180000000000000${String(summaryIdCounter).padStart(4, "0")}`;
+  const observedAt = "2026-05-01T00:00:00.000Z";
+
+  return {
+    id: `summary-archive-${summaryIdCounter}`,
+    platform: "x",
+    platformPostId,
+    text: "An archive-imported post.",
+    createdAt: observedAt,
+    kind: "original",
+    language: "en",
+    replyReferences: {},
+    entityFlags: { ...baseEntityFlags },
+    weakMetrics: {},
+    metricSnapshots: [
+      {
+        source: "archive_tweets_js",
+        observedAt,
+        importedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ],
+    sourceRefs: [
+      {
+        source: "archive_tweets_js",
+        importRunId: "summary-import-1",
+        rawId: platformPostId,
+        sourceHash:
+          "sha256:7a2f4e9c1b3d5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcd",
+      },
+    ],
+    ...overrides,
+  };
+};
+
+// A post carrying a single x_live_capture snapshot with an explicit capturedAt,
+// the value that feeds lastCaptureAt.
+const liveSnapshotPost = (
+  capturedAt: string,
+  overrides: Partial<CanonicalOwnPostInput> = {},
+): CanonicalOwnPostInput => {
+  summaryIdCounter += 1;
+  const platformPostId = `190000000000000${String(summaryIdCounter).padStart(4, "0")}`;
+
+  return {
+    id: `summary-live-${summaryIdCounter}`,
+    platform: "x",
+    platformPostId,
+    text: "A live-captured post.",
+    createdAt: "2026-06-19T18:00:00.000Z",
+    kind: "original",
+    language: "en",
+    replyReferences: {},
+    entityFlags: { ...baseEntityFlags },
+    weakMetrics: {},
+    metricSnapshots: [
+      {
+        source: "x_live_capture",
+        capturedAt,
+        impressions: 1200,
+      },
+    ],
+    sourceRefs: [
+      {
+        source: "x_live_capture",
+        captureSessionId: "summary-session-1",
+        rawId: platformPostId,
+      },
+    ],
+    ...overrides,
+  };
+};
+
+// A repository whose every read fails with PostLibraryStorageError. Drives
+// summary() (and the route) into the storage-failure path for the 500 test.
+const failingRepository = (): PostLibraryRepository => ({
+  loadStore: async () => {
+    throw new PostLibraryStorageError("boom");
+  },
+  upsertPosts: async () => {
+    throw new PostLibraryStorageError("boom");
+  },
+  saveImportRun: async () => undefined,
+  saveDerivedInsights: async () => undefined,
+  setActiveContext: async () => undefined,
+  pushProfileSnapshot: async () => undefined,
+});
+
+beforeEach(() => {
+  summaryIdCounter = 0;
 });
 
 describe("LiveCaptureService.ingest", () => {
@@ -306,5 +430,243 @@ describe("LiveCaptureService.ingest", () => {
     expect(refs).toHaveLength(1);
     expect(refs[0]?.rawId).toBe("1900000000000000070");
     expect(refs[0]?.captureSessionId.length).toBeGreaterThan(0);
+  });
+});
+
+describe("LiveCaptureService.summary", () => {
+  // Coverage 1 + AC: 3 posts plus a single profile snapshot ->
+  // postsCaptured 3, followers/screenName/profileCapturedAt from that snapshot.
+  it("returns post count plus the most-recent profile fields", async () => {
+    await repository.upsertPosts([
+      liveSnapshotPost("2026-06-20T08:00:00.000Z"),
+      liveSnapshotPost("2026-06-20T09:00:00.000Z"),
+      liveSnapshotPost("2026-06-20T10:00:00.000Z"),
+    ]);
+    await repository.pushProfileSnapshot({
+      platformUserId: "user-alice",
+      screenName: "alice",
+      followers: 8000,
+      capturedAt: "2026-06-20T10:05:00.000Z",
+    });
+
+    const summary: CaptureSummary = await service.summary();
+
+    expect(captureSummarySchema.safeParse(summary).success).toBe(true);
+    expect(summary.postsCaptured).toBe(3);
+    expect(summary.followers).toBe(8000);
+    expect(summary.screenName).toBe("alice");
+    expect(summary.profileCapturedAt).toBe("2026-06-20T10:05:00.000Z");
+  });
+
+  // Coverage 2: lastCaptureAt is the max capturedAt across every x_live_capture
+  // snapshot in the store (here spread across three separate posts).
+  it("reports the maximum capturedAt across all live snapshots as lastCaptureAt", async () => {
+    await repository.upsertPosts([
+      liveSnapshotPost("2026-06-20T08:00:00.000Z"),
+      liveSnapshotPost("2026-06-20T11:30:00.000Z"),
+      liveSnapshotPost("2026-06-20T09:15:00.000Z"),
+    ]);
+
+    const summary = await service.summary();
+
+    expect(summary.postsCaptured).toBe(3);
+    expect(summary.lastCaptureAt).toBe("2026-06-20T11:30:00.000Z");
+  });
+
+  // Coverage 3 + AC: empty store -> only postsCaptured: 0, every optional field
+  // ABSENT (not null), and no exception.
+  it("returns only postsCaptured: 0 for an empty store with all optionals absent", async () => {
+    const summary = await service.summary();
+
+    expect(captureSummarySchema.safeParse(summary).success).toBe(true);
+    expect(summary.postsCaptured).toBe(0);
+    expect(summary).not.toHaveProperty("lastCaptureAt");
+    expect(summary).not.toHaveProperty("followers");
+    expect(summary).not.toHaveProperty("screenName");
+    expect(summary).not.toHaveProperty("profileCapturedAt");
+  });
+
+  // Coverage 4 + AC: archive-only corpus (no live snapshots, no profiles) ->
+  // postsCaptured counts the posts; lastCaptureAt/followers/screenName/
+  // profileCapturedAt all absent.
+  it("counts archive-only posts but omits live and profile fields", async () => {
+    await repository.upsertPosts([
+      archiveOnlyPost(),
+      archiveOnlyPost(),
+      archiveOnlyPost(),
+      archiveOnlyPost(),
+    ]);
+
+    const summary = await service.summary();
+
+    expect(summary.postsCaptured).toBe(4);
+    expect(summary).not.toHaveProperty("lastCaptureAt");
+    expect(summary).not.toHaveProperty("followers");
+    expect(summary).not.toHaveProperty("screenName");
+    expect(summary).not.toHaveProperty("profileCapturedAt");
+  });
+
+  // Coverage 5: two profile snapshots, the most-recent (by capturedAt) carries
+  // followers 9000 -> that value wins.
+  it("reads followers from the most-recent profile snapshot", async () => {
+    await repository.pushProfileSnapshot({
+      platformUserId: "user-x",
+      screenName: "earlier",
+      followers: 5000,
+      capturedAt: "2026-06-20T08:00:00.000Z",
+    });
+    await repository.pushProfileSnapshot({
+      platformUserId: "user-x",
+      screenName: "later",
+      followers: 9000,
+      capturedAt: "2026-06-20T12:00:00.000Z",
+    });
+
+    const summary = await service.summary();
+
+    expect(summary.followers).toBe(9000);
+    expect(summary.screenName).toBe("later");
+    expect(summary.profileCapturedAt).toBe("2026-06-20T12:00:00.000Z");
+  });
+
+  // Edge: most-recent profile snapshot has no follower count -> followers field
+  // absent while screenName and profileCapturedAt are still present.
+  it("omits followers when the most-recent profile snapshot has no follower count", async () => {
+    await repository.pushProfileSnapshot({
+      platformUserId: "user-y",
+      screenName: "countless",
+      capturedAt: "2026-06-20T13:00:00.000Z",
+    });
+
+    const summary = await service.summary();
+
+    expect(summary).not.toHaveProperty("followers");
+    expect(summary.screenName).toBe("countless");
+    expect(summary.profileCapturedAt).toBe("2026-06-20T13:00:00.000Z");
+  });
+
+  // Edge: two profile snapshots share the same capturedAt -> the tie breaks to
+  // the first in array order (followers 1111, the earlier-pushed entry).
+  it("breaks a same-capturedAt profile tie toward the first in array order", async () => {
+    await repository.pushProfileSnapshot({
+      platformUserId: "user-tie",
+      screenName: "first-in-order",
+      followers: 1111,
+      capturedAt: "2026-06-20T14:00:00.000Z",
+    });
+    await repository.pushProfileSnapshot({
+      platformUserId: "user-tie",
+      screenName: "second-in-order",
+      followers: 2222,
+      capturedAt: "2026-06-20T14:00:00.000Z",
+    });
+
+    const summary = await service.summary();
+
+    expect(summary.followers).toBe(1111);
+    expect(summary.screenName).toBe("first-in-order");
+    expect(summary.profileCapturedAt).toBe("2026-06-20T14:00:00.000Z");
+  });
+
+  // Edge: a post carrying both an archive and a live snapshot. lastCaptureAt
+  // considers only the live snapshot; postsCaptured counts every post regardless
+  // of source mix.
+  it("considers only live snapshots for lastCaptureAt while counting every post", async () => {
+    const mixedPost = liveSnapshotPost("2026-06-20T07:00:00.000Z", {
+      metricSnapshots: [
+        {
+          source: "archive_tweets_js",
+          observedAt: "2026-06-25T00:00:00.000Z",
+          importedAt: "2026-06-25T01:00:00.000Z",
+        },
+        {
+          source: "x_live_capture",
+          capturedAt: "2026-06-20T07:00:00.000Z",
+          impressions: 900,
+        },
+      ],
+    });
+    await repository.upsertPosts([
+      mixedPost,
+      archiveOnlyPost(),
+    ]);
+
+    const summary = await service.summary();
+
+    // Both posts counted; the archive snapshot's later observedAt is ignored, so
+    // lastCaptureAt is the lone live capturedAt.
+    expect(summary.postsCaptured).toBe(2);
+    expect(summary.lastCaptureAt).toBe("2026-06-20T07:00:00.000Z");
+  });
+
+  // Edge / AC: summary() re-throws PostLibraryStorageError from loadStore.
+  it("re-throws PostLibraryStorageError raised by the repository read", async () => {
+    const throwingService = new LiveCaptureService(failingRepository());
+
+    await expect(throwingService.summary()).rejects.toBeInstanceOf(PostLibraryStorageError);
+  });
+});
+
+describe("GET /capture/summary route", () => {
+  // Coverage 6 + AC: a seeded corpus served over HTTP -> 200, body parses as
+  // captureSummarySchema with the expected post count and profile fields.
+  it("responds 200 with a captureSummarySchema body for a seeded corpus", async () => {
+    await repository.upsertPosts([
+      liveSnapshotPost("2026-06-20T08:00:00.000Z"),
+      liveSnapshotPost("2026-06-20T09:30:00.000Z"),
+    ]);
+    await repository.pushProfileSnapshot({
+      platformUserId: "user-bob",
+      screenName: "bob",
+      followers: 12000,
+      capturedAt: "2026-06-20T09:45:00.000Z",
+    });
+
+    const liveCaptureService = new LiveCaptureService(repository);
+    const app = buildServer({
+      postLibraryRepository: repository,
+      liveCaptureService,
+    });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/capture/summary",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = captureSummarySchema.parse(parseJsonPayload(response.body));
+      expect(body.postsCaptured).toBe(2);
+      expect(body.followers).toBe(12000);
+      expect(body.screenName).toBe("bob");
+      expect(body.lastCaptureAt).toBe("2026-06-20T09:30:00.000Z");
+      expect(body.profileCapturedAt).toBe("2026-06-20T09:45:00.000Z");
+    } finally {
+      await app.close();
+    }
+  });
+
+  // Coverage 7 + AC: the route's service reads through a repository that throws
+  // PostLibraryStorageError -> 500 with code "library_storage_failed".
+  it("responds 500 with library_storage_failed when the repository read fails", async () => {
+    const repo = failingRepository();
+    const throwingService = new LiveCaptureService(repo);
+    const app = buildServer({
+      postLibraryRepository: repo,
+      liveCaptureService: throwingService,
+    });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/capture/summary",
+      });
+
+      expect(response.statusCode).toBe(500);
+      const error = apiErrorSchema.parse(parseJsonPayload(response.body));
+      expect(error.code).toBe("library_storage_failed");
+    } finally {
+      await app.close();
+    }
   });
 });
