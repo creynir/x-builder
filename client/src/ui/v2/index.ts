@@ -9,6 +9,7 @@
 export { Alert, type AlertProps } from "./alert";
 export { Badge, type BadgeProps } from "./badge";
 export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from "./button";
+export { EmptyState, type EmptyStateProps } from "./empty-state";
 export { IconButton, type IconButtonProps, type IconButtonVariant } from "./icon-button";
 export { Input, type InputProps } from "./input";
 export { KeyValueList, type KeyValueItem, type KeyValueListProps } from "./key-value-list";
