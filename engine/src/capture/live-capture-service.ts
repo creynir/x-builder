@@ -98,10 +98,8 @@ export class LiveCaptureService {
 
     const writeResult = await this.repo.upsertPosts(inputs);
 
-    let profileApplied = false;
-    if (parsed.profile !== undefined && this.repo.pushProfileSnapshot) {
+    if (parsed.profile !== undefined) {
       await this.repo.pushProfileSnapshot(parsed.profile);
-      profileApplied = true;
     }
 
     const corpusSize = (await this.repo.loadStore()).posts.length;
@@ -109,7 +107,7 @@ export class LiveCaptureService {
     return {
       ...writeResult,
       duplicateCount: writeResult.duplicateCount + inBatchDuplicateCount,
-      profileApplied,
+      profileApplied: parsed.profile !== undefined,
       corpusSize,
     };
   }

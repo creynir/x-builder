@@ -148,9 +148,7 @@ export interface PostLibraryRepository {
   saveImportRun(importRun: ArchiveImportRun): Promise<void>;
   saveDerivedInsights(snapshot: ArchiveDerivedInsightSnapshot): Promise<void>;
   setActiveContext(context: ActiveArchiveContext): Promise<void>;
-  // Optional so existing repository fakes that predate live capture still satisfy
-  // the interface; JsonFilePostLibraryRepository implements it for real.
-  pushProfileSnapshot?(snapshot: LiveCapturedProfile): Promise<void>;
+  pushProfileSnapshot(snapshot: LiveCapturedProfile): Promise<void>;
 }
 
 export class PostLibraryStorageError extends Error {

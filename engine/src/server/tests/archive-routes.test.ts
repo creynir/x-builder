@@ -193,6 +193,7 @@ describe("archive routes", () => {
       saveImportRun: async () => undefined,
       saveDerivedInsights: async () => undefined,
       setActiveContext: async () => undefined,
+      pushProfileSnapshot: async () => undefined,
     };
     const app = buildServer({ postLibraryRepository: failingRepository });
 
