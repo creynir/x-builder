@@ -1,8 +1,12 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # XOB-027: JudgeStrip auto-improve (`applyJudgeSuggestions`) + approved state + green/blue provenance render
+
+> **CONTRACT RECONCILIATION (2026-06-22):** `ProvenanceState` (XOB-023) is a **bare string union** `"generated" | "user_written"` — NOT an object. Everywhere this ticket writes `provenance.status === "user_written"` / `provenance.status === "generated"`, read it as `provenance === "user_written"` / `provenance === "generated"`. Provenance fixtures are the bare strings (reuse the `USER_WRITTEN`/`GENERATED` constants already in `overlay/src/judge/__tests__/judge-strip.test.tsx`).
+>
+> **This ticket EXTENDS the existing `overlay/src/judge/judge-strip.tsx`** (built in XOB-026) — Green MODIFIES that file (adds `onApplyAll` prop + Apply-all/banner rendering + the `ApplyState`-machine render); Red EXTENDS the existing `judge-strip.test.tsx` (adds the 9 apply/provenance cases + adds `onApplyAll: vi.fn()` to the existing `props()` helper defaults so the prior XOB-026 tests still typecheck). Harness: Vitest **browser mode → Playwright Chromium** (NOT jsdom/RTL).
 
 ## Implementation Details
 
@@ -72,7 +76,7 @@ Blue annotations = `CompositionHighlightLayer` BLUE state (XOB-022 renders it; p
 
 - `ApplyJudgeSuggestionsResponse` — from `applyJudgeSuggestionsResponseSchema` (§16.3): `{ text, verdict, approved, improvedOverOriginal }`.
 - `ApplyState` — local discriminated union (defined above); owned by `ComposeCockpit` reducer.
-- `ProvenanceState` — `{ status: "generated" | "user_written" }` from `ProvenanceController` (XOB-023).
+- `ProvenanceState` — the bare string union `"generated" | "user_written"` from `ProvenanceController` (XOB-023). (NOT `{ status: … }`.)
 
 No new shared schemas introduced; all shapes from `@x-builder/shared`.
 
@@ -104,20 +108,21 @@ No new shared schemas introduced; all shapes from `@x-builder/shared`.
 
 ## Test Strategy & Fixture Ownership
 
-**Framework:** Vitest + RTL, shadow-DOM-aware.
+**Framework:** Vitest **browser mode → Playwright Chromium** via `vitest-browser-react` — the established overlay harness (XOB-018/020–026), shadow-DOM-aware. NOT jsdom/RTL.
 
-**Fixtures (owned by overlay package, extend XOB-026 fixtures):**
+**Fixtures (owned by overlay package; declare inline in the test or extend `overlay/src/testing/`):**
 ```ts
-// fixtures/apply-state.ts
-export const applyingState: ApplyState = "applying";
-export const appliedImproved: ApplyState = { status: "applied", improvedOverOriginal: true };
-export const appliedNotImproved: ApplyState = { status: "applied", improvedOverOriginal: false };
-export const applyFailed: ApplyState = { status: "failed", error: "generation_failed" };
+const applyingState: ApplyState = "applying";
+const appliedImproved: ApplyState = { status: "applied", improvedOverOriginal: true };
+const appliedNotImproved: ApplyState = { status: "applied", improvedOverOriginal: false };
+const applyFailed: ApplyState = { status: "failed", error: "generation_failed" };
 
-// fixtures/provenance.ts
-export const userWrittenProvenance: ProvenanceState = { status: "user_written" };
-export const generatedProvenance: ProvenanceState = { status: "generated" };
+// provenance fixtures are BARE STRINGS — reuse the existing USER_WRITTEN / GENERATED
+// consts in judge-strip.test.tsx:
+const userWrittenProvenance: ProvenanceState = "user_written";
+const generatedProvenance: ProvenanceState = "generated";
 ```
+Also add `onApplyAll: vi.fn()` to the existing `props()` helper defaults so prior XOB-026 tests keep typechecking once `onApplyAll` becomes a required prop.
 
 **Test cases:**
 1. **Apply-all hidden in `generated`** — `provenance: generated` → no "✦ Apply all suggestions" button in DOM.
