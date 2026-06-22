@@ -102,7 +102,7 @@ describe("POST /drafts/judge", () => {
   });
 
   it("carries an empty verdict.annotations array through the response body", async () => {
-    // XOB-010: the route is unchanged; the judge service supplies annotations. When
+    // The route is unchanged; the judge service supplies annotations. When
     // the injected judge returns a verdict with an empty annotations array, the HTTP
     // body must surface annotations as a present, empty array (not omitted, not null).
     const judge = vi.fn(async () => judgedOutcome);

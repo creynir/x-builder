@@ -380,7 +380,7 @@ describe("JudgeDraftService account profile and rubric", () => {
   });
 });
 
-// XOB-010: span-level annotations. The model emits a `quote` (verbatim substring),
+// Span-level annotations. The model emits a `quote` (verbatim substring),
 // a `severity`, and a one-line `recommendation`; the service threads these through
 // the structured-output parser into verdict.annotations alongside the aggregate
 // scores. The model output never carries a `verdict` key (omit({ verdict })) and
@@ -501,7 +501,7 @@ describe("JudgeDraftService span annotations", () => {
   });
 });
 
-// XOB-010: the shared judgeVerdictSchema owns the annotations contract; the engine
+// The shared judgeVerdictSchema owns the annotations contract; the engine
 // consumes it. These round-trips pin the additive default behavior at the schema
 // boundary independent of the service wiring.
 describe("judgeVerdictSchema annotations round-trip", () => {
