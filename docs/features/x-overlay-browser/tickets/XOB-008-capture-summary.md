@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-008: LiveCaptureService.summary + GET /capture/summary — capture summary / auto-followers source
@@ -134,3 +134,15 @@ Coverage:
 - Posts with both archive and live metric snapshots → `lastCaptureAt` considers only `x_live_capture` snapshots; `postsCaptured` counts all posts regardless of source.
 - `screenName` at exactly 80 characters → accepted; 81 → silently truncated or surfaced as a schema validation issue upstream (the capture normalizer enforces ≤ 80).
 - `PostLibraryStorageError` from `loadStore` → re-thrown by `summary()`; the route maps it to `library_storage_failed`.
+
+## Pipeline Log
+
+Lean Red-first lane. (First Red dispatch returned an empty/malformed run with 0 tool-uses and no commit — re-spawned fresh; no repo impact.)
+
+- **Red** (`6c6495f`): extended `live-capture-service.test.ts` with `describe("summary")` + co-located `GET /capture/summary` route tests (11 new; 12 existing ingest preserved). Seeds via `upsertPosts` (not `ingest`, which forces a live snapshot) to exercise archive-only/mixed cases; `failingRepository()` for the 500 path; `not.toHaveProperty` for absent optionals. Corrected a stale brief path (generate-category tests live in `suggest/tests/`, not `server/tests/`). RED via `service.summary is not a function` + route 404 + 2 expected typecheck errors.
+- **Gates** (post-Red, base `763509b`): `[scope]` + `[ticket-ids]` CLEAN.
+- **Green** (`6663280`): `summary()` on the existing `LiveCaptureService` (postsCaptured, max-`capturedAt` `lastCaptureAt` narrowed on `.source`, most-recent profile with first-in-order tie-break, conditional-spread omission, `captureSummarySchema.parse` fail-fast, re-throw) + `GET /capture/summary` route + `liveCaptureService?` option (lazy construction mirroring XOB-006). 23/662 tests, typecheck 9/9.
+- **Gates** (post-Green, base `6c6495f`): all CLEAN; no test files touched.
+- **Blue (Validate Green)**: APPROVE — logic faithful, genuine omission (no `undefined`-valued keys), route 200/500 correct, typecheck honest (cache-bypassed), `noUncheckedIndexedAccess` respected (guarded, no bangs).
+- **Yellow (intent)**: APPROVE — real derivation, wired to transport method 15 (`getCaptureSummary`), auto-followers chain intact (`ingest`→`pushProfileSnapshot`→`profileSnapshots`→`summary.followers`), zero-trace (no aggregation/trimming, `ManualScoringContextPanel` untouched).
+- Concerns ledger: none. Status → **done**.
