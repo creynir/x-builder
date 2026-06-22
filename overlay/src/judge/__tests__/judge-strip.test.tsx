@@ -107,6 +107,10 @@ function props(
     provenance: USER_WRITTEN,
     applyState: "idle",
     onRetryJudge: vi.fn(),
+    // XOB-027: Green makes `onApplyAll` a required prop on JudgeStrip. Adding it
+    // to the helper defaults keeps every XOB-026 test (which builds props via
+    // this helper) typechecking without touching their bodies.
+    onApplyAll: vi.fn(),
     explainer: overlayExplainerCopy,
     ...overrides,
   };
@@ -477,5 +481,340 @@ describe("JudgeStrip — unavailable", () => {
     // No pulse, no score grid.
     expect(pulseDot(root)).toBeNull();
     expect(scoreBars(root)).toHaveLength(0);
+  });
+});
+
+// ==========================================================================
+// XOB-027 — auto-improve: Apply-all + ApplyState render + provenance gate.
+//
+// RED for XOB-027: these pin the apply affordance Green will add to
+// `judge-strip.tsx` (the `onApplyAll` prop + Apply-all button + the
+// `ApplyState`-machine render + the AlreadySolid/failure banners). They fail
+// because the current XOB-026 impl ignores `applyState` and renders no apply
+// UI (and `onApplyAll` is not yet a prop) — NOT because of test bugs. The
+// XOB-026 cases above keep passing (they don't exercise apply behavior; the
+// `props()` helper's new `onApplyAll: vi.fn()` default just keeps them
+// typechecking once Green makes the prop required).
+//
+// Stable hooks for Green:
+//   - Apply-all button: queried by its label text `/apply all suggestions/i`
+//     (the ✦ glyph is optional in the match) via role/text, so the exact
+//     leading glyph is not load-bearing.
+//   - Applying indicator: asserted via the "Improving…" label + an
+//     `aria-busy="true"` region (the reduced-motion-safe affordance), mirroring
+//     the XOB-026 running indicator. If Green reuses the running pulse dot
+//     (`data-judge-pulse="animated"`) for the apply pulse that is fine, but the
+//     load-bearing signal these tests pin is the label + `aria-busy`.
+//   - AlreadySolid banner: `Alert` with `data-variant="warning"` + title text
+//     `/already solid/i`.
+//   - Failure banner: `Alert` with `data-variant="danger"` + a retry button
+//     whose click fires `onApplyAll` (the APPLY retry — distinct from the
+//     judge-failure retry that fires `onRetryJudge`).
+// ==========================================================================
+
+/** Apply-all button by label, glyph-agnostic (matches "✦ Apply all suggestions"). */
+function applyAllButton(root: ParentNode): HTMLButtonElement | undefined {
+  return buttons(root).find((b) => /apply all suggestions/i.test(b.textContent ?? ""));
+}
+
+/** A judged, approved verdict in user_written state — the canonical "ready to apply" base. */
+const judgedUserWrittenProps = () =>
+  props({
+    judge: { status: "judged", verdict: judgedVerdict },
+    provenance: USER_WRITTEN,
+    applyState: "idle",
+  });
+
+describe("auto-improve: Apply-all + ApplyState machine + provenance gate", () => {
+  // ------------------------------------------------------------------------
+  // 1. Apply-all HIDDEN (absent from DOM) in `generated` — loop-prevention.
+  // ------------------------------------------------------------------------
+  it("does not render the Apply-all button in the generated state (absent from DOM, not just CSS-hidden)", () => {
+    const root = mount(
+      <JudgeStrip
+        {...props({
+          judge: { status: "judged", verdict: approvedVerdict },
+          provenance: GENERATED,
+          applyState: "idle",
+        })}
+      />,
+    );
+
+    // The button is absent from the DOM entirely — query by role/text and
+    // assert nothing matches (not merely display:none). Both the resolved
+    // button and the raw label text are gone, so this cannot pass on a
+    // CSS-hidden-but-present button.
+    expect(applyAllButton(root)).toBeUndefined();
+    expect(root.textContent).not.toContain("Apply all suggestions");
+  });
+
+  // ------------------------------------------------------------------------
+  // 2. Apply-all VISIBLE + ENABLED in `user_written` + judged.
+  // ------------------------------------------------------------------------
+  it("renders an enabled '✦ Apply all suggestions' button in user_written + judged", () => {
+    const root = mount(<JudgeStrip {...judgedUserWrittenProps()} />);
+
+    const btn = applyAllButton(root);
+    expect(btn).toBeDefined();
+    // Present AND not disabled (clickable affordance, not a greyed placeholder).
+    expect(btn!.disabled).toBe(false);
+  });
+
+  // ------------------------------------------------------------------------
+  // 3. `applying` → pulse/loading + "Improving…" + aria-busy; the Apply-all
+  //    button is replaced by the loading indicator (not separately clickable).
+  // ------------------------------------------------------------------------
+  it("shows an 'Improving…' loading indicator with aria-busy and no separate Apply-all button while applying", () => {
+    const root = mount(
+      <JudgeStrip
+        {...props({
+          judge: { status: "judged", verdict: judgedVerdict },
+          provenance: USER_WRITTEN,
+          applyState: "applying",
+        })}
+      />,
+    );
+
+    // The applying affordance: an "Improving…" label inside an aria-busy region.
+    expect(root.textContent?.toLowerCase()).toContain("improving");
+    expect(root.querySelector('[aria-busy="true"]')).not.toBeNull();
+
+    // The clickable Apply-all button is replaced by the loading indicator: no
+    // separately-clickable "Apply all suggestions" button remains.
+    expect(applyAllButton(root)).toBeUndefined();
+  });
+
+  // ------------------------------------------------------------------------
+  // 4. `applied` + improvedOverOriginal:true + generated + approved verdict →
+  //    "✓ Judge approved" visible; Apply-all hidden.
+  // ------------------------------------------------------------------------
+  it("shows '✓ Judge approved' and hides Apply-all on applied+improved in generated/approved", () => {
+    const root = mount(
+      <JudgeStrip
+        {...props({
+          judge: { status: "judged", verdict: approvedVerdict },
+          provenance: GENERATED,
+          applyState: { status: "applied", improvedOverOriginal: true },
+        })}
+      />,
+    );
+
+    expect(root.textContent).toContain("✓ Judge approved");
+    expect(applyAllButton(root)).toBeUndefined();
+  });
+
+  // ------------------------------------------------------------------------
+  // 5. `applied` + improvedOverOriginal:false → AlreadySolid banner: Alert
+  //    data-variant="warning" (NOT "danger"); title contains "Already solid";
+  //    Apply-all hidden (state is generated).
+  // ------------------------------------------------------------------------
+  it("renders an AlreadySolid warning Alert (not danger) when applied but not improved", () => {
+    const root = mount(
+      <JudgeStrip
+        {...props({
+          judge: { status: "judged", verdict: approvedVerdict },
+          provenance: GENERATED,
+          applyState: { status: "applied", improvedOverOriginal: false },
+        })}
+      />,
+    );
+
+    const alerts = Array.from(root.querySelectorAll<HTMLElement>('[role="alert"]'));
+    const alreadySolid = alerts.find((a) => /already solid/i.test(a.textContent ?? ""));
+    expect(alreadySolid).toBeDefined();
+    // The banner is informational (warning), explicitly NOT an error/danger state.
+    expect(alreadySolid!.getAttribute("data-variant")).toBe("warning");
+
+    // And no danger Alert masquerading as the already-solid banner.
+    expect(
+      alerts.some((a) => a.getAttribute("data-variant") === "danger"),
+    ).toBe(false);
+
+    // Apply-all stays hidden (the re-pin flipped provenance to generated).
+    expect(applyAllButton(root)).toBeUndefined();
+  });
+
+  // ------------------------------------------------------------------------
+  // 6. `failed` → danger Alert + retry button; clicking retry fires onApplyAll
+  //    (the APPLY retry — NOT onRetryJudge, which is the judge-failure retry).
+  // ------------------------------------------------------------------------
+  it("renders a danger Alert with a retry that calls onApplyAll once (not onRetryJudge)", () => {
+    const onApplyAll = vi.fn();
+    const onRetryJudge = vi.fn();
+    const root = mount(
+      <JudgeStrip
+        {...props({
+          // judge is JUDGED (not failed) so the only danger Alert here is the
+          // apply-failure one — its retry must drive onApplyAll, never onRetryJudge.
+          judge: { status: "judged", verdict: judgedVerdict },
+          provenance: USER_WRITTEN,
+          applyState: { status: "failed", error: "generation_failed" },
+          onApplyAll,
+          onRetryJudge,
+        })}
+      />,
+    );
+
+    const dangerAlert = Array.from(
+      root.querySelectorAll<HTMLElement>('[role="alert"][data-variant="danger"]'),
+    );
+    expect(dangerAlert).toHaveLength(1);
+    // The error string surfaces in the failure banner.
+    expect(dangerAlert[0]!.textContent).toContain("generation_failed");
+
+    // The retry button lives in the apply-failure Alert. Click it.
+    const retry = buttons(root).find((b) => /retry|try again/i.test(b.textContent ?? ""));
+    expect(retry).toBeDefined();
+    retry!.click();
+
+    // The APPLY retry drives onApplyAll exactly once, and never the judge retry.
+    expect(onApplyAll).toHaveBeenCalledTimes(1);
+    expect(onRetryJudge).not.toHaveBeenCalled();
+  });
+
+  // ------------------------------------------------------------------------
+  // 7. Edit-while-applying reset → applying → idle (user_written + judged) →
+  //    the Apply-all button reappears; no partial/applying UI remains.
+  // ------------------------------------------------------------------------
+  it("clears the applying UI and restores Apply-all when applyState resets to idle", () => {
+    const { rerender } = render(
+      <JudgeStrip
+        {...props({
+          judge: { status: "judged", verdict: judgedVerdict },
+          provenance: USER_WRITTEN,
+          applyState: "applying",
+        })}
+      />,
+      { container: (harness = mountShadowHost()).mount },
+    );
+    const root = harness.mount;
+
+    // Mid-apply: the Improving indicator is up, Apply-all replaced.
+    expect(root.textContent?.toLowerCase()).toContain("improving");
+    expect(applyAllButton(root)).toBeUndefined();
+
+    // The user edits → ComposeCockpit aborts → applyState resets to idle.
+    rerender(
+      <JudgeStrip
+        {...props({
+          judge: { status: "judged", verdict: judgedVerdict },
+          provenance: USER_WRITTEN,
+          applyState: "idle",
+        })}
+      />,
+    );
+
+    // The Apply-all affordance is back and no partial/applying UI lingers.
+    expect(applyAllButton(root)).toBeDefined();
+    expect(root.textContent?.toLowerCase()).not.toContain("improving");
+  });
+
+  // ------------------------------------------------------------------------
+  // 8. Post Coach hints not suppressed by JudgeStrip (JudgeStrip-LOCAL sanity).
+  //
+  //    Post Coach lives in StaticEngineColumn — OUTSIDE JudgeStrip — so there is
+  //    no cross-component assertion to make here without overreaching scope.
+  //    The honest, JudgeStrip-local invariant: in the generated/approved state,
+  //    JudgeStrip renders its OWN approved content without error AND exposes no
+  //    "suppress" affordance/attribute that could hide a sibling column. We
+  //    assert (a) the approved content renders, and (b) no element in the
+  //    JudgeStrip subtree carries a suppression hook (data-suppress* / a
+  //    [hidden] wrapper claiming to gate siblings).
+  // ------------------------------------------------------------------------
+  it("renders its own approved content and exposes no sibling-suppression hook in generated/approved", () => {
+    const root = mount(
+      <JudgeStrip
+        {...props({
+          judge: { status: "judged", verdict: approvedVerdict },
+          provenance: GENERATED,
+          applyState: { status: "applied", improvedOverOriginal: true },
+        })}
+      />,
+    );
+
+    // (a) JudgeStrip renders its approved content without crashing.
+    expect(root.textContent).toContain("✓ Judge approved");
+    expect(scoreBars(root)).toHaveLength(13);
+
+    // (b) No suppression affordance leaks out of JudgeStrip that would hide a
+    //     sibling static column (Post Coach). JudgeStrip is self-scoped.
+    expect(root.querySelector("[data-suppress-post-coach]")).toBeNull();
+    expect(root.querySelector("[data-suppress]")).toBeNull();
+  });
+
+  // ------------------------------------------------------------------------
+  // 9. Loop prevention — generated → Apply-all absent AND no rendered control
+  //    in JudgeStrip can fire onApplyAll (no hidden trigger). Non-tautological:
+  //    we click EVERY rendered button and assert onApplyAll is never invoked.
+  // ------------------------------------------------------------------------
+  it("exposes no control that can trigger onApplyAll in the generated state", () => {
+    const onApplyAll = vi.fn();
+    const root = mount(
+      <JudgeStrip
+        {...props({
+          judge: { status: "judged", verdict: approvedVerdict },
+          provenance: GENERATED,
+          applyState: "idle",
+          onApplyAll,
+        })}
+      />,
+    );
+
+    // The named Apply-all button is gone…
+    expect(applyAllButton(root)).toBeUndefined();
+
+    // …and no OTHER rendered control is a hidden apply trigger: clicking every
+    // button in the JudgeStrip subtree must never fire onApplyAll.
+    for (const btn of buttons(root)) {
+      btn.click();
+    }
+    expect(onApplyAll).not.toHaveBeenCalled();
+  });
+
+  // ------------------------------------------------------------------------
+  // Key edge A: Apply-all also absent when judge.status !== "judged" even if
+  // user_written — the button requires a landed verdict to show.
+  // ------------------------------------------------------------------------
+  it("does not render Apply-all in user_written when the judge is still running (not judged)", () => {
+    const root = mount(
+      <JudgeStrip
+        {...props({
+          judge: { status: "running" },
+          provenance: USER_WRITTEN,
+          applyState: "idle",
+        })}
+      />,
+    );
+
+    expect(applyAllButton(root)).toBeUndefined();
+  });
+
+  // ------------------------------------------------------------------------
+  // Key edge B: applied-not-improved with a NOT-approved verdict → the
+  // AlreadySolid banner shows, but "✓ Judge approved" does NOT (gated by
+  // deriveApproved, independent of the apply outcome).
+  // ------------------------------------------------------------------------
+  it("shows AlreadySolid but withholds '✓ Judge approved' when the re-pinned verdict is not approved", () => {
+    const rejected = makeJudgeVerdict({ scores: { overall: 30 } }); // do_not_post
+    expect(deriveApproved(rejected)).toBe(false);
+
+    const root = mount(
+      <JudgeStrip
+        {...props({
+          judge: { status: "judged", verdict: rejected },
+          provenance: GENERATED,
+          applyState: { status: "applied", improvedOverOriginal: false },
+        })}
+      />,
+    );
+
+    // The info banner appears…
+    const alreadySolid = Array.from(
+      root.querySelectorAll<HTMLElement>('[role="alert"][data-variant="warning"]'),
+    ).find((a) => /already solid/i.test(a.textContent ?? ""));
+    expect(alreadySolid).toBeDefined();
+
+    // …but the approval badge is withheld (verdict is not approved).
+    expect(root.textContent).not.toContain("✓ Judge approved");
   });
 });
