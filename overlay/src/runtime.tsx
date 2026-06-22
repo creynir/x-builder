@@ -10,18 +10,22 @@
 import type { ReactNode } from "react";
 
 import { AnchorLayer } from "./anchor-layer";
+import { SettingsAffordance } from "./settings/settings-affordance";
 import { OverlayTransportProvider } from "./transport/provider";
 
 export interface OverlayRuntimeProps {}
 
 /**
- * The overlay's React root: transport provider over the anchor layer. Produces
- * zero paint output at this ticket.
+ * The overlay's React root: transport provider over the anchor layer and the
+ * page-persistent settings affordance. The affordance is a sibling of
+ * `AnchorLayer` (not inside the node-anchored pin tree) so it stays mounted in
+ * the top-left of the shadow layer regardless of which X nodes are present.
  */
 export function OverlayRuntime(_props: OverlayRuntimeProps): ReactNode {
   return (
     <OverlayTransportProvider>
       <AnchorLayer />
+      <SettingsAffordance />
     </OverlayTransportProvider>
   );
 }
