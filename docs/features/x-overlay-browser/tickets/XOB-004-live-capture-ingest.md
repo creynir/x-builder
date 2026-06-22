@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-004: LiveCaptureService.ingest — accumulate live posts + profile
@@ -123,3 +123,18 @@ Coverage:
 - `liveMetrics` fields absent on a post → `liveMetricSnapshotSchema` entry created with all metric fields `undefined`; no validation error.
 - Two posts with the same `platformPostId` within one batch → second treated as a duplicate; `duplicateCount` incremented; final store has one post with the first item's data.
 - Very large `text` field exactly at 8 000 characters → accepted; over 8 000 → item skipped (schema violation, tolerate-and-skip).
+
+## Pipeline Log
+
+Lean Red-first lane.
+
+- **Red** (`5a48f0a`): `engine/src/capture/tests/live-capture-service.test.ts` — 12 tests covering all Coverage cases + ACs + Edge Cases (accumulate-merge with `.source`-narrowed snapshot reads, profile apply, tolerate-skip, in-batch dup, 200-batch, empty-posts, absent-metrics, 8000-char boundary). RED via missing-module import. Flagged the disk-full `PostLibraryStorageError` re-throw edge as impractical to force with a real repo.
+- **Gates** (post-Red, base `de8661e`): `[scope]` + `[ticket-ids]` CLEAN.
+- **Green** (`051c009`): `LiveCaptureService.ingest` + `pushProfileSnapshot` on the repo + barrel export. 12/601 tests, typecheck 9/9. Resolved two internal ticket tensions: envelope-parse + per-item `safeParse` (tolerate-skip can't whole-batch `.parse`), and service-level first-wins in-batch dedup layered over the repo's last-wins merge. Handled the carried XOB-003 concern (tighter stored profile schema → `pushProfileSnapshot` wraps `ZodError → PostLibraryStorageError`).
+- **Gates** (post-Green, base `5a48f0a`): all CLEAN.
+- **Blue (Validate Green)**: APPROVE_WITH_CONCERNS — all mechanical green, typecheck honest (cache-bypassed), error propagation correct; validated decisions A (envelope-parse, no data leak — `upsertPosts` re-validates) and B (first-wins dedup correct, repo merge unchanged). Flagged C (optional method) for routing.
+- **Yellow (intent/wiring)**: REJECT — optional `pushProfileSnapshot?` is a wiring defect (degrades XOB-008 summary + runner into defensive guards / unguaranteed profile persistence). Secondary decisions A+B approved as intent-honoring. Verified the fix: make required → exactly one trivially-fixable TS2741.
+- **Green fix** (`556cd90`): made `pushProfileSnapshot` a REQUIRED repo-contract method, unconditional service call, one authorized no-op conformance line in `archive-routes.test.ts` (pre-existing consumer fake; XOB-002 pattern, behavior-neutral). 12/601 tests, typecheck 9/9, gates clean. Re-verified mechanically (Yellow had pre-simulated the exact fix).
+
+### Concerns Ledger
+- **Disk-full `PostLibraryStorageError` re-throw** (Edge Case, not an AC) — untested with a forced failure (impractical with a real repo). Behavior verified correct by Blue (service never catches `upsertPosts` errors → propagates). Low-priority coverage gap; could be a fake-repo unit test in a future hardening pass.
