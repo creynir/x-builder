@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-013: SuggestPostService + POST /posts/suggest
@@ -286,3 +286,18 @@ Add `suggestPostService?: SuggestPostService` and `repetitionWindowService?: Rep
 - `loadStore` throws `PostLibraryStorageError`: propagate → route maps to `library_storage_failed`.
 - `RepetitionWindowService.compute` throws: catch → use an empty `CooldownReport` with `signals: []` so the route does not fail; log the error for observability.
 - `classifyPostFormat` returns `"other"` for a post: exclude `"other"` format from the ranking candidates (not a meaningful suggest target).
+
+## Pipeline Log
+
+Lean Red-first lane.
+
+- **Red** (`acda20e`): `suggest-post-service.test.ts` (11: clear-top-format/LLM, cooldown-exclusion, LLM-fail→fallback, insufficient-corpus, excludeFormats, all-cooldown→fallback, count, archive-only ranking, threshold-10, window-throw-swallow) + `posts-suggest.test.ts` (3 route: 200 ready, 200 insufficient, 500 library_storage_failed). Real `StructuredLlmService` wrapping a fake provider that echoes raw suggestions through the contract parser; classifier-locked fixtures. RED via missing module + 3×404; `rg "XOB-"` clean.
+- **Gates** (post-Red, base `d256658`): `[scope]` + `[ticket-ids]` CLEAN.
+- **Green** (`033e3af`): `SuggestPostService` (insufficient-corpus short-circuit; cooldown ∪ excludeFormats exclusion; deterministic replies-per-post ranking with live-`replies`/`favoriteCount` fallback narrowed on `.source`, `"other"` excluded, tie→postCount; format→angle map; ONE `writer_first_pass` LLM pass 60s; deterministic resurfacing fallback on LLM-fail/all-cooldown; window-throw swallow → empty report) + `POST /posts/suggest` route + `suggestPostService?` option (reusing the shared `repetitionWindowService`) + barrel export. 11/3/716 tests, typecheck+build green. 3 files.
+- **Gates** (post-Green, base `acda20e`): all CLEAN; no test files touched.
+- **Blue (Validate Green)**: APPROVE — ran all commands (11/3/716, cache-bypassed `tsc` EXIT 0, forced clean build green); ranking/exclusion/fallback/swallow correct, route error mapping correct, shared `repetitionWindowService` reused, typecheck honest. Discovered the flagged parser premise was inverted: production ALSO double-applies the parser (providers apply it, then `StructuredLlmService` re-applies), so idempotency is REQUIRED production behavior, not a test artifact — fixpoint verified.
+- **Yellow (intent)**: APPROVE — real rank+LLM+fallback (no judge pass per scope), exported per DoD, wired to method 13, cooldown-aware with deterministic escape hatch, never dead-ends, zero-trace. Confirmed the test fake faithfully mirrors the real provider parser pre-application (established codebase pattern).
+
+### Concerns Ledger
+- **Comment clarity (trivial, non-blocking):** the service's "idempotent parser" comment frames the double-parse as a test accommodation; it's actually a production-path requirement (real CLI providers pre-apply `structuredOutput.parser`, then `StructuredLlmService.parseProviderOutput` re-applies). Comment is accurate but undersells why — a future reader might mistake the dual-shape handling for removable test-only code. Worth a one-line comment improvement in a future cleanup; no behavior impact.
+- Status → **done**.
