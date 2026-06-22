@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # XOB-014: XGraphQlNormalizer — tolerate-and-skip GraphQL → capture DTOs
@@ -30,7 +30,7 @@ status: todo
      - `replies` from `tweet.legacy.reply_count`
      - `quotes` from `tweet.legacy.quote_count`
      - `bookmarks` from `tweet.legacy.bookmark_count`
-     - `impressions` from `tweet.views.count` — **type: string in the API**; parse with `parseInt(tweet.views.count, 10)`; if absent, `null`, `"unavailable"`, `"0"`, non-numeric, or `NaN` → leave `impressions` **undefined** (field omitted)
+     - `impressions` from `tweet.views.count` — **type: string in the API**; parse with `parseInt(tweet.views.count, 10)`; if absent, `null`, `"unavailable"`, non-numeric, or `NaN` → leave `impressions` **undefined** (field omitted). A valid non-negative integer parse is KEPT, including `"0"` → `impressions: 0` (see Edge Cases; `"0"` is a real zero-views value, NOT a sentinel — corrected from an earlier draft that lumped `"0"` with `"unavailable"`).
    - `capturedAt` passed through as-is (ISO string from caller)
 3. Tolerate-and-skip: any exception thrown while processing a single tweet entry (missing fields, type errors, `zod.parse` failure, invalid date) → `catch`, log a single `debug`-level message (no `console.error`), and **skip that entry**. Never rethrow. Return only successfully parsed records.
 4. Deduplicate by `platformPostId` before returning (last-wins if same id appears twice in one response).
