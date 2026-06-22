@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-009: GET /capture/cooldown route
@@ -122,3 +122,17 @@ Coverage:
 - Empty corpus → valid 200 response with `corpusSource: "empty"` and `signals: []`; no error.
 - `windowDays=90` (max) → status 200, service computes window correctly.
 - Corpus with only archive posts (no live capture) → `corpusSource: "archive"`, signals computed from archive post `createdAt` values.
+
+## Pipeline Log
+
+Lean Red-first lane. (First Red dispatch returned an empty/malformed 0-tool-use run with no commit — re-spawned fresh; no repo impact.)
+
+- **Red** (`6bacb1f`, scrub `646eb74`): `engine/src/server/tests/capture-cooldown.test.ts` — 11 route tests (cooldown signal, empty/archive corpusSource, default + explicit windowDays, the four 400 validation cases, 500 storage path via `failingRepository()`) + a classifier guard. Deterministic via injected `now` stub. RED via route 404 + missing `repetitionWindowService` option. ticket-ids gate flagged an `XOB-009` comment → scrubbed (comment-only, suite unchanged).
+- **Gates** (post-Red, base `b40b75a`): `[scope]` CLEAN; `[ticket-ids]` flagged 1 comment → fixed → re-checked CLEAN.
+- **Green** (`f4549cb`): `GET /capture/cooldown` route + `repetitionWindowService?` option + made the composition-root instance injectable & SHARED with the analyze path. Query parsed `z.coerce.number().int().min(1).max(90).default(7)` → ZodError to the global handler → 400 `validation_failed`; `compute(windowDays)` → `parseResponseContract(cooldownReportSchema)` 200; `PostLibraryStorageError` → 500 `library_storage_failed`. 12/674 tests, typecheck 9/9. Single file (`server.ts`).
+- **Gates** (post-Green, base `646eb74`): all CLEAN; no test files touched.
+- **Blue (Validate Green)**: APPROVE — route logic exact, single shared instance confirmed, both error envelopes valid + correctly fired, typecheck honest (cache-bypassed ×2), no regression.
+- **Yellow (intent)**: APPROVE_WITH_CONCERNS — thin route (no new class), real delegation, `corpusSource` not overridden, no `__xbuilder_getCooldown` leak (XOB-016's job), no auth, no regression to in-process consumers.
+
+### Concerns Ledger
+- **`GenerateCategoryService` (XOB-006) still constructs its own separate `RepetitionWindowService`** — so the "don't read the store twice" principle is only partially realized: the analyze path + this cooldown route share one instance (as XOB-009 required), but the categories route reads independently. Pre-existing (introduced in XOB-006, not by this ticket) and outside XOB-009's named boundary; non-blocking. Untouched AC/DoD: none (XOB-009's shared-instance scope is satisfied). Candidate future consolidation if a single process-wide `RepetitionWindowService` is desired.
