@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-006: GenerateCategoryService + GET /generate/categories — dynamic categories from the corpus
@@ -153,3 +153,15 @@ Coverage:
 - `weakMetrics.favoriteCount` absent and no live replies → `avgReplies: 0`; ranking is by frequency only.
 - Multiple formats have identical `performanceScore` → stable tie-break by format name alphabetically.
 - Corpus has posts but 0 originals (all replies/reposts) → corpus count < 10 → cold-start path returns 4 defaults.
+
+## Pipeline Log
+
+Lean Red-first lane.
+
+- **Red** (`6556d83`): `generate-category-service.test.ts` — 12 tests (4 service-logic + edges + 2 HTTP-route via `buildServer().inject`) + a classifier-guard test. Verified format fixtures (hot_take/founder_story/audience_question/story/other); 500-path injects a `GenerateCategoryService` over a `failingRepository()`. RED via 3 expected feature-missing errors (missing module + `generateCategoryService` option). Flagged the all-other → 4-defaults nuance.
+- **Gates** (post-Red, base `6d8b94f`): `[scope]` + `[ticket-ids]` CLEAN.
+- **Green** (`2133c49`): `GenerateCategoryService.getCategories` (cold-start + corpus ranking by `sampleCount × avgReplies`, alpha tie-break, cooldown annotation via `windowService.compute(7)`, backfill nuance) + `GET /generate/categories` route + `BuildServerOptions.generateCategoryService?` + a dedicated `libraryStorageFailedError()` helper (archive helper emits a different code; `library_storage_failed`/`library` both valid in `apiErrorSchema`) + barrel export. 12/632 tests, typecheck 9/9.
+- **Gates** (post-Green, base `6556d83`): all CLEAN; no test files touched.
+- **Blue (Validate Green)**: APPROVE — typecheck honest (cache-bypassed), ranking/cooldown/backfill logic faithful, route 200 + 500 paths correct, new error helper schema-valid, no `@ts-ignore`/`any`, guarded non-null assertions.
+- **Yellow (intent)**: APPROVE — real deterministic ranking of the user's own formats (no LLM, no fake), wired to transport method 16 (`getGenerateCategories`), zero-trace (no theme/topic, no cache), backfill coherent (4 only when no corpus signal; 3–4 when usable formats exist), `libraryStorageFailedError` justified + used.
+- Concerns ledger: none. Status → **done**.
