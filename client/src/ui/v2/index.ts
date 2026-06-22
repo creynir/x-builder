@@ -12,6 +12,7 @@ export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from ".
 export { IconButton, type IconButtonProps, type IconButtonVariant } from "./icon-button";
 export { Input, type InputProps } from "./input";
 export { KeyValueList, type KeyValueItem, type KeyValueListProps } from "./key-value-list";
+export { ScoreBar, type ScoreBand, type ScoreBarProps } from "./score-bar";
 export { Select, type SelectOption, type SelectProps } from "./select";
 export { Skeleton, type SkeletonProps } from "./skeleton";
 export { Switch, type SwitchProps } from "./switch";
