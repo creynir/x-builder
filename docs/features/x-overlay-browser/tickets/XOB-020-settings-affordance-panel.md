@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-020: Settings affordance + settings panel
@@ -188,3 +188,20 @@ interface CaptureSummary {
 - `validateArchive` + `importArchive` file too large (engine enforces limit): transport rejects with an error message — surface in `Alert` danger; input is re-enabled for retry.
 - Collision-flip: if `SettingsPanel` overflows the right or bottom edge of the viewport, flip to open rightward / upward respectively. Minimum implementation: check `getBoundingClientRect()` of the launcher + panel dimensions post-render; apply `data-flip-x` / `data-flip-y` CSS attribute overrides.
 - `event.composedPath()` unavailable (should not occur in Chromium): fall back to `document.activeElement` check; if outside the panel, close.
+
+## Pipeline Log
+
+Lean Red-first lane. **First v2 ticket** — founded the fresh `client/src/ui/v2/` primitive library + reconciled the ticket's muddled settings model to the real transport contract.
+
+- **Red** (`0578417` + realign `2c7e962`): browser-mode tests for the v2 primitive contracts + the SettingsAffordance scenarios + `overlay/src/testing/{fixtures,shadow-host}`. Cross-package overlay→`client/src/ui/v2` resolution needs ZERO config (moduleResolution: Bundler, no rootDir). **Realigned to the real contract** after the orchestrator caught the mismatch: active-context via `getActiveContext`/`activate`/`deactivate` (not `updateSettings({activeContext})`), judge-provider a `Select` over the real `JudgeProviderId` enum → full-object `updateSettings`, real 8-value `ReadinessState`, real `AppSettings` (no `judgeReady`/`activeContext`). RED feature-missing; 63 prior pass; `rg`/eslint clean.
+- **Gates** (post-Red, base `e220fa1`): `[scope]` CLEAN (with `**/testing/**` in `--allowed`) + `[ticket-ids]` CLEAN.
+- **Green** (`a56ab1f`): 9 v2 primitives (`client/src/ui/v2/` — Button/IconButton/Input/Select/Alert/Badge/Switch/Skeleton/KeyValueList + `tokens.ts` variant→token maps + barrel; fresh, NOT reusing `foundation.tsx`; token-driven inline `var(--…)` styles → shadow-portable, no global CSS) + 7 settings components (`overlay/src/settings/`) wired to the real contract + runtime wiring (SettingsAffordance sibling of AnchorLayer). 117 tests, typecheck 10/10, overlay IIFE self-contained, client build green. No hardcoded literals, no eslint-disable.
+- **Gates** (post-Green, base `2c7e962`): ALL CLEAN incl. `[ui-tokens]` (v2 uses `var()` refs, no raw literals).
+- **Blue (Validate Green)**: APPROVE — real-contract wiring verified (active/deactivate, full-object updateSettings, real ReadinessState), v2 primitives shadow-portable (token reads back in shadow root), a11y/focus correct, no regression (117 pass, both builds green, cache-bypassed typecheck), token discipline clean. Active-context-via-`children` ruled sound.
+- **Yellow (intent/UI)**: APPROVE_WITH_CONCERNS — reconciliation is the load-bearing result and landed correctly (no fictional `judgeReady`/`activeContext` leaked; judge=enum Select; readiness=real states); v2 is a genuine reusable foundation (maps 1:1 to product-components.md); ZERO-TRACE; Aurora Glass + all 4 states + a11y; active-context-via-children clean.
+
+### Concerns Ledger (non-blocking)
+- **ui-tokens "gate":** there's no `package.json` ui-tokens script — but the deterministic `gates.py ui-tokens` (run by the orchestrator every ticket) IS that gate and is CLEAN here. Visibility gap only; token discipline IS gate-enforced at the orchestration layer. (A future CI hook could surface it in-repo.)
+- **Collision-flip not implemented:** `SettingsPanel` documents `data-flip-x/y` but uses static `position:absolute` with no `getBoundingClientRect()` measurement; the flip is never applied. The HARD invariant holds (`max-width`/`max-height:80vh`/`overflow-y:auto` → never pushes X UI or causes horizontal scroll); collision-flip is narrow-viewport polish (an Edge-Case "minimum implementation", untested). Revisit if needed.
+- **`selectorMissCount` not fed:** plumbed `SettingsPanel`→`ReadinessIndicator` but defaults to 0; nothing wires the real `selectorMissCount()` from `selectors.ts`. The threshold branch is unit-tested but dead in-app; the PRIMARY layout-changed signal (`capture.state`) is fully wired. Wire the real count in a later integration (XOB-030).
+- Status → **done**.
