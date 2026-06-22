@@ -1,8 +1,16 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # XOB-029: ComposeCockpit — orchestrator assembly + responsive collapse
+
+> **SCOPE DECISION (2026-06-22, user-directed) — XOB-029 is the FULL overlay-side integration:**
+> 1. **Auto-apply best candidate.** `generateIdeas` returns **3 candidates** (`generateIdeaResponseSchema = { candidates: [3] }`, each `{ id, format, text, verdict?, approved? }`). On generate, the cockpit auto-applies the **best** candidate — the highest `verdict.scores.overall` among `deriveApproved`-true candidates; if none approved, `candidates[0]`. It writes that candidate's `text` into X's composer (explicit-gesture write), captures the written text as the green anchor (`setAnchor`), and sets the judge from `candidate.verdict` (→ `judged`/pre-approved) or starts the normal judge flow if the candidate carries no `verdict` (→ `typing`). **No multi-candidate picker** (deferred; no component, not tested here). NOTE the response `candidate.format` is a 3-value enum (`one-liner|mini-framework|debate-question`) distinct from `DetectedPostFormat` — the cockpit reads `candidate.text`/`verdict`/`approved`, not `candidate.format`.
+> 2. **Full DOM integration built HERE:** (a) **compose detection** (URL `/compose/post` OR `[role="dialog"]` ⊃ `tweetTextarea_0`); (b) the **`AnchorLayer` register/reconcile mutation API + `ComposeContext` provider** (`{composerEl, isActive, composerText}`) — additively extend `overlay/src/anchor-layer.tsx` (today a read-only registry skeleton); (c) **live-modal pin anchoring** — the 3 zones position over the modal rect, tracked by (d) a **single per-frame rAF snapshot** (host origin + modal/composer rect captured together) that ALSO feeds `CompositionHighlightLayer` — this resolves the carried **XOB-022 L2 / XOB-023 C1** multi-source-read skew; (e) the **real contenteditable composer-write gesture** (write generated/improved text into `tweetTextarea_0` on explicit user click — policy-safe, never auto-post); (f) **in-flight abort/cancel** — a composer edit during `judging`/`applying` aborts the in-flight `judgeDraft`/`applyJudgeSuggestions` (AbortController or a generation-token guard) and resets state.
+> 3. **Transport BINDING remains XOB-030 [INT].** XOB-029 calls the engine ONLY through the XOB-019 `useTransport()` seam (`transport.getGenerateCategories()`, `.getCaptureSummary()`, `.analyzePosts()`, `.judgeDraft()`, `.generateIdeas()`, `.applyJudgeSuggestions()`, `.getOverlayReadiness()`). Tests inject `FakeEngineTransport` via `OverlayTransportProvider`. The real `__xbuilder_*`→engine binding + RunnerApp wiring + capture/readiness round-trip is XOB-030.
+> 4. **judge readiness gate:** before auto-kicking `judgeDraft`, the cockpit checks `getOverlayReadiness().llm.state === "ready"`; otherwise `JudgeStrip` shows `{ status: "unavailable", hint: readiness.llm.label/message }`.
+> 5. Build a small **`ChannelDivider`** (labelled neon hairline) here — none exists. Harness: Vitest **browser mode → Playwright Chromium** (NOT jsdom/RTL); X-shaped fixture DOM in `document.body` + `FakeEngineTransport`.
+> 6. `ProvenanceState` is the **bare string** `"generated" | "user_written"`.
 
 ## Implementation Details
 
@@ -102,12 +110,16 @@ Key derived prop mappings:
 ## Scope Boundaries / Out of Scope
 
 **In scope:**
-- Mounting all three zone components as `AnchorLayer` pins.
-- Owning the `ComposeMachineState` reducer.
-- Orchestrating all transport calls (categories, capture summary, analyze, judge, generate, apply).
-- `ProvenanceController` composition.
+- Compose detection (URL/dialog) + the `AnchorLayer` register/reconcile mutation API + `ComposeContext` provider (`{composerEl, isActive, composerText}`) — additive extension of the XOB-019 skeleton.
+- The single per-frame **rAF snapshot** tracker (host origin + modal/composer rect together) feeding both the pins and `CompositionHighlightLayer` (resolves XOB-022 L2 / XOB-023 C1).
+- Live-modal pin anchoring of all three zone components; internal scroll on overflow; no push of X UI.
+- Owning the `ComposeMachineState` reducer + the `ApplyState` (L4).
+- Orchestrating all transport calls via the `useTransport` seam (categories, capture summary, analyze, judge, generate, apply, readiness).
+- The **explicit-gesture composer-write** (write generated/improved text into `tweetTextarea_0` on user click; never auto-post) + **auto-apply-best** candidate selection.
+- **In-flight abort/cancel** on composer edit during `judging`/`applying`.
+- `ProvenanceController` composition; `setAnchor` wired to the composer-write step.
 - Responsive collapse at < ~1180px via `data-cockpit="stacked"`.
-- Channel captions + `ChannelDivider`.
+- Channel captions + a new `ChannelDivider`.
 - No-horizontal-scroll guarantee.
 
 **Out of scope (zero-trace):**
@@ -118,7 +130,7 @@ Key derived prop mappings:
 
 ## Test Strategy & Fixture Ownership
 
-**Framework:** Vitest + RTL, shadow-DOM-aware. Integration assertions use fixture DOM resembling X's composer modal (X-shaped fixture HTML owned by overlay package).
+**Framework:** Vitest **browser mode → Playwright Chromium** via `vitest-browser-react` (NOT jsdom/RTL) — real DOM/contenteditable/getClientRects/shadow DOM. Integration assertions use X-shaped fixture DOM (the `xComposerFixture` below) inserted into `document.body`, with `FakeEngineTransport` injected via `OverlayTransportProvider`. Mount the cockpit inside `<OverlayTransportProvider transport={fake}><AnchorLayer>…</AnchorLayer></OverlayTransportProvider>` per the established harness (mirror `overlay/src/anchor-layer.test.tsx` for the rAF/fake-timer reconcile pattern and `transport/use-transport.test.tsx` for fake-transport injection).
 
 **Fixtures (owned by overlay package):**
 ```ts
@@ -137,10 +149,17 @@ export const xComposerFixture = `
 3. **Overflow internal-scroll** — content exceeding pin height scrolls within pin; no horizontal page scroll.
 4. **Breakpoint collapse** — `data-cockpit="stacked"` set at ≤ 1180px; stacked column order = rail → static → judge.
 5. **Channel captions** — "◆ Static engine" + "✦ AI judge" present in all layout modes.
-6. **Generate flow** — generate click → `generating` phase → `generateIdeas` called; `pending` passed to `ComposeGenerateRail`.
-7. **Apply flow** — Apply-all click → `onApplyAll()` called; `applyState: "applying"` passed to `JudgeStrip`.
-8. **Unmount on dialog close** — dialog removed from DOM → `ComposeCockpit` unmounts cleanly (no lingering state).
+6. **Generate flow** — generate click → `generating` phase → `generateIdeas({format})` called; `pending` passed to `ComposeGenerateRail`.
+7. **Apply flow** — Apply-all click → `applyJudgeSuggestions({text})` called; `applyState: "applying"` passed to `JudgeStrip`.
+8. **Unmount on dialog close** — dialog removed from DOM → `ComposeCockpit` unmounts cleanly (no lingering state/listeners/timers).
 9. **No horizontal page scroll** — cockpit assembly never adds horizontal scroll to document.
+10. **Auto-apply-best (composer write)** — `generateIdeas` resolves with 3 candidates → the highest-`overall` approved candidate's `text` is written into the fixture `tweetTextarea_0` (`.textContent` reflects it); the green anchor is set (provenance → `generated`); judge set from that candidate's `verdict` (→ judged/approved). If none approved → `candidates[0]` applied; if the chosen candidate has no `verdict` → provenance `user_written` + normal judge flow.
+11. **Apply-all write** — `applyJudgeSuggestions` resolves `{text, improvedOverOriginal:true}` → improved `text` written into the composer; anchor re-pinned (provenance → `generated`); `applyState` → `{applied, improvedOverOriginal:true}`.
+12. **In-flight abort on edit** — composer text changes while `judging` (or `applying`) → the in-flight `judgeDraft`/`applyJudgeSuggestions` is aborted (no stale result applied) and the machine resets (re-debounces analyze / `applyState`→`idle`); composer retains the user's edit.
+13. **Judge-readiness gate** — `getOverlayReadiness().llm.state !== "ready"` → after `static_ready`, judge is NOT auto-kicked; `JudgeStrip` shows `unavailable` with the readiness hint. When `ready`, `judgeDraft` is kicked → `judging`→`judged`.
+14. **rAF snapshot single-source** — host origin + composer/modal rect are read in ONE per-frame snapshot shared by the pins and the highlight layer (assert no independent double-read; e.g. one tracker instance feeds both).
+
+**Transport mock note:** `FakeEngineTransport` overrides `analyzePosts`/`judgeDraft`/`generateIdeas`/`applyJudgeSuggestions`/`getGenerateCategories`/`getCaptureSummary`/`getOverlayReadiness` per case; tests advance fake timers for the 350 ms analyze debounce and await promise resolution.
 
 **Transport mock:** `FakeEngineTransport` implementing all 17 methods.
 
