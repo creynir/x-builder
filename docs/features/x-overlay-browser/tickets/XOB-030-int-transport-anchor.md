@@ -1,11 +1,22 @@
 ---
-status: todo
+status: in-progress
 labels: [test]
 ---
 
 # XOB-030: [INT] Transport↔Engine Bindings (All 17) + AnchorLayer Reconciliation + Provenance Flip
 
 Depends on: XOB-001 through XOB-029
+
+> **LANE DECISION (2026-06-22, user-directed): run as the STANDARD pipeline (Red → Green → Blue+Yellow), not Purple-only [INT].** XOB-016 shipped `ExposeFunctionTransport.bindAll` as injectable/service-agnostic and `RunnerApp.bindTransport`/`attachObserver` with NO-OP defaults — the **real `BoundEngineServices` adapter + the default wiring deferred *into* this ticket** and do not exist yet. So the implementation the [INT] flows verify is the very piece XOB-030 must BUILD. Red writes the flows + invariants below as failing integration tests; **Green builds**:
+> - the real **`BoundEngineServices` adapter bundle** (construct/inject every engine service the 17 bindings map to) consumed by `ExposeFunctionTransport.bindAll`;
+> - **`RunnerApp` default wiring**: `bindTransport` default → `ExposeFunctionTransport.bindAll(page, services)`; `attachObserver` default → `GraphQlCaptureObserver.attach(context, batch => liveCapture.ingest(batch))`; register `getOverlayReadiness` (XOB-017) into the bundle;
+> - **`getStatus`** composition (no `AppStatusService` class — compose from the engine `/status` logic) and **`getOverlayReadiness`** wrapping (engine `ReadinessService` exposes `getStatus()`, not `getSubsystems()` — wrap to the readiness shape);
+> - **`judgeDraft` arg-shape**: `req → JudgeDraftService.judge(req.text, req.accountProfile)`, `JudgeDraftOutcome → JudgeDraftResponse`;
+> - **`analyzePosts` per-item cooldown re-attach**: resolver-chain → `DeterministicAnalysisService.analyzePosts` → `RepetitionWindowService.compute(windowDays)` cooldown-attach (mirror `server.ts` `attachCooldownSignals`) and **assert it on round-trip** (`cooldown` is schema-optional so it silently vanishes otherwise).
+>
+> **Must prove capture→corpus ingest + the readiness round-trip in-process** (capture is inert until this lands). Then Blue+Yellow validate (incl. the 1:1-bindings, no-facade, capture-observed-not-injected invariants).
+>
+> **Stale-path reconcile:** the Modules list below references `overlay/src/anchor/anchor-layer.ts` and `overlay/src/anchor/provenance-controller.ts`; the shipped files are flat — `overlay/src/anchor-layer.tsx` (AnchorLayer + `ComposeContext` + register/reconcile, built in XOB-029) and `overlay/src/provenance/provenance-controller.tsx` (XOB-023). Use the real paths. The AnchorLayer `ComposeContext`/reconcile + `ProvenanceController` + generate-refine verdict-attach (XOB-011) + capture-no-egress (XOB-017) are already BUILT — those flows are verify-only; the binding adapter + RunnerApp wiring are the new build.
 
 ## User Flows to Verify
 
