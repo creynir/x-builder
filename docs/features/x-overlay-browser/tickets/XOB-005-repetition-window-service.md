@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-005: RepetitionWindowService — real rolling-window cooldown over the merged corpus
@@ -71,7 +71,7 @@ The service reads the merged corpus (archive + live), so it naturally covers bot
 - Does not extend `ArchiveDerivedContextService` — that service fakes the window via static `repeatHistory`; this is a focused new service with real rolling-window semantics.
 - Does not write to the store — read-only.
 - No HTTP route in this ticket (that is XOB-009).
-- `windowDays` validation (1..90) is enforced by the route schema in XOB-009; this service accepts any positive integer.
+- `windowDays` validation (1..90) is owned by the XOB-009 route schema as the first-line guard. The service itself returns a `cooldownReportSchema`-valid report, and that schema also bounds `windowDays` to `1..90` — so an out-of-range `windowDays` reaching `compute` directly is **rejected by the schema parse (ZodError)**, not silently computed. (Corrected from an earlier draft that said "accepts any positive integer" — that contradicted the shared schema bound; flagged by Blue+Yellow in validation.)
 - No per-topic or per-theme analysis — signals are by `detectedPostFormat` only.
 - Post-v1 threshold tuning (e.g., different `warming`/`cooldown` counts) is out of scope.
 
@@ -139,9 +139,23 @@ Coverage:
 
 ## Edge Cases
 
-- `windowDays` of 0 or very large: the service computes correctly (all posts or no posts in window); threshold validation is the route's responsibility.
+- `windowDays` of 0 or > 90 reaching `compute` directly: the final `cooldownReportSchema.parse` rejects it (ZodError), since the shared schema bounds `windowDays` to `1..90`. The XOB-009 route validates the range before calling, so consumers never hit this; an in-range value (e.g. a very large-but-≤90, or a window covering all/no posts) computes correctly.
 - A format appears in the corpus but only outside the window → no signal emitted (no `countInWindow: 0` signals in the report).
 - Posts with `createdAt` exactly at the window boundary (within milliseconds): boundary is inclusive — `>= windowCutoff`.
 - More than 40 distinct formats in window (highly unlikely given the classifier has 17 formats) → signals array capped at 40 by schema; top 40 by `countInWindow` are kept.
 - `PostLibraryStorageError` from `loadStore` → re-thrown unchanged.
 - Corpus with only `"other"` format posts → `signals: []` (no signals for excluded format).
+
+## Pipeline Log
+
+Lean Red-first lane.
+
+- **Red** (`85ad344`): `repetition-window-service.test.ts` — 19 tests (8 Coverage + ACs + edges + a classifier-guard test). Verified fixture text → format mappings via a throwaway probe against the real `classifyPostFormat`, then locked them with an in-suite guard test. Deterministic `now` injection. RED via missing module.
+- **Gates** (post-Red, base `8ff9007`): `[scope]` + `[ticket-ids]` CLEAN.
+- **Green** (`4f7af02`): `RepetitionWindowService.compute` + `asRepeatHistory` + barrel export. Read-only; result parsed through `cooldownReportSchema` (fail-fast). `corpusSource` via `.source` discriminant inspection; `lastPostedAt` spans all originals while `countInWindow` is window-bounded (inclusive `>=`). 19/620 tests, typecheck 9/9.
+- **Gates** (post-Green, base `85ad344`): all CLEAN; no test files touched.
+- **Blue (Validate Green)**: APPROVE_WITH_CONCERNS — all mechanical green, typecheck honest (cache-bypassed), logic faithful to spec (corpusSource, inclusive window, thresholds, sort/cap, error propagation, ISO lexical ordering sound).
+- **Yellow (intent)**: APPROVE_WITH_CONCERNS — real rolling-window (no delegation to the static `ArchiveDerivedContextService` fake), wired to XOB-006/007/009, `asRepeatHistory` shape matches `repeatHistoryEntrySchema`/`computeRepeatMultiplier`, merged-corpus coverage uniform, zero-trace.
+
+### Concern — RESOLVED (doc fix)
+- **Spec/schema contradiction on out-of-range `windowDays`** — ticket prose claimed `compute` "accepts any positive integer" / "windowDays of 0 or very large computes correctly," but the service's terminal `cooldownReportSchema.parse` bounds `windowDays` to `1..90`, so out-of-range throws a ZodError. Code is correct (fail-fast); the prose was wrong. **Fixed in this ticket's Scope Boundaries + Edge Cases** to state out-of-range is schema-rejected (XOB-009 route is the first-line guard; consumers always pass in-range). No code change needed.
