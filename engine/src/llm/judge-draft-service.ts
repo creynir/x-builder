@@ -46,8 +46,12 @@ const judgeInstructions = [
   "Penalize hashtag/emoji spam, em dashes, engagement bait, vague 'thoughts?' endings,",
   "unsupported absolutes, and no clear audience.",
   "Also set confidence (low, medium, or high), a one-line headline verdict, up to five",
-  "concrete strengths, and up to five concrete improvements. Return only JSON matching",
-  "the output schema.",
+  "concrete strengths, and up to five concrete improvements.",
+  "Also emit an annotations array (up to 12 items) of { quote, severity, recommendation }",
+  "where quote is an exact substring of the draft (copy the words verbatim), severity is",
+  "suggestion or warning, and recommendation is a one-line fix. Omit annotations entirely",
+  "if you have none.",
+  "Return only JSON matching the output schema.",
 ].join(" ");
 
 // When the caller supplies an account profile, the model anchors audienceMatch to
@@ -118,6 +122,20 @@ const verdictOutputSchema: Record<string, unknown> = {
       type: "array",
       maxItems: 5,
       items: { type: "string", minLength: 1, maxLength: 240 },
+    },
+    annotations: {
+      type: "array",
+      maxItems: 12,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["quote", "severity", "recommendation"],
+        properties: {
+          quote: { type: "string", minLength: 1, maxLength: 280 },
+          severity: { type: "string", enum: ["suggestion", "warning"] },
+          recommendation: { type: "string", minLength: 1, maxLength: 240 },
+        },
+      },
     },
   },
 };
