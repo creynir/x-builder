@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-014: XGraphQlNormalizer — tolerate-and-skip GraphQL → capture DTOs
@@ -155,3 +155,19 @@ Fixture files live at `runner/src/__fixtures__/graphql/`:
 - Response body is oversized (e.g. > 2MB) → `response.json()` is the caller's responsibility (XOB-017); normalizer receives already-parsed object and applies no size gate itself.
 
 **Depends on:** XOB-002
+
+## Pipeline Log
+
+Lean Red-first lane. Runner package (Wave 3).
+
+- **Red** (`7369c44`): `runner/src/x-graphql-normalizer.test.ts` (20 cases) + 8 ticket-owned fixtures in `runner/src/__fixtures__/graphql/` (valid/malformed/views-unavailable/with-replies/3× profile + an edge-cases fixture). Schema-validates outputs; covers the corrected `"0"`→0 case, dedupe last-wins, retweet-precedence, oversized-text/invalid-date skips. RED via missing module; no vitest config needed; `rg "XOB-"` clean.
+- **Gates** (post-Red, base `46bfc5c`): `[ticket-ids]` CLEAN; `[scope]` initially flagged the 8 fixtures (default globs lack `__fixtures__`) → re-ran with `--allowed '…,**/__fixtures__/**'` → CLEAN (ticket-owned fixtures, not source).
+- **Green** (`22ef032`, cleanup `f0627d7`): `XGraphQlNormalizer` (defensive walker over `timeline_v2…tweet_results.result`; per-entry tolerate-and-skip via try/catch + `console.debug`; `liveCapturedPostSchema` final gate; dedupe last-wins; `parseImpressions` strict `^\d+$` so `"0"`→0 / `"unavailable"`→omitted; counters 0-kept/absent-omitted; profile rest_id+screen_name required). No `any` outside the single `unknown` boundary. 20 tests, typecheck 9/9, build 7/7. Cleanup `f0627d7` removed an inert `eslint-disable no-console` (repo has no eslint; lint=tsc; the only suppression in src).
+- **Gates** (post-Green, base `7369c44`): `[suppressions]`/`[ticket-ids]`/`[stubs]`/`[ui-tokens]` CLEAN; `[slop] console.debug` ruled justified (spec-mandated skip log, matches repo bare-console convention).
+- **Blue (Validate Green)**: APPROVE — walker/extraction/tolerate-skip/dedupe correct, `"0"`→0 verified, typecheck+build honest (cache-bypassed), no `any` in code. console.debug ruled justified-and-required.
+- **Yellow (intent)**: APPROVE — **ZERO-TRACE verified** (grep: no fetch/network/DOM/page/scrape/paginate/persist — the passive-observation X-policy guarantee holds), pure stateless transform, wiring-ready for XOB-017→XOB-004, skip-log leaks no tweet data.
+
+### Concerns Ledger
+- **Trivial (no action):** `classifyKind` never emits `"unknown"` (falls back to `"original"`). Defensible — a tweet with a validated `legacy` block is genuinely original; schema permits but doesn't require `"unknown"`; no AC asserts it.
+- **Process note:** runner tickets that add `__fixtures__` need `gates.py scope --allowed '…,**/__fixtures__/**'` (default globs omit it). Applies to XOB-017 if it adds fixtures.
+- Status → **done**.
