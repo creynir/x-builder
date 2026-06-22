@@ -127,29 +127,12 @@ export type ArchiveSourceRef = z.infer<typeof archiveSourceRefSchema>;
 export type LiveSourceRef = z.infer<typeof liveSourceRefSchema>;
 export type LiveProfileSnapshot = z.infer<typeof liveProfileSnapshotSchema>;
 
-// The runtime schemas are genuine discriminated unions (see metricSnapshotSchema /
-// sourceRefSchema): that is what drives validation and the snapshotKey/sourceRefKey
-// dedup branch. The exported element types keep the `source` discriminant required while
-// making the per-variant fields optional across the union, so a caller can read a field
-// by its discriminant without an explicit narrow. The runtime value still carries only
-// the fields of its own variant; a read of the "wrong" variant's field is `undefined`.
-export type MetricSnapshot =
-  | (ArchiveMetricSnapshot & Partial<Omit<LiveMetricSnapshot, "source">>)
-  | (LiveMetricSnapshot & Partial<Omit<ArchiveMetricSnapshot, "source">>);
-export type SourceRef =
-  | (ArchiveSourceRef & Partial<Omit<LiveSourceRef, "source">>)
-  | (LiveSourceRef & Partial<Omit<ArchiveSourceRef, "source">>);
-
-type CanonicalOwnPostInferred = z.infer<typeof canonicalOwnPostSchema>;
-export type CanonicalOwnPost = Omit<CanonicalOwnPostInferred, "metricSnapshots" | "sourceRefs"> & {
-  metricSnapshots: MetricSnapshot[];
-  sourceRefs: SourceRef[];
-};
+export type MetricSnapshot = z.infer<typeof metricSnapshotSchema>;
+export type SourceRef = z.infer<typeof sourceRefSchema>;
+export type CanonicalOwnPost = z.infer<typeof canonicalOwnPostSchema>;
 export type CanonicalOwnPostInput = z.infer<typeof canonicalOwnPostInputSchema>;
 export type ArchiveDerivedInsightSnapshot = z.infer<typeof archiveDerivedInsightSnapshotSchema>;
-export type PostLibraryStore = Omit<z.infer<typeof postLibraryStoreSchema>, "posts"> & {
-  posts: CanonicalOwnPost[];
-};
+export type PostLibraryStore = z.infer<typeof postLibraryStoreSchema>;
 
 export type PostLibraryWriteResult = {
   insertedCount: number;
