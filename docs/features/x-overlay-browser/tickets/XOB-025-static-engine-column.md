@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-025: StaticEngineColumn — compose detection + static metrics + Post Coach recommendations (RIGHT cockpit zone)
@@ -179,3 +179,23 @@ Required fixture variants:
 - **Overflow:** Post Coach list truncated at 5 items; "See more" expander if more exist.
 
 **Cross-deps:** XOB-019 (AnchorLayer/compose detection), XOB-021 (MetricExplainer), XOB-023 (ProvenanceController — static column renders independently of provenance state).
+
+## Pipeline Log
+
+Lane: rgb-tdd lean Red-first (Red self-validates → Green → combined Blue+Yellow). Not `[FND]`. Heavy pre-flight reconciliation (real `deterministic-analysis.ts` shapes; scope-split to XOB-029).
+
+| Station | Commit | Result |
+|---|---|---|
+| pre-Red SHA | `0b77d4e` | base (after reconciliations: discriminated `postCoach`/`prediction`, `{low,high}` ranges, `predictedMidImpressions`, fresh v2 `ScoreBar`, compose-detection/AnchorLayer-pin-API/`analyzePosts` trigger → deferred to XOB-029, browser-mode harness) |
+| Red (failing tests, self-validated) | `c23ec28` | ScoreBar contract block (in `ui-v2.test.tsx`) + 8 SEC cases + fixture-validity test; scope CLEAN; ticket-ids 2 benign header matches; fixtures copied from `engine/src/server/tests/posts-analyze.test.ts` and proven valid via `analyzedPostItemSchema.parse()`. |
+| pre-Green SHA | `c23ec28` | base |
+| Green (impl) | `2e5ded6` | 3 files (`client/src/ui/v2/score-bar.tsx` + barrel, `overlay/src/compose/static-engine-column.tsx`); 247/247 overlay tests pass; overlay+client typecheck green; `gates.py all` CLEAN (incl. ui-tokens). |
+| Blue (validate Green) | — | **APPROVE** — no test modification (`c23ec28...2e5ded6` test-diff empty); ScoreBar progressbar semantics + `data-score-fill`/`data-score-band` + `--score-*`-only fill; fresh primitive (no foundation import); both typechecks honest; focused 3-file diff; score-band thresholds (`≥80/≥70/≥50/<50/unknown`) reasonable. |
+| Yellow (intent/wiring) | — | **APPROVE** — scope-split honored (purely presentational; zero detection/transport/AnchorLayer); auto-followers (no `ManualScoringContextPanel`, no `<input>`); deterministic-not-judge Post Coach; quiet channel identity (no `--xb-judge*`, no primary-CTA, "◆ Static engine" caption); fresh v2 ScoreBar. |
+
+### Concerns Ledger
+
+| # | Concern | Owner | Resolution |
+|---|---|---|---|
+| E1 | **`followers` prop declared but unused** in `StaticEngineColumn`'s body. Correct by design — the follower-data effect is already baked into `prediction.status` (`available` vs `disabled:"missing_followers"`) upstream by the analyze request's `scoringContext.followers`, so the column derives the reach state from `prediction`, not the raw count. No AC violated; all tests pass; not a TS unused-var error (the field is in the prop type but not destructured). | XOB-029 wiring awareness | Either drop `followers` from `StaticEngineColumnProps` if it stays unused, or use it for a "N followers" caption. Non-blocking; XOB-029 should know the column does NOT key off `followers` directly. |
+| E2 | **`--xb-border-edge` applied as a full container border** rather than the Visual AC's "right-edge accent." Cosmetic; within the token vocabulary; not a DoD line. | XOB-029 polish (optional) | If the right-edge-only accent is desired in the assembled cockpit, set `border-right` only. Non-blocking. |
