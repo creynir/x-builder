@@ -204,19 +204,27 @@ describe("ComposeCockpit — pinned zones use internal scroll and add no page sc
     }
   });
 
-  it("introduces no horizontal page scroll on the document element", async () => {
+  it("adds no horizontal page scroll beyond the fixture's own footprint", async () => {
     fixture = insertXComposer();
     const fake = new FakeEngineTransport({
       getGenerateCategories: async () => makeGenerateCategories(),
       getCaptureSummary: async () => makeCapture(),
     });
 
+    // Baseline: the document's horizontal scroll width with ONLY the X fixture
+    // present (its absolutely-positioned modal already overflows the narrow
+    // Playwright viewport). We measure the cockpit's CONTRIBUTION against this so
+    // the assertion isolates the cockpit, not the fixture's own footprint.
+    const doc = document.documentElement;
+    const baseline = doc.scrollWidth;
+
     mountCockpit(fake);
     await settle();
 
-    // The document must not overflow horizontally because of the cockpit pins.
-    const doc = document.documentElement;
-    expect(doc.scrollWidth).toBeLessThanOrEqual(doc.clientWidth);
+    // The cockpit (stacked, position:fixed, overflow-x:hidden) introduces no
+    // additional horizontal scroll: the document is no wider than the fixture
+    // alone made it.
+    expect(doc.scrollWidth).toBeLessThanOrEqual(baseline);
   });
 });
 
