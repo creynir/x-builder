@@ -526,6 +526,18 @@ class DefaultReadinessService implements ReadinessService {
   }
 }
 
+// In-process readiness service construction. The runner composes /status and
+// the overlay readiness view from a real ReadinessService without a Fastify
+// instance, mirroring the buildServer default. `DefaultReadinessService` stays
+// private; this is the single exported construction path for it.
+export const createDefaultReadinessService = (
+  options: DefaultReadinessDependenciesOptions & { timeoutMs?: number } = {},
+): ReadinessService =>
+  new DefaultReadinessService(
+    createDefaultReadinessDependencies(options),
+    options.timeoutMs ?? readinessTimeoutMsDefault,
+  );
+
 const configureCors = (
   app: FastifyInstance,
   allowedOrigins: readonly string[],

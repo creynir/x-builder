@@ -47,7 +47,19 @@ export const __xbuilder_getCaptureSummary = "__xbuilder_getCaptureSummary" as co
 export const __xbuilder_getGenerateCategories = "__xbuilder_getGenerateCategories" as const;
 export const __xbuilder_applyJudgeSuggestions = "__xbuilder_applyJudgeSuggestions" as const;
 
-export const ENGINE_TRANSPORT_BINDINGS: Readonly<Record<string, string>> = Object.freeze({
+// Concrete per-method binding-name literals, one per EngineTransport method, so
+// dotted access (`ENGINE_TRANSPORT_BINDINGS.getStatus`) is a known `string`.
+type EngineTransportBindings = {
+  readonly [K in keyof EngineTransport]: `__xbuilder_${K & string}`;
+};
+
+// Intersect the concrete record with a readonly string index signature. Dotted
+// access resolves through the concrete property (a known `string`), while
+// bracket access by a `string` variable and `Object.keys`/`Object.values` resolve
+// through the index signature (`string | undefined`, guarded at call sites under
+// noUncheckedIndexedAccess) — satisfying both the transport binder and its tests.
+export const ENGINE_TRANSPORT_BINDINGS: EngineTransportBindings &
+  Readonly<Record<string, string>> = Object.freeze({
   getOverlayReadiness: __xbuilder_getOverlayReadiness,
   getStatus: __xbuilder_getStatus,
   getSettings: __xbuilder_getSettings,

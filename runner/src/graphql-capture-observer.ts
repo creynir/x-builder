@@ -53,9 +53,18 @@ export class GraphQlCaptureObserver {
    * async and never throws to the page.
    */
   static attach(context: ContextLike, onBatch: OnBatch): GraphQlCaptureObserver {
-    const observer = new GraphQlCaptureObserver();
-    context.on("response", (response) => observer.handle(response, onBatch));
-    return observer;
+    return new GraphQlCaptureObserver().attachTo(context, onBatch);
+  }
+
+  /**
+   * Registers this observer's response listener on `context`. Lets the caller
+   * (RunnerApp) construct the observer first — so the readiness composer can
+   * hold its live `state`/`lastCaptureAt` reference — then attach it once the
+   * context exists. Returns `this` for fluent use by {@link attach}.
+   */
+  attachTo(context: ContextLike, onBatch: OnBatch): this {
+    context.on("response", (response) => this.handle(response, onBatch));
+    return this;
   }
 
   private async handle(response: ResponseLike, onBatch: OnBatch): Promise<void> {
