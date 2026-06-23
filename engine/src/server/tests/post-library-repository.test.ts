@@ -16,7 +16,7 @@ import {
 const importedAt = "2026-06-16T10:00:00.000Z";
 const sourceHash = "sha256:7a2f4e9c1b3d5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcd";
 
-// Real consumers (e.g. XOB-007/008) must narrow on the `source` discriminant before
+// Real consumers must narrow on the `source` discriminant before
 // reading any variant-specific field. These helpers filter a union array down to a single
 // variant so the subsequent reads are statically the narrowed arm — no casts, and reads of
 // a field that belongs to the other arm become a compile error rather than `undefined`.

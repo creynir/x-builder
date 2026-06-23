@@ -1,6 +1,6 @@
 // @x-builder/overlay — `SuggestState` fixtures for SuggestAffordance (test-only)
 //
-// XOB-028 owns these fixtures. `SuggestAffordance` is purely presentational over
+// `SuggestAffordance` is purely presentational over
 // an injected `SuggestState`, so its tests drive it entirely from the variants
 // below. The `cooldown` / `signal` sub-objects are REAL `CooldownSignal` shapes
 // imported from `@x-builder/shared` (`{ format, countInWindow, windowDays,

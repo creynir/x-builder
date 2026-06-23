@@ -1,4 +1,4 @@
-// @x-builder/overlay — AnalyzeState fixture-validity test (XOB-025)
+// @x-builder/overlay — AnalyzeState fixture-validity test
 //
 // These fixtures (`overlay/src/testing/analyze-state.ts`) feed the
 // StaticEngineColumn suite. The whole value of those tests rests on the fixtures

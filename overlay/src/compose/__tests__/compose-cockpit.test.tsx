@@ -1,7 +1,7 @@
 // @x-builder/overlay — ComposeCockpit FULL integration tests
 // (browser mode → Playwright Chromium via vitest-browser-react)
 //
-// RED (XOB-029): `../compose-cockpit` does not exist yet, so importing
+// RED: `../compose-cockpit` does not exist yet, so importing
 // `ComposeCockpit` is what drives the failing state. These are the heaviest tests
 // in the overlay suite — the integration keystone. `ComposeCockpit` is the
 // SELF-ORCHESTRATING cockpit: it owns the `ComposeMachineState` reducer, detects

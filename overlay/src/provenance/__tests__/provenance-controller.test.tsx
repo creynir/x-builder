@@ -1,13 +1,13 @@
 // @x-builder/overlay — ProvenanceController + provenance derived-model tests
-// (XOB-023, RED). Browser-mode harness (Vitest browser / Playwright Chromium),
-// real `textContent` and real timers, mirroring XOB-022's discipline.
+// (RED). Browser-mode harness (Vitest browser / Playwright Chromium),
+// real `textContent` and real timers, mirroring the highlight-layer discipline.
 //
 // WHY BROWSER MODE: the controller reads `composerEl.textContent` on a debounce
 // and derives the two-state provenance model from a byte-for-byte comparison of
 // the green anchor against the live composer text. The flip-on-edit AC needs a
 // REAL contenteditable-like composer whose `textContent` we mutate and a REAL
 // fake-timer debounce tick — jsdom's empty layout would make the fixture and the
-// flip meaningless. We stub rAF to run synchronously (as XOB-018/022 do) so the
+// flip meaningless. We stub rAF to run synchronously (as the anchor/highlight suites do) so the
 // debounced read is observable under fake timers regardless of whether the read
 // rides a rAF or a bare setTimeout.
 //
@@ -81,7 +81,7 @@ function editComposerTo(el: HTMLElement, text: string): void {
 }
 
 /**
- * Simulate the real generate/apply flow (XOB-024/027): the candidate text is
+ * Simulate the real generate/apply flow: the candidate text is
  * WRITTEN to the composer, then `setAnchor` is called from the composer's
  * post-write `textContent`. The input event + debounce flush is what triggers
  * the controller to re-read composer text and re-derive — `setAnchor` alone

@@ -1,4 +1,4 @@
-// @x-builder/overlay — ComposeCockpit integration fixtures (XOB-029, test-only)
+// @x-builder/overlay — ComposeCockpit integration fixtures (test-only)
 //
 // The X-shaped DOM the ComposeCockpit integration suite mounts against, plus the
 // transport-response builders the suite injects through `FakeEngineTransport`.
@@ -25,7 +25,7 @@
 // The response builders produce the REAL shared shapes (`GenerateIdeaResponse`,
 // `JudgeDraftResponse`, `ApplyJudgeSuggestionsResponse`, `GenerateCategory[]`,
 // etc.) — no re-derived Zod, no invented fields — reusing `makeJudgeVerdict` and
-// the XOB-025 `readyResult` so the cockpit exercises exactly the bytes the engine
+// the `readyResult` so the cockpit exercises exactly the bytes the engine
 // emits. A `deferred()` helper builds a hand-resolved promise so the in-flight
 // abort case can hold a `judgeDraft`/`applyJudgeSuggestions` call open while the
 // user edits, then resolve it AFTER the abort to prove the stale result is

@@ -1,6 +1,6 @@
 // @x-builder/overlay — SuggestAffordance tests (browser mode → Playwright Chromium)
 //
-// RED (XOB-028): `../suggest-affordance` does not exist yet, so importing
+// RED: `../suggest-affordance` does not exist yet, so importing
 // `SuggestAffordance` is what drives the failing state. These tests pin the
 // ticket's 8 cases + the key edges against a PURELY PRESENTATIONAL component: it
 // receives `suggestion` (a `SuggestState`), `onRefresh`, `onUse`, `open`, and

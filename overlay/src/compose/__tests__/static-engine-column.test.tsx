@@ -1,10 +1,10 @@
 // @x-builder/overlay — StaticEngineColumn tests (browser mode → Playwright Chromium)
 //
-// RED (XOB-025): `../static-engine-column` does not exist yet, so importing
+// RED: `../static-engine-column` does not exist yet, so importing
 // `StaticEngineColumn` is what drives the failing state. These tests pin the 8
 // ticket cases against a PURELY PRESENTATIONAL component: it receives
 // `analyzeState` + `followers` + `explainer` as props and renders. All compose
-// detection / transport / debounce is OUT OF SCOPE here (owned by XOB-029).
+// detection / transport / debounce is OUT OF SCOPE here (owned by the ComposeCockpit).
 //
 // The `analyzeState` fixtures are schema-valid `Extract<AnalyzedPostItem,
 // {status:"scored"}>` instances (proven by `analyze-state-fixtures.test.tsx`),

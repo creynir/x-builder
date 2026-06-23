@@ -1,7 +1,7 @@
-// @x-builder/overlay — FakeEngineTransport (XOB-019, test-only)
+// @x-builder/overlay — FakeEngineTransport (test-only)
 //
-// A configurable, type-safe stand-in for the REAL shared `EngineTransport`
-// (XOB-002). It implements all 17 methods; each resolves to a minimal valid
+// A configurable, type-safe stand-in for the REAL shared `EngineTransport`.
+// It implements all 17 methods; each resolves to a minimal valid
 // default (`{}` cast to the method's return type) unless an override is
 // supplied via the constructor. Used as the injected transport in overlay
 // tests via `OverlayTransportProvider`.

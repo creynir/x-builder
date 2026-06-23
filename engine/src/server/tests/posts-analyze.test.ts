@@ -638,8 +638,8 @@ describe("posts analyze API — live auto-context and per-item cooldown", () => 
     const windowService = new RepetitionWindowService(repository);
     const liveContextResolver = new LiveContextResolver(repository, windowService);
 
-    // `liveContextResolver` is the option Green adds to BuildServerOptions
-    // (XOB-007). Until then this is an expected typecheck RED (TS2353).
+    // `liveContextResolver` is the option Green adds to BuildServerOptions.
+    // Until then this is an expected typecheck RED (TS2353).
     return buildServer({
       postLibraryRepository: repository,
       liveContextResolver,

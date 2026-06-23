@@ -1,6 +1,6 @@
 // @x-builder/overlay — StaticEngineColumn `AnalyzeState` fixtures (test-only)
 //
-// XOB-025 owns these fixtures. `StaticEngineColumn` is purely presentational
+// `StaticEngineColumn` is purely presentational
 // over an injected `AnalyzeState`, so its tests drive it entirely from the
 // variants below. The `ready` result is a FULL, schema-valid
 // `Extract<AnalyzedPostItem, { status: "scored" }>` — its construction is copied
@@ -13,7 +13,7 @@
 // fixtures can never silently drift from the schema.
 //
 // `AnalyzeState` is the overlay-local UI-state wrapper the parent ComposeCockpit
-// (XOB-029) owns; `StaticEngineColumn` only ever consumes it. It is declared
+// owns; `StaticEngineColumn` only ever consumes it. It is declared
 // here against the real `ScoredPostItem` alias so the column and its tests share
 // one definition.
 

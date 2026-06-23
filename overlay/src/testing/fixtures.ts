@@ -26,8 +26,8 @@ const COMPOSER_TESTID = "tweetTextarea_0";
 /**
  * Build a REAL `div[data-testid="tweetTextarea_0"]` carrying a single Text node
  * of `text`, appended to a real container in `document.body`. This is the
- * XOB-022 inline `n(text, widthPx)` composer fixture promoted into a shared
- * ticket-owned helper (XOB-023) so the highlight-layer suite and the provenance
+ * inline `n(text, widthPx)` composer fixture promoted into a shared
+ * ticket-owned helper so the highlight-layer suite and the provenance
  * suite read one composer shape. Browser mode lays it out for real, so
  * `el.textContent` and `range.getClientRects()` over its text are real; the
  * `widthPx` knob forces a narrow box when a test needs a long quote to wrap.

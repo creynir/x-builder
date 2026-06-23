@@ -19,7 +19,7 @@ import { cleanup, render } from "vitest-browser-react";
 import { Alert } from "../../client/src/ui/v2/alert";
 import { Badge } from "../../client/src/ui/v2/badge";
 import { Button } from "../../client/src/ui/v2/button";
-// XOB-028: the FRESH v2 `EmptyState` primitive — this file does not exist yet,
+// the FRESH v2 `EmptyState` primitive — this file does not exist yet,
 // so importing it is what drives the RED state for the contract block below.
 import { EmptyState } from "../../client/src/ui/v2/empty-state";
 import { IconButton } from "../../client/src/ui/v2/icon-button";
@@ -273,7 +273,7 @@ describe("v2 KeyValueList", () => {
 });
 
 describe("v2 ScoreBar", () => {
-  // XOB-025 is the first consumer of the fresh v2 ScoreBar primitive. It mirrors
+  // StaticEngineColumn is the first consumer of the fresh v2 ScoreBar primitive. It mirrors
   // the legacy `ScoreBarProps` ({ label, value, max?, bandLabel?, helpText?,
   // loading?, disabled? }) but renders with inline `var(--…)` token styles (no
   // global classnames) so it travels into the shadow root. The fill colour maps
@@ -376,7 +376,7 @@ describe("v2 ScoreBar", () => {
 });
 
 describe("v2 EmptyState", () => {
-  // XOB-028 is the FIRST consumer of the fresh v2 `EmptyState` primitive. It
+  // SuggestAffordance is the FIRST consumer of the fresh v2 `EmptyState` primitive. It
   // mirrors the legacy `client/src/ui/foundation.tsx` `EmptyState` prop shape —
   // `{ title: string; children: ReactNode; action?: ReactNode }` — but renders
   // with inline `var(--…)` token styles (no global classnames) so it travels

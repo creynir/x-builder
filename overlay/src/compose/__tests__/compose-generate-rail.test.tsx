@@ -1,6 +1,6 @@
 // @x-builder/overlay — ComposeGenerateRail tests (browser mode → Playwright Chromium)
 //
-// RED (XOB-024): `../compose-generate-rail` does not exist yet, so importing
+// RED: `../compose-generate-rail` does not exist yet, so importing
 // `ComposeGenerateRail` is what drives the failing state. These tests pin the
 // component contract from the ticket — one ghost `Button` per category, a
 // `warning` `Badge` when `cooldownStatus !== "clear"`, the pending button in its

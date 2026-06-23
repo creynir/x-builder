@@ -1,4 +1,4 @@
-// @x-builder/overlay — ComposeGenerateRail test fixtures (XOB-024, ticket-owned)
+// @x-builder/overlay — ComposeGenerateRail test fixtures (ticket-owned)
 //
 // These are the canonical `GenerateCategory[]` shapes the ticket's Test Strategy
 // pins for the rail tests. They use the REAL `GenerateCategory` type from

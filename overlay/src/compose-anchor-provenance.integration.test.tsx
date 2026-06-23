@@ -1,9 +1,9 @@
 // @x-builder/overlay — compose-surface integration seam (Group B — VERIFY-ONLY).
 //
 // These exercise the cross-component integration of units that already shipped:
-//   • AnchorLayer compose detection + reconcile (ComposeContext)   — XOB-029
-//   • selectors.safeQuery / selectorMissCount silent degrade        — XOB-019
-//   • ProvenanceController generated→user_written flip + approved   — XOB-023
+//   • AnchorLayer compose detection + reconcile (ComposeContext)
+//   • selectors.safeQuery / selectorMissCount silent degrade
+//   • ProvenanceController generated→user_written flip + approved
 // Passing here is EXPECTED (the units are built); this suite asserts that the
 // composed seam behaves end-to-end against an X-shaped fixture DOM. It is NOT a
 // new-build surface — see the matching Group-A runner integration suite for the

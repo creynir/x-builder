@@ -1,6 +1,6 @@
 // @x-builder/overlay — JudgeStrip tests (browser mode → Playwright Chromium)
 //
-// RED (XOB-026): `../judge-strip` does not exist yet, so importing `JudgeStrip`
+// RED: `../judge-strip` does not exist yet, so importing `JudgeStrip`
 // is what drives the failing state. These tests pin the 9 ticket cases + the key
 // edges against a PURELY PRESENTATIONAL component: it receives `judge`,
 // `provenance`, `applyState`, `onRetryJudge`, and `explainer` as props and
@@ -9,12 +9,12 @@
 // ComposeCockpit machine) — JudgeStrip only renders what `judge` + `provenance`
 // tell it.
 //
-// Contract fixtures are REAL shapes: `makeJudgeVerdict` (XOB-023) builds a full
+// Contract fixtures are REAL shapes: `makeJudgeVerdict` builds a full
 // 13-dim `JudgeVerdict` whose `verdict` label is derived from `scores.overall`
 // via shared's `deriveJudgeVerdict`, so `deriveApproved` (imported from
 // `@x-builder/shared`, never re-implemented here) agrees with the score the
 // approval ACs assert. `ProvenanceState` is the bare string union
-// `"generated" | "user_written"` (XOB-023) — compared `provenance === "generated"`,
+// `"generated" | "user_written"` — compared `provenance === "generated"`,
 // NOT `provenance.status`.
 //
 // Harness: the established overlay shadow-host harness (`mountShadowHost`) with
@@ -107,8 +107,8 @@ function props(
     provenance: USER_WRITTEN,
     applyState: "idle",
     onRetryJudge: vi.fn(),
-    // XOB-027: Green makes `onApplyAll` a required prop on JudgeStrip. Adding it
-    // to the helper defaults keeps every XOB-026 test (which builds props via
+    // Green makes `onApplyAll` a required prop on JudgeStrip. Adding it
+    // to the helper defaults keeps every existing test (which builds props via
     // this helper) typechecking without touching their bodies.
     onApplyAll: vi.fn(),
     explainer: overlayExplainerCopy,
@@ -230,7 +230,7 @@ describe("JudgeStrip — judged", () => {
     );
 
     // The 13-dim grid is unaffected by zero annotations (annotations are
-    // XOB-022/027 scope; the strip just renders the scores).
+    // out of scope here; the strip just renders the scores).
     expect(scoreBars(root)).toHaveLength(13);
   });
 });
@@ -485,14 +485,14 @@ describe("JudgeStrip — unavailable", () => {
 });
 
 // ==========================================================================
-// XOB-027 — auto-improve: Apply-all + ApplyState render + provenance gate.
+// auto-improve: Apply-all + ApplyState render + provenance gate.
 //
-// RED for XOB-027: these pin the apply affordance Green will add to
+// RED: these pin the apply affordance Green will add to
 // `judge-strip.tsx` (the `onApplyAll` prop + Apply-all button + the
 // `ApplyState`-machine render + the AlreadySolid/failure banners). They fail
-// because the current XOB-026 impl ignores `applyState` and renders no apply
+// because the current impl ignores `applyState` and renders no apply
 // UI (and `onApplyAll` is not yet a prop) — NOT because of test bugs. The
-// XOB-026 cases above keep passing (they don't exercise apply behavior; the
+// cases above keep passing (they don't exercise apply behavior; the
 // `props()` helper's new `onApplyAll: vi.fn()` default just keeps them
 // typechecking once Green makes the prop required).
 //
@@ -502,7 +502,7 @@ describe("JudgeStrip — unavailable", () => {
 //     leading glyph is not load-bearing.
 //   - Applying indicator: asserted via the "Improving…" label + an
 //     `aria-busy="true"` region (the reduced-motion-safe affordance), mirroring
-//     the XOB-026 running indicator. If Green reuses the running pulse dot
+//     the judge running indicator. If Green reuses the running pulse dot
 //     (`data-judge-pulse="animated"`) for the apply pulse that is fine, but the
 //     load-bearing signal these tests pin is the label + `aria-busy`.
 //   - AlreadySolid banner: `Alert` with `data-variant="warning"` + title text
