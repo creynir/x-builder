@@ -1,0 +1,167 @@
+{
+  "data": {
+    "user": {
+      "result": {
+        "__typename": "User",
+        "rest_id": "44196397",
+        "timeline_v2": {
+          "timeline": {
+            "instructions": [
+              { "type": "TimelineClearCache" },
+              {
+                "type": "TimelineAddEntries",
+                "entries": [
+                  {
+                    "entryId": "tweet-1800000000000000001",
+                    "sortIndex": "1800000000000000001",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1800000000000000001",
+                            "legacy": {
+                              "full_text": "Local-first tools survive the network being hostile. Design for offline and the online path gets simpler too.",
+                              "created_at": "Mon Jun 02 09:00:00 +0000 2025",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 142,
+                              "retweet_count": 18,
+                              "reply_count": 11,
+                              "quote_count": 3,
+                              "bookmark_count": 27,
+                              "entities": { "urls": [], "hashtags": [], "user_mentions": [], "media": [] }
+                            },
+                            "views": { "count": "51200", "state": "EnabledWithCount" }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-1800000000000000002",
+                    "sortIndex": "1800000000000000002",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1800000000000000002",
+                            "legacy": {
+                              "full_text": "The hardest part of a sync engine is not the merge. It is deciding what counts as the same thing.",
+                              "created_at": "Tue Jun 03 11:30:00 +0000 2025",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 89,
+                              "retweet_count": 6,
+                              "reply_count": 14,
+                              "quote_count": 1,
+                              "bookmark_count": 33,
+                              "entities": { "urls": [], "hashtags": [], "user_mentions": [], "media": [] }
+                            },
+                            "views": { "count": "20100", "state": "EnabledWithCount" }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-1800000000000000003",
+                    "sortIndex": "1800000000000000003",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1800000000000000003",
+                            "legacy": {
+                              "full_text": "Shipping a rough thing you can learn from beats polishing a thing nobody has used yet.",
+                              "created_at": "Wed Jun 04 08:15:00 +0000 2025",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 233,
+                              "retweet_count": 41,
+                              "reply_count": 19,
+                              "quote_count": 5,
+                              "bookmark_count": 61,
+                              "entities": { "urls": [], "hashtags": [], "user_mentions": [], "media": [] }
+                            },
+                            "views": { "count": "98010", "state": "EnabledWithCount" }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-1800000000000000004",
+                    "sortIndex": "1800000000000000004",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1800000000000000004",
+                            "legacy": {
+                              "full_text": "Most onboarding decks explain the product. The good ones get the user to one finished task.",
+                              "created_at": "Thu Jun 05 14:45:00 +0000 2025",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 167,
+                              "retweet_count": 22,
+                              "reply_count": 8,
+                              "quote_count": 2,
+                              "bookmark_count": 44,
+                              "entities": { "urls": [], "hashtags": [], "user_mentions": [], "media": [] }
+                            },
+                            "views": { "count": "40550", "state": "EnabledWithCount" }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-1800000000000000005",
+                    "sortIndex": "1800000000000000005",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1800000000000000005",
+                            "legacy": {
+                              "full_text": "A backlog is not a plan. A plan is the three things you will refuse to be distracted from this week.",
+                              "created_at": "Fri Jun 06 07:05:00 +0000 2025",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 311,
+                              "retweet_count": 58,
+                              "reply_count": 27,
+                              "quote_count": 9,
+                              "bookmark_count": 102,
+                              "entities": { "urls": [], "hashtags": [], "user_mentions": [], "media": [] }
+                            },
+                            "views": { "count": "120400", "state": "EnabledWithCount" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { JudgeVerdict } from "@x-builder/shared";
+import { judgeVerdictSchema, type JudgeVerdict } from "@x-builder/shared";
 
 import { JudgeDraftService } from "../judge-draft-service";
 import {
@@ -31,6 +31,7 @@ const verdict: JudgeVerdict = {
   headline: "Strong, specific, reply-friendly.",
   strengths: ["Concrete claim up front"],
   improvements: ["Trim the middle paragraph"],
+  annotations: [],
 };
 
 const successResult: StructuredLlmProviderResult<JudgeVerdict> = {
@@ -376,5 +377,162 @@ describe("JudgeDraftService account profile and rubric", () => {
       replyVsQuoteOrientation: 62,
       audienceMatch: null,
     });
+  });
+});
+
+// Span-level annotations. The model emits a `quote` (verbatim substring),
+// a `severity`, and a one-line `recommendation`; the service threads these through
+// the structured-output parser into verdict.annotations alongside the aggregate
+// scores. The model output never carries a `verdict` key (omit({ verdict })) and
+// the annotations field is optional at the model layer, defaulted at the Zod layer.
+describe("JudgeDraftService span annotations", () => {
+  // A model output as the provider returns it: every verdict field except the
+  // derived `verdict` band. annotations is appended per-test.
+  const modelOutput = {
+    confidence: "medium" as const,
+    scores: { ...scores },
+    headline: "Strong, specific, reply-friendly.",
+    strengths: ["Concrete claim up front"],
+    improvements: ["Trim the middle paragraph"],
+  };
+
+  // Capture the structured-output parser the service hands the provider; this IS
+  // toVerdict (the production parse path), so parsing model output through it
+  // exercises judgeModelOutputSchema + the verdict-band derivation exactly as the
+  // real StructuredLlmService.parseProviderOutput does.
+  const captureParser = async () => {
+    const captured: StructuredLlmRequest<JudgeVerdict>[] = [];
+    const service = new JudgeDraftService({
+      generateStructured: async (request) => {
+        captured.push(request);
+        return successResult;
+      },
+    });
+    await service.judge("guaranteed results in thirty days, no effort needed");
+    return captured[0]!;
+  };
+
+  it("threads model-emitted annotations through into verdict.annotations", async () => {
+    const request = await captureParser();
+
+    const verdict = request.structuredOutput.parser({
+      ...modelOutput,
+      annotations: [
+        { quote: "exact phrase", severity: "warning", recommendation: "be more specific" },
+      ],
+    });
+
+    expect(verdict.annotations).toHaveLength(1);
+    expect(verdict.annotations[0]!.quote).toBe("exact phrase");
+    expect(verdict.annotations[0]!.severity).toBe("warning");
+    expect(verdict.annotations[0]!.recommendation).toBeTruthy();
+    expect(verdict.annotations[0]!.recommendation.length).toBeGreaterThan(0);
+  });
+
+  it("defaults verdict.annotations to [] when the model omits the field", async () => {
+    const request = await captureParser();
+
+    // modelOutput has no `annotations` key at all.
+    const verdict = request.structuredOutput.parser({ ...modelOutput });
+
+    expect(verdict.annotations).toEqual([]);
+    expect(verdict.annotations).not.toBeUndefined();
+    expect(verdict.annotations).not.toBeNull();
+  });
+
+  it("leaves aggregate scores, verdict band, and headline unaffected by annotations", async () => {
+    const request = await captureParser();
+    const parser = request.structuredOutput.parser;
+
+    const withAnnotations = parser({
+      ...modelOutput,
+      annotations: [
+        { quote: "guaranteed results", severity: "warning", recommendation: "remove the unsupported absolute" },
+      ],
+    });
+    const withoutAnnotations = parser({ ...modelOutput });
+
+    expect(withAnnotations.scores.overall).toBe(withoutAnnotations.scores.overall);
+    expect(withAnnotations.scores).toEqual(withoutAnnotations.scores);
+    expect(withAnnotations.verdict).toBe(withoutAnnotations.verdict);
+    expect(withAnnotations.headline).toBe(withoutAnnotations.headline);
+  });
+
+  it("rejects annotations: null at the parse layer (structured_output_invalid path)", async () => {
+    const request = await captureParser();
+
+    // Zod's .default([]) only fills `undefined`, not `null`; a model that emits an
+    // explicit null annotations array fails the contract. The real
+    // StructuredLlmService catches this throw and surfaces structured_output_invalid;
+    // toVerdict never returns a verdict with a null annotations field.
+    expect(() => request.structuredOutput.parser({ ...modelOutput, annotations: null })).toThrow();
+  });
+
+  it("briefs the model on emitting exact-substring annotations and exposes an optional annotations property in the output schema", async () => {
+    const request = await captureParser();
+
+    // Prompt: the instructions must tell the model to emit annotations with a
+    // verbatim quote substring (Green appends this sentence to judgeInstructions).
+    expect(request.instructions).toContain("annotations");
+    expect(request.instructions.toLowerCase()).toContain("substring");
+
+    // Output schema: an optional `annotations` array property capped at 12 items,
+    // each { quote, severity, recommendation }, and NOT promoted to required.
+    const schema = request.structuredOutput.schema;
+    const properties = schema.properties as Record<string, unknown>;
+    const annotationsNode = properties.annotations as Record<string, unknown> | undefined;
+
+    expect(annotationsNode).toBeDefined();
+    expect(annotationsNode!.type).toBe("array");
+    expect(annotationsNode!.maxItems).toBe(12);
+
+    const items = annotationsNode!.items as Record<string, unknown>;
+    expect(items.type).toBe("object");
+    expect(items.additionalProperties).toBe(false);
+    expect(items.required).toEqual(expect.arrayContaining(["quote", "severity", "recommendation"]));
+    const itemProps = items.properties as Record<string, unknown>;
+    expect(itemProps).toHaveProperty("quote");
+    expect(itemProps).toHaveProperty("severity");
+    expect(itemProps).toHaveProperty("recommendation");
+    expect((itemProps.severity as Record<string, unknown>).enum).toEqual(["suggestion", "warning"]);
+
+    // Optional at the model layer: annotations must NOT be in the top-level required set.
+    expect(schema.required as string[]).not.toContain("annotations");
+  });
+});
+
+// The shared judgeVerdictSchema owns the annotations contract; the engine
+// consumes it. These round-trips pin the additive default behavior at the schema
+// boundary independent of the service wiring.
+describe("judgeVerdictSchema annotations round-trip", () => {
+  const baseVerdict = {
+    verdict: "slight_rework" as const,
+    confidence: "medium" as const,
+    scores: { ...scores },
+    headline: "Strong, specific, reply-friendly.",
+    strengths: ["Concrete claim up front"],
+    improvements: ["Trim the middle paragraph"],
+  };
+
+  it("round-trips a verdict that carries annotations", () => {
+    const parsed = judgeVerdictSchema.parse({
+      ...baseVerdict,
+      annotations: [
+        { quote: "guaranteed results", severity: "warning", recommendation: "remove the unsupported absolute" },
+      ],
+    });
+
+    expect(parsed.annotations).toHaveLength(1);
+    expect(parsed.annotations[0]).toEqual({
+      quote: "guaranteed results",
+      severity: "warning",
+      recommendation: "remove the unsupported absolute",
+    });
+  });
+
+  it("coerces a verdict without an annotations key to []", () => {
+    const parsed = judgeVerdictSchema.parse({ ...baseVerdict });
+
+    expect(parsed.annotations).toEqual([]);
   });
 });

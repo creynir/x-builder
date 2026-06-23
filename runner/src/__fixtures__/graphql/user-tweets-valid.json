@@ -1,0 +1,173 @@
+{
+  "data": {
+    "user": {
+      "result": {
+        "__typename": "User",
+        "rest_id": "44196397",
+        "timeline_v2": {
+          "timeline": {
+            "instructions": [
+              {
+                "type": "TimelineClearCache"
+              },
+              {
+                "type": "TimelineAddEntries",
+                "entries": [
+                  {
+                    "entryId": "tweet-1700000000000000001",
+                    "sortIndex": "1700000000000000001",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000001",
+                            "legacy": {
+                              "full_text": "Local-first is the right default for tools that need to survive offline.",
+                              "created_at": "Mon Nov 13 09:00:00 +0000 2023",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 128,
+                              "retweet_count": 14,
+                              "reply_count": 9,
+                              "quote_count": 2,
+                              "bookmark_count": 31,
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [],
+                                "user_mentions": [],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "48211",
+                              "state": "EnabledWithCount"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-1700000000000000002",
+                    "sortIndex": "1700000000000000002",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000002",
+                            "legacy": {
+                              "full_text": "@indie_hacker totally agree, the sync layer is where most of the complexity lives. https://t.co/abc123",
+                              "created_at": "Mon Nov 13 11:30:00 +0000 2023",
+                              "in_reply_to_status_id_str": "1699999999999999999",
+                              "in_reply_to_user_id_str": "987654321",
+                              "favorite_count": 7,
+                              "retweet_count": 0,
+                              "reply_count": 1,
+                              "quote_count": 0,
+                              "bookmark_count": 0,
+                              "entities": {
+                                "urls": [
+                                  {
+                                    "url": "https://t.co/abc123",
+                                    "expanded_url": "https://example.com/sync",
+                                    "display_url": "example.com/sync",
+                                    "indices": [80, 103]
+                                  }
+                                ],
+                                "hashtags": [],
+                                "user_mentions": [
+                                  {
+                                    "screen_name": "indie_hacker",
+                                    "id_str": "987654321",
+                                    "indices": [0, 13]
+                                  }
+                                ],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "3120",
+                              "state": "EnabledWithCount"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-1700000000000000003",
+                    "sortIndex": "1700000000000000003",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000003",
+                            "legacy": {
+                              "full_text": "RT @builder: shipping is a feature. #buildinpublic",
+                              "created_at": "Tue Nov 14 08:15:00 +0000 2023",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 0,
+                              "retweet_count": 56,
+                              "reply_count": 0,
+                              "quote_count": 0,
+                              "bookmark_count": 4,
+                              "retweeted_status_result": {
+                                "result": {
+                                  "__typename": "Tweet",
+                                  "rest_id": "1690000000000000000",
+                                  "legacy": {
+                                    "full_text": "shipping is a feature. #buildinpublic",
+                                    "created_at": "Tue Nov 14 07:00:00 +0000 2023"
+                                  }
+                                }
+                              },
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [
+                                  {
+                                    "text": "buildinpublic",
+                                    "indices": [36, 50]
+                                  }
+                                ],
+                                "user_mentions": [
+                                  {
+                                    "screen_name": "builder",
+                                    "id_str": "111222333",
+                                    "indices": [3, 11]
+                                  }
+                                ],
+                                "media": []
+                              },
+                              "extended_entities": {
+                                "media": [
+                                  {
+                                    "type": "photo",
+                                    "media_url_https": "https://pbs.twimg.com/media/example.jpg"
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

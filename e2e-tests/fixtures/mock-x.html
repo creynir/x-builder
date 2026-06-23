@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mock X</title>
+    <style>
+      /* A wide enough viewport-independent layout so the cockpit lays out in its
+         WIDE (three-zone) mode by default; specs that exercise the stacked mode
+         set a small viewport themselves. The modal box is given real dimensions
+         so the pins anchor to a non-zero rect. */
+      :root {
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #fff;
+        color: #0f1419;
+      }
+      header {
+        padding: 12px 16px;
+        border-bottom: 1px solid #eff3f4;
+      }
+      main {
+        display: flex;
+        gap: 16px;
+        padding: 16px;
+      }
+      #timeline {
+        flex: 1;
+        min-width: 0;
+      }
+      article[data-testid="tweet"] {
+        border: 1px solid #eff3f4;
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 12px;
+      }
+      /* X's compose modal: a centered dialog with a real box so the cockpit's
+         rect snapshot is non-zero. The composer is a contenteditable div, exactly
+         the shape the overlay's compose detection + composer-write expect. */
+      [role="dialog"] {
+        position: fixed;
+        top: 80px;
+        left: 360px;
+        width: 600px;
+        min-height: 220px;
+        background: #fff;
+        border: 1px solid #cfd9de;
+        border-radius: 16px;
+        box-shadow: 0 0 24px rgba(0, 0, 0, 0.15);
+        padding: 16px;
+        box-sizing: border-box;
+      }
+      div[data-testid="tweetTextarea_0"] {
+        min-height: 120px;
+        font-size: 20px;
+        line-height: 1.4;
+        outline: none;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      div[data-testid="tweetTextarea_0"]:empty::before {
+        content: "What is happening?!";
+        color: #536471;
+      }
+      div[data-testid="tweetButton"] {
+        margin-top: 16px;
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 9999px;
+        background: #1d9bf0;
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+        user-select: none;
+      }
+    </style>
+  </head>
+  <body>
+    <header>Mock X timeline (fixture)</header>
+    <main>
+      <section id="timeline" aria-label="Timeline">
+        <article data-testid="tweet">
+          <div data-testid="tweetText">A previously authored post in the timeline.</div>
+        </article>
+        <article data-testid="tweet">
+          <div data-testid="tweetText">Another authored post in the timeline.</div>
+        </article>
+      </section>
+
+      <!-- X's compose modal. A [role="dialog"] wrapping a contenteditable
+           tweetTextarea_0 is exactly the shape the overlay's ComposeContext
+           detects (anchor-layer detectComposer). The dialog stays in the DOM so
+           the cockpit mounts on page load. -->
+      <div role="dialog" aria-label="Post a reply">
+        <div
+          data-testid="tweetTextarea_0"
+          contenteditable="true"
+          role="textbox"
+          aria-label="Post text"
+          spellcheck="false"
+        ></div>
+        <div data-testid="tweetButton" role="button" tabindex="0">Post</div>
+      </div>
+    </main>
+
+    <script>
+      // The page issues its OWN already-fetched GraphQL requests, exactly as the
+      // logged-in X SPA does on a profile/home load. The runner's
+      // GraphQlCaptureObserver observes these responses via context.on("response")
+      // — it never crafts them. The route layer (mock-route-handlers.ts) fulfills
+      // them from the checked-in fixtures and records the request log.
+      //
+      // The query ids are arbitrary (X rotates them); the observer matches by the
+      // operation-name SUBSTRING in the URL path, so the operation name must be
+      // present in the path.
+      (function loadCannedGraphQl() {
+        var endpoints = [
+          "/i/api/graphql/QID-profile/UserByScreenName?variables=%7B%7D",
+          "/i/api/graphql/QID-tweets/UserTweets?variables=%7B%7D",
+        ];
+        for (var i = 0; i < endpoints.length; i += 1) {
+          // GET, like the page's own observe-only profile/timeline fetches.
+          fetch(endpoints[i], { method: "GET" }).catch(function () {
+            // A fixture-server hiccup must not break the page; the observer simply
+            // sees no batch. Tests assert on the captured corpus, not this fetch.
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

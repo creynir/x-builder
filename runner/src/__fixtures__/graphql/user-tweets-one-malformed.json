@@ -1,0 +1,116 @@
+{
+  "data": {
+    "user": {
+      "result": {
+        "__typename": "User",
+        "rest_id": "44196397",
+        "timeline_v2": {
+          "timeline": {
+            "instructions": [
+              {
+                "type": "TimelineAddEntries",
+                "entries": [
+                  {
+                    "entryId": "tweet-1700000000000000011",
+                    "sortIndex": "1700000000000000011",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000011",
+                            "legacy": {
+                              "full_text": "Well-formed tweet number one in the malformed batch.",
+                              "created_at": "Wed Nov 15 09:00:00 +0000 2023",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 12,
+                              "retweet_count": 1,
+                              "reply_count": 0,
+                              "quote_count": 0,
+                              "bookmark_count": 2,
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [],
+                                "user_mentions": [],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "910",
+                              "state": "EnabledWithCount"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-1700000000000000012",
+                    "sortIndex": "1700000000000000012",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000012",
+                            "legacy": null,
+                            "views": {
+                              "count": "55",
+                              "state": "EnabledWithCount"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-1700000000000000013",
+                    "sortIndex": "1700000000000000013",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000013",
+                            "legacy": {
+                              "full_text": "Well-formed tweet number two in the malformed batch.",
+                              "created_at": "Wed Nov 15 12:00:00 +0000 2023",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 4,
+                              "retweet_count": 0,
+                              "reply_count": 0,
+                              "quote_count": 0,
+                              "bookmark_count": 0,
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [],
+                                "user_mentions": [],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "201",
+                              "state": "EnabledWithCount"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

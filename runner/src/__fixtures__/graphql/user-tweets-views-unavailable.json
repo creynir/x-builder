@@ -1,0 +1,95 @@
+{
+  "data": {
+    "user": {
+      "result": {
+        "__typename": "User",
+        "rest_id": "44196397",
+        "timeline_v2": {
+          "timeline": {
+            "instructions": [
+              {
+                "type": "TimelineAddEntries",
+                "entries": [
+                  {
+                    "entryId": "tweet-1700000000000000021",
+                    "sortIndex": "1700000000000000021",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000021",
+                            "legacy": {
+                              "full_text": "First tweet whose view count is unavailable.",
+                              "created_at": "Thu Nov 16 09:00:00 +0000 2023",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 5,
+                              "retweet_count": 0,
+                              "reply_count": 0,
+                              "quote_count": 0,
+                              "bookmark_count": 0,
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [],
+                                "user_mentions": [],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "unavailable",
+                              "state": "Enabled"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-1700000000000000022",
+                    "sortIndex": "1700000000000000022",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000022",
+                            "legacy": {
+                              "full_text": "Second tweet whose view count is unavailable.",
+                              "created_at": "Thu Nov 16 11:00:00 +0000 2023",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 8,
+                              "retweet_count": 1,
+                              "reply_count": 0,
+                              "quote_count": 0,
+                              "bookmark_count": 1,
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [],
+                                "user_mentions": [],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "unavailable",
+                              "state": "Enabled"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

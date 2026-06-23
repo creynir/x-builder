@@ -1,0 +1,19 @@
+{
+  "data": {
+    "user": {
+      "result": {
+        "__typename": "User",
+        "id": "VXNlcjo0NDE5NjM5Nw==",
+        "rest_id": "44196397",
+        "legacy": {
+          "screen_name": "indie_hacker",
+          "name": "Indie Hacker",
+          "followers_count": 1800,
+          "friends_count": 312,
+          "statuses_count": 9421,
+          "description": "Building small tools that survive offline."
+        }
+      }
+    }
+  }
+}

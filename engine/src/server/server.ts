@@ -12,6 +12,8 @@ import {
   appSettingsResponseSchema,
   appSettingsSchema,
   appStatusSchema,
+  applyJudgeSuggestionsRequestSchema,
+  applyJudgeSuggestionsResponseSchema,
   activeArchiveContextSchema,
   archiveContextActivationResponseSchema,
   archiveImportOverviewSchema,
@@ -21,10 +23,16 @@ import {
   archiveTweetsImportResponseSchema,
   archiveTweetsValidateRequestSchema,
   archiveTweetsValidateResponseSchema,
+  captureSummarySchema,
+  cooldownReportSchema,
+  type CooldownReport,
+  generateCategorySchema,
   generateIdeaRequestSchema,
   generateIdeaResponseSchema,
   judgeDraftRequestSchema,
   judgeDraftResponseSchema,
+  suggestPostRequestSchema,
+  suggestPostResponseSchema,
   subsystemStatusSchema,
   type ApiError,
   type AppSettings,
@@ -37,6 +45,10 @@ import {
 import { z } from "zod";
 
 import { DeterministicAnalysisService } from "../deterministic/deterministic-analysis-service.js";
+import { RepetitionWindowService } from "../capture/repetition-window-service.js";
+import { LiveCaptureService } from "../capture/live-capture-service.js";
+import { LiveContextResolver } from "../capture/live-context-resolver.js";
+import { GenerateCategoryService } from "../suggest/generate-category-service.js";
 import {
   ArchiveImportService,
   ArchiveValidationError,
@@ -48,6 +60,9 @@ import {
   type JudgeDraft,
   type JudgeDraftOutcome,
 } from "../llm/judge-draft-service.js";
+import { GenerateIdeasService } from "../llm/generate-ideas-service.js";
+import { ApplyJudgeSuggestionsService } from "../llm/apply-judge-suggestions-service.js";
+import { SuggestPostService } from "../suggest/suggest-post-service.js";
 import { judgeProviderRegistry } from "../llm/judge-provider-registry.js";
 import { createSettingsJudgeProviderResolver } from "../llm/judge-provider-resolver.js";
 import { NodeProcessRunner, type ProcessRunner } from "../llm/process-runner.js";
@@ -97,7 +112,13 @@ export interface BuildServerOptions {
   readinessTimeoutMs?: number;
   settingsRepository?: AppSettingsRepository;
   postLibraryRepository?: PostLibraryRepository;
+  repetitionWindowService?: RepetitionWindowService;
+  generateCategoryService?: GenerateCategoryService;
+  suggestPostService?: SuggestPostService;
   judgeDraftService?: JudgeDraft;
+  applyJudgeSuggestionsService?: ApplyJudgeSuggestionsService;
+  liveContextResolver?: LiveContextResolver;
+  liveCaptureService?: LiveCaptureService;
 }
 
 export type EngineRuntimeConfig = {
@@ -176,6 +197,15 @@ const archiveStorageFailedError = (): ApiError =>
     code: "archive_storage_failed",
     message: "The local archive library could not be saved. Try again.",
     scope: "archive",
+    retryable: true,
+    status: 500,
+  });
+
+const libraryStorageFailedError = (): ApiError =>
+  normalize({
+    code: "library_storage_failed",
+    message: "The local post library could not be read. Try again.",
+    scope: "library",
     retryable: true,
     status: 500,
   });
@@ -264,24 +294,28 @@ const parseResponseContract = <T>(schema: z.ZodType<T>, value: unknown): T => {
   }
 };
 
-const defaultGenerateCandidates: GenerateCandidates = ({ idea }) => ({
-  candidates: [
-    {
-      id: "one-liner",
-      format: "one-liner",
-      text: idea,
-    },
-    {
-      id: "mini-framework",
-      format: "mini-framework",
-      text: `${idea}\n\n1. Name the constraint.\n2. Show the tradeoff.\n3. Make the decision.`,
-    },
-    {
-      id: "debate-question",
-      format: "debate-question",
-      text: `${idea}\n\nWhat would change your mind?`,
-    },
-  ],
+// Attach a per-item cooldown signal to each scored item by looking up its
+// detectedFormat in the precomputed window report. A scored item gets a cooldown
+// key ONLY when the report carries a real in-window signal for its format;
+// formats with no signal leave the key genuinely absent (the field is
+// .optional() in the contract). score_failed items are returned unchanged (no
+// cooldown key), keeping the response valid against analyzePostsResponseSchema.
+const attachCooldownSignals = (
+  response: AnalyzePostsResponse,
+  report: CooldownReport,
+): AnalyzePostsResponse => ({
+  ...response,
+  items: response.items.map((item) => {
+    if (item.status !== "scored") {
+      return item;
+    }
+
+    const signal = report.signals.find(
+      (candidate) => candidate.format === item.detectedFormat,
+    );
+
+    return signal === undefined ? item : { ...item, cooldown: signal };
+  }),
 });
 
 const readinessTimeoutMsDefault = 750;
@@ -492,6 +526,18 @@ class DefaultReadinessService implements ReadinessService {
   }
 }
 
+// In-process readiness service construction. The runner composes /status and
+// the overlay readiness view from a real ReadinessService without a Fastify
+// instance, mirroring the buildServer default. `DefaultReadinessService` stays
+// private; this is the single exported construction path for it.
+export const createDefaultReadinessService = (
+  options: DefaultReadinessDependenciesOptions & { timeoutMs?: number } = {},
+): ReadinessService =>
+  new DefaultReadinessService(
+    createDefaultReadinessDependencies(options),
+    options.timeoutMs ?? readinessTimeoutMsDefault,
+  );
+
 const configureCors = (
   app: FastifyInstance,
   allowedOrigins: readonly string[],
@@ -573,7 +619,6 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const deterministicAnalysisService = new DeterministicAnalysisService();
   const defaultAnalyzePosts: AnalyzePosts = (request) => deterministicAnalysisService.analyzePosts(request);
   const analyzePosts = options.analyzePosts ?? defaultAnalyzePosts;
-  const generateCandidates = options.generateCandidates ?? defaultGenerateCandidates;
   const settingsRepository =
     options.settingsRepository ?? new JsonFileAppSettingsRepository({ root: defaultSettingsRoot });
   const postLibraryRepository =
@@ -584,6 +629,45 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     repository: postLibraryRepository,
   });
   const archiveStudioContextResolver = new ArchiveStudioContextResolver(postLibraryRepository);
+  // One RepetitionWindowService backs both the live-context resolver's
+  // repeatHistory derivation and the per-item cooldown attachment on
+  // /posts/analyze, so the 7-day window is computed against one clock and one
+  // store for a single request.
+  const repetitionWindowService =
+    options.repetitionWindowService ?? new RepetitionWindowService(postLibraryRepository);
+  const liveContextResolver =
+    options.liveContextResolver ??
+    new LiveContextResolver(postLibraryRepository, repetitionWindowService);
+  const generateCategoryService =
+    options.generateCategoryService ??
+    new GenerateCategoryService(
+      postLibraryRepository,
+      new RepetitionWindowService(postLibraryRepository),
+    );
+  // Suggest rail: deterministic ranking of the live corpus + one writer-first
+  // LLM pass in the chosen lane. It reuses the SHARED repetitionWindowService so
+  // cooldown is computed against one clock and store for the request, and shares
+  // the same judge providers + settings-backed resolver as the other LLM paths,
+  // so a settings PATCH retargets it on the next call.
+  const suggestPostService =
+    options.suggestPostService ??
+    (() => {
+      const workspaceRoot = resolveWorkspaceRoot(process.cwd());
+      const providers = workspaceRoot
+        ? judgeProviderRegistry.map((entry) =>
+            entry.createProvider({ runner: new NodeProcessRunner(), workspaceRoot }),
+          )
+        : [];
+
+      return new SuggestPostService(
+        postLibraryRepository,
+        repetitionWindowService,
+        new StructuredLlmService({ providers }),
+        createSettingsJudgeProviderResolver(settingsRepository),
+      );
+    })();
+  const liveCaptureService =
+    options.liveCaptureService ?? new LiveCaptureService(postLibraryRepository);
   const readinessService =
     options.readinessService ??
     new DefaultReadinessService(
@@ -620,6 +704,63 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       return accountProfile;
     }
   };
+
+  // Default apply-suggestions service: judges the original, rewrites it applying
+  // the verdict's annotations and improvements (writer_first_pass), re-judges the
+  // rewrite, and enforces the never-worse guard. It shares the judge providers,
+  // the same JudgeDraftService the /drafts/judge route uses, the settings-backed
+  // provider resolver, and the same profile fallback as the judge route, so a
+  // settings PATCH retargets it on the next call.
+  const applyJudgeSuggestionsService =
+    options.applyJudgeSuggestionsService ??
+    (() => {
+      const workspaceRoot = resolveWorkspaceRoot(process.cwd());
+      const providers = workspaceRoot
+        ? judgeProviderRegistry.map((entry) =>
+            entry.createProvider({ runner: new NodeProcessRunner(), workspaceRoot }),
+          )
+        : [];
+
+      return new ApplyJudgeSuggestionsService(
+        judgeDraftService,
+        new StructuredLlmService({ providers }),
+        createSettingsJudgeProviderResolver(settingsRepository),
+        () => resolveJudgeAccountProfile(undefined),
+      );
+    })();
+
+  // Default idea generation: the format path is LLM-driven (writer_variants) and
+  // judged via the same JudgeDraftService the /drafts/judge route uses; the
+  // idea-only path stays the deterministic stub. The generate step shares the
+  // judge providers and the settings-backed provider resolver, so a settings
+  // PATCH retargets generation and judging on the next call. The profile resolver
+  // forwards no explicit profile, so it falls back to the persisted account
+  // profile (composed with any active archive context).
+  const buildDefaultGenerateCandidates = (): GenerateCandidates => {
+    const workspaceRoot = resolveWorkspaceRoot(process.cwd());
+    // With no resolvable workspace root the provider list is empty, so a format
+    // request resolves to a provider_unconfigured generate failure (->
+    // generation_failed) rather than throwing at construction.
+    const providers = workspaceRoot
+      ? judgeProviderRegistry.map((entry) =>
+          entry.createProvider({ runner: new NodeProcessRunner(), workspaceRoot }),
+        )
+      : [];
+
+    const generateIdeasService = new GenerateIdeasService(
+      new StructuredLlmService({ providers }),
+      judgeDraftService,
+      createSettingsJudgeProviderResolver(settingsRepository),
+      () => resolveJudgeAccountProfile(undefined),
+    );
+
+    // Bind to the constructed instance so `this` survives the function reference;
+    // generate's signature matches GenerateCandidates
+    // (GenerateIdeaRequest -> Promise<GenerateIdeaResponse>).
+    return generateIdeasService.generate.bind(generateIdeasService);
+  };
+  const generateCandidates: GenerateCandidates =
+    options.generateCandidates ?? buildDefaultGenerateCandidates();
 
   app.setNotFoundHandler((_request, reply) => {
     const apiError = notFoundError();
@@ -811,17 +952,94 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     }
   });
 
+  app.get("/generate/categories", async (_request, reply) => {
+    try {
+      const result = await generateCategoryService.getCategories();
+
+      return reply.send(parseResponseContract(z.array(generateCategorySchema), result));
+    } catch (error) {
+      if (error instanceof PostLibraryStorageError) {
+        throw new NormalizedApiError(libraryStorageFailedError());
+      }
+
+      throw error;
+    }
+  });
+
+  app.get("/capture/summary", async (_request, reply) => {
+    try {
+      const result = await liveCaptureService.summary();
+
+      return reply.send(parseResponseContract(captureSummarySchema, result));
+    } catch (error) {
+      if (error instanceof PostLibraryStorageError) {
+        throw new NormalizedApiError(libraryStorageFailedError());
+      }
+
+      throw error;
+    }
+  });
+
+  app.get("/capture/cooldown", async (request, reply) => {
+    const { windowDays } = z
+      .object({
+        windowDays: z.coerce.number().int().min(1).max(90).default(7),
+      })
+      .parse(request.query);
+
+    try {
+      const report = await repetitionWindowService.compute(windowDays);
+
+      return reply.send(parseResponseContract(cooldownReportSchema, report));
+    } catch (error) {
+      if (error instanceof PostLibraryStorageError) {
+        throw new NormalizedApiError(libraryStorageFailedError());
+      }
+
+      throw error;
+    }
+  });
+
   app.post("/posts/analyze", async (request, reply) => {
     const input = analyzePostsRequestSchema.parse(request.body);
     let result: Awaited<ReturnType<typeof analyzePosts>>;
 
     try {
-      result = await analyzePosts(await archiveStudioContextResolver.mergeAnalysisRequest(input));
-    } catch {
+      // Resolver ordering is a hard constraint: live context is patched first so
+      // it takes precedence, then the archive resolver fills any still-undefined
+      // fields. Both only patch fields that are === undefined, so neither
+      // overwrites a caller-supplied value.
+      let merged = await liveContextResolver.mergeAnalysisRequest(input);
+      merged = await archiveStudioContextResolver.mergeAnalysisRequest(merged);
+      const analyzed = await analyzePosts(merged);
+      // One compute(7) per request for the per-item cooldown attachment.
+      const report = await repetitionWindowService.compute(7);
+      result = attachCooldownSignals(analyzed, report);
+    } catch (error) {
+      if (error instanceof PostLibraryStorageError) {
+        throw new NormalizedApiError(libraryStorageFailedError());
+      }
+
       throw new NormalizedApiError(deterministicAnalysisError());
     }
 
     return reply.send(parseResponseContract(analyzePostsResponseSchema, result));
+  });
+
+  app.post("/posts/suggest", async (request, reply) => {
+    const input = suggestPostRequestSchema.parse(request.body);
+
+    try {
+      const result = await suggestPostService.suggest(input);
+
+      return reply.send(parseResponseContract(suggestPostResponseSchema, result));
+    } catch (error) {
+      if (error instanceof PostLibraryStorageError) {
+        throw new NormalizedApiError(libraryStorageFailedError());
+      }
+
+      throw new NormalizedApiError(generationError());
+    }
   });
 
   app.post("/drafts/judge", async (request, reply) => {
@@ -841,6 +1059,20 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     }
 
     return reply.send(parseResponseContract(judgeDraftResponseSchema, outcome.response));
+  });
+
+  app.post("/drafts/apply-suggestions", async (request, reply) => {
+    const input = applyJudgeSuggestionsRequestSchema.parse(request.body);
+
+    try {
+      const result = await applyJudgeSuggestionsService.apply(input);
+
+      return reply.send(
+        parseResponseContract(applyJudgeSuggestionsResponseSchema, result),
+      );
+    } catch {
+      throw new NormalizedApiError(generationError());
+    }
   });
 
   return app;

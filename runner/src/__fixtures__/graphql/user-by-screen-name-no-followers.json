@@ -1,0 +1,18 @@
+{
+  "data": {
+    "user": {
+      "result": {
+        "__typename": "User",
+        "id": "VXNlcjo3ODkwMTI=",
+        "rest_id": "789012",
+        "legacy": {
+          "screen_name": "fresh_account",
+          "name": "Fresh Account",
+          "friends_count": 5,
+          "statuses_count": 0,
+          "description": "Just joined."
+        }
+      }
+    }
+  }
+}

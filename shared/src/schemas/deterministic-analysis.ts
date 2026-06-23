@@ -1,30 +1,7 @@
 import { z } from "zod";
-
-export const deterministicSourceFormatSchema = z.enum([
-  "one-liner",
-  "mini-framework",
-  "debate-question",
-]);
-
-export const detectedPostFormatSchema = z.enum([
-  "genuine_question",
-  "hot_take",
-  "audience_question",
-  "story",
-  "founder_story",
-  "insight_share",
-  "ab_choice",
-  "connect",
-  "other",
-  "fill_blank_tribal",
-  "cta_farm",
-  "fantasy_question",
-  "binary_choice",
-  "nuanced_question",
-  "recognition_roast",
-  "wisdom_one_liner",
-  "milestone",
-]);
+import { cooldownSignalSchema } from "./cooldown.js";
+import { deterministicSourceFormatSchema, detectedPostFormatSchema } from "./post-formats.js";
+export { deterministicSourceFormatSchema, detectedPostFormatSchema };
 
 const voiceCheckSchema = z.object({
   id: z.string().min(1).max(120),
@@ -193,6 +170,7 @@ const scoredPostItemSchema = z.object({
   heuristicLabel: z.literal("Heuristic rank, not prediction."),
   analyzedAt: z.string().datetime(),
   analyzerVersion: z.string().min(1).max(120),
+  cooldown: cooldownSignalSchema.optional(),
 });
 
 const scoreFailedPostItemSchema = z.object({

@@ -303,6 +303,7 @@ describe("two-pass analyze + judge-bridge integration — account profile settin
     headline: "Solid hook, weak closer.",
     strengths: ["Clear, concrete claim"],
     improvements: ["Cut the last sentence"],
+    annotations: [],
   };
 
   const profileCapturingJudge = () => {

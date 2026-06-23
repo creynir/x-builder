@@ -11,6 +11,7 @@
     "lint": "turbo lint"
   },
   "devDependencies": {
+    "@x-builder/runner": "workspace:*",
     "turbo": "^2.4.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"

@@ -1,0 +1,264 @@
+import {
+  deriveApproved,
+  type DetectedPostFormat,
+  type GenerateIdeaRequest,
+  type GenerateIdeaResponse,
+  type GeneratedIdeaCandidate,
+} from "@x-builder/shared";
+
+import {
+  type JudgeDraft,
+  type JudgeProviderResolver,
+} from "./judge-draft-service.js";
+import {
+  StructuredLlmService,
+  type StructuredLlmRequest,
+} from "./structured-llm-service.js";
+
+// Default per-chain budget: the full chain touches up to four LLM calls (one
+// generate + three judges). The generate call and each judge call each get a
+// quarter of this budget.
+const defaultChainTimeoutMs = 4 * 60_000;
+
+// The generate step asks for exactly three candidates; the three rendering
+// formats are assigned deterministically so each candidate carries one of the
+// shell's distinct presentation styles, the same ones the idea-only stub emits.
+const candidateRenderingFormats = [
+  "one-liner",
+  "mini-framework",
+  "debate-question",
+] as const;
+const generatedCandidateCount = candidateRenderingFormats.length;
+
+// The shape the model is asked to return: exactly three { id, text } drafts.
+type GeneratedDrafts = {
+  candidates: Array<{ id: string; text: string }>;
+};
+
+// A typed error so the route handler's catch maps a generate-step failure to
+// the generation_failed contract. Judge-step failures never throw — they leave
+// a candidate without verdict/approved.
+export class IdeaGenerationError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+  ) {
+    super(message);
+    this.name = "IdeaGenerationError";
+  }
+}
+
+const generatedDraftsSchema: Record<string, unknown> = {
+  type: "object",
+  additionalProperties: false,
+  required: ["candidates"],
+  properties: {
+    candidates: {
+      type: "array",
+      minItems: generatedCandidateCount,
+      maxItems: generatedCandidateCount,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "text"],
+        properties: {
+          id: { type: "string", minLength: 1, maxLength: 120 },
+          text: { type: "string", minLength: 1, maxLength: 8_000 },
+        },
+      },
+    },
+  },
+};
+
+// Shape and validate the model output. The real StructuredLlmService runs this
+// parser against raw provider output; an off-contract payload throws here and
+// the LLM layer turns it into a structured_output_invalid failure.
+const toGeneratedDrafts = (value: unknown): GeneratedDrafts => {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !Array.isArray((value as { candidates?: unknown }).candidates)
+  ) {
+    throw new Error("Generated output did not match the candidate contract.");
+  }
+
+  const candidates = (value as { candidates: unknown[] }).candidates.map((entry) => {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      typeof (entry as { id?: unknown }).id !== "string" ||
+      typeof (entry as { text?: unknown }).text !== "string"
+    ) {
+      throw new Error("Generated candidate did not match the candidate contract.");
+    }
+
+    const { id, text } = entry as { id: string; text: string };
+    return { id, text };
+  });
+
+  return { candidates };
+};
+
+// JudgeProviderResolver is `string | (() => string | Promise<string>)`; resolve
+// either form to a concrete provider id, mirroring judge-draft-service.
+const resolveProviderId = async (
+  source: JudgeProviderResolver,
+): Promise<string> =>
+  typeof source === "function" ? source() : source;
+
+const generationInstructions = (format: DetectedPostFormat, idea?: string): string => {
+  const lines = [
+    "You are an expert X (Twitter) writer.",
+    `Produce exactly ${generatedCandidateCount} distinct draft posts in the "${format}" format.`,
+    "Each draft must take a genuinely different angle on the topic — no near-duplicates.",
+    "Keep every draft Twitter-length and in an authentic human voice; avoid generic AI",
+    "hype, hashtag/emoji spam, em dashes, and engagement bait.",
+    idea !== undefined
+      ? `Seed topic to build the drafts around: ${idea}`
+      : "Choose a fresh, specific topic that suits the requested format.",
+    "Return only JSON matching the output schema: a candidates array of exactly",
+    `${generatedCandidateCount} items, each with a short id and the draft text.`,
+  ];
+
+  return lines.join(" ");
+};
+
+export class GenerateIdeasService {
+  private readonly chainTimeoutMs: number;
+
+  constructor(
+    private readonly llm: StructuredLlmService,
+    private readonly judge: JudgeDraft,
+    private readonly resolveProvider: JudgeProviderResolver,
+    private readonly resolveJudgeAccountProfile: () => Promise<string | undefined>,
+    chainTimeoutMs: number = defaultChainTimeoutMs,
+  ) {
+    this.chainTimeoutMs = chainTimeoutMs;
+  }
+
+  async generate(input: GenerateIdeaRequest): Promise<GenerateIdeaResponse> {
+    // Format path takes precedence: when a format is present the drafts are
+    // generated by the LLM and judged. The idea-only path is the deterministic
+    // stub and never touches the LLM or the judge.
+    if (input.format === undefined) {
+      return this.generateFromIdeaOnly(input);
+    }
+
+    return this.generateFromFormat(input.format, input.idea);
+  }
+
+  // Idea-only path: deterministic stub, byte-for-byte the shell's three
+  // rendering formats, no verdict/approved fields. No LLM call, no judge pass.
+  private generateFromIdeaOnly(input: GenerateIdeaRequest): GenerateIdeaResponse {
+    const idea = input.idea ?? "";
+
+    return {
+      candidates: [
+        { id: "one-liner", format: "one-liner", text: idea },
+        {
+          id: "mini-framework",
+          format: "mini-framework",
+          text: `${idea}\n\n1. Name the constraint.\n2. Show the tradeoff.\n3. Make the decision.`,
+        },
+        {
+          id: "debate-question",
+          format: "debate-question",
+          text: `${idea}\n\nWhat would change your mind?`,
+        },
+      ],
+    };
+  }
+
+  private async generateFromFormat(
+    format: DetectedPostFormat,
+    idea: string | undefined,
+  ): Promise<GenerateIdeaResponse> {
+    const stepTimeoutMs = Math.floor(this.chainTimeoutMs / 4);
+    const provider = await resolveProviderId(this.resolveProvider);
+
+    const request: StructuredLlmRequest<GeneratedDrafts> = {
+      provider,
+      purpose: "writer_variants",
+      instructions: generationInstructions(format, idea),
+      turns: [
+        {
+          role: "user",
+          content:
+            idea !== undefined
+              ? `Format: ${format}. Seed topic: ${idea}.`
+              : `Format: ${format}.`,
+        },
+      ],
+      structuredOutput: {
+        name: "generated_idea_candidates",
+        schema: generatedDraftsSchema,
+        parser: toGeneratedDrafts,
+      },
+      options: { timeoutMs: stepTimeoutMs },
+    };
+
+    const result = await this.llm.generateStructured(request);
+
+    // A generate-step failure is the only path that surfaces generation_failed:
+    // throw a typed error the route handler maps to that contract.
+    if (result.status === "failed") {
+      throw new IdeaGenerationError(result.message, result.code);
+    }
+
+    const generated = result.output.candidates;
+
+    // Fewer or more than the contracted count is a generate failure, not a
+    // judge failure — the overlay must not render a short-changed batch.
+    if (generated.length !== generatedCandidateCount) {
+      throw new IdeaGenerationError(
+        `Expected ${generatedCandidateCount} generated candidates, received ${generated.length}.`,
+        "structured_output_invalid",
+      );
+    }
+
+    // Resolve the judge profile once for the whole batch. A profile resolver
+    // that throws must not fail any candidate — fall back to a profile-less
+    // judge pass.
+    const profile = await this.resolveProfileSafely();
+
+    // Judge every candidate in parallel: one judge failure (rejected or a
+    // failed outcome) must not block the others, so allSettled — not all.
+    const judged = await Promise.allSettled(
+      generated.map((candidate) => this.judge.judge(candidate.text, profile)),
+    );
+
+    const candidates: GeneratedIdeaCandidate[] = generated.map((candidate, index) => {
+      const base: GeneratedIdeaCandidate = {
+        id: candidate.id,
+        format: candidateRenderingFormats[index]!,
+        text: candidate.text,
+      };
+
+      const outcome = judged[index];
+
+      // A judge that succeeded attaches verdict + derived approved. Anything
+      // else (rejected promise, or a resolved "failed" outcome) leaves the
+      // candidate without those keys — a genuine omission, not undefined values.
+      if (
+        outcome !== undefined &&
+        outcome.status === "fulfilled" &&
+        outcome.value.status === "judged"
+      ) {
+        const verdict = outcome.value.response.verdict;
+        return { ...base, verdict, approved: deriveApproved(verdict) };
+      }
+
+      return base;
+    });
+
+    return { candidates };
+  }
+
+  private async resolveProfileSafely(): Promise<string | undefined> {
+    try {
+      return await this.resolveJudgeAccountProfile();
+    } catch {
+      return undefined;
+    }
+  }
+}

@@ -1,0 +1,312 @@
+// @x-builder/overlay — AnchorLayer skeleton + anchor registry (XOB-019)
+//
+// Watches `document.body` for the X SPA's DOM churn and keeps a node→pin
+// registry (`Map<Element, AffordanceHandle>`) that downstream tickets (XOB-025+)
+// will populate with real pins. At THIS ticket the registry stays empty: the
+// reconcile pass calls `safeQueryAll` on the `XSelectors` targets, mounts no
+// pins, and zero matches is a valid, error-free state.
+//
+// Observer discipline:
+//   - A single `MutationObserver(document.body, {childList, subtree})`.
+//   - Callbacks are rAF-gated and ~150ms debounced (cancel-and-reschedule), so
+//     a heavy SPA re-render burst collapses to a single trailing reconcile.
+//   - The observer disconnects when the tab is hidden (`visibilitychange`) and
+//     on unmount; both disconnects are wrapped in try/catch to survive a
+//     document teardown during fast navigation.
+
+import type { ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+
+import { safeQuery, safeQueryAll, XSelectors } from "./selectors";
+
+/** Internal node→pin handle. The registry is empty until XOB-025+ mount pins. */
+export interface AffordanceHandle {
+  anchorEl: Element;
+  rect: DOMRect;
+  type: "composer" | "tweet";
+}
+
+/** Node→pin registry, shared with descendants for read access (`.size` etc.). */
+export type AnchorRegistry = Map<Element, AffordanceHandle>;
+
+const AnchorRegistryContext = createContext<AnchorRegistry | null>(null);
+
+/**
+ * Read the anchor registry from the nearest `AnchorLayer`. Throws if used
+ * outside one (dev invariant), mirroring the transport seam.
+ */
+export function useAnchorRegistry(): AnchorRegistry {
+  const registry = useContext(AnchorRegistryContext);
+  if (registry === null) {
+    throw new Error("[xb] useAnchorRegistry() called outside an AnchorLayer");
+  }
+  return registry;
+}
+
+// ---------------------------------------------------------------------------
+// ComposeContext (XOB-029) — additive compose-modal detection seam
+// ---------------------------------------------------------------------------
+
+/**
+ * The live compose surface the cockpit (XOB-029) orchestrates over. `isActive`
+ * is `true` while X's compose modal is in the DOM (a `[role="dialog"]`
+ * containing `div[data-testid="tweetTextarea_0"]`, OR the `/compose/post`
+ * route); `composerEl` is the live contenteditable composer; `composerText` is
+ * the composer's `.textContent`, debounced ~350 ms so a typing burst collapses
+ * to one trailing read. When inactive every field is empty/`null`.
+ */
+export interface ComposeContextValue {
+  /** The live `div[data-testid="tweetTextarea_0"]` composer, or `null`. */
+  composerEl: HTMLElement | null;
+  /** `true` while X's compose modal is detected in the DOM / route. */
+  isActive: boolean;
+  /** The composer's `.textContent`, debounced ~350 ms; `""` when inactive. */
+  composerText: string;
+}
+
+const ComposeContextContext = createContext<ComposeContextValue | null>(null);
+
+/**
+ * Read the live `ComposeContext` from the nearest `AnchorLayer`. Throws when
+ * used outside one (dev invariant), mirroring `useAnchorRegistry`.
+ */
+export function useComposeContext(): ComposeContextValue {
+  const value = useContext(ComposeContextContext);
+  if (value === null) {
+    throw new Error("[xb] useComposeContext() called outside an AnchorLayer");
+  }
+  return value;
+}
+
+/** The debounce window for the `ComposeContext` composer-text read. */
+const COMPOSE_TEXT_DEBOUNCE_MS = 350;
+
+/**
+ * Detect X's compose surface. The composer is active when its contenteditable
+ * lives inside a `[role="dialog"]` (the real modal shape) OR the location is the
+ * `/compose/post` route. Returns the live composer element, or `null`.
+ */
+function detectComposer(): HTMLElement | null {
+  const dialog = safeQuery(document.body, XSelectors.COMPOSER_DIALOG);
+  if (dialog !== null) {
+    const inDialog = safeQuery(dialog, XSelectors.COMPOSER_TEXTAREA);
+    if (inDialog instanceof HTMLElement) {
+      return inDialog;
+    }
+  }
+  if (location.pathname.includes("/compose/post")) {
+    const composer = safeQuery(document.body, XSelectors.COMPOSER_TEXTAREA);
+    if (composer instanceof HTMLElement) {
+      return composer;
+    }
+  }
+  return null;
+}
+
+/** ~150ms debounce window; absorbs SPA navigation re-render bursts. */
+const RECONCILE_DEBOUNCE_MS = 150;
+
+/** rAF that degrades to a microtask-ish timeout when unavailable (JSDOM). */
+function scheduleFrame(cb: () => void): number {
+  const raf = (
+    globalThis as { requestAnimationFrame?: (fn: FrameRequestCallback) => number }
+  ).requestAnimationFrame;
+  if (typeof raf === "function") {
+    return raf(() => cb());
+  }
+  return setTimeout(cb, 0) as unknown as number;
+}
+
+/** Cancel a handle from `scheduleFrame`, matching the rAF/timeout it returned. */
+function cancelFrame(handle: number): void {
+  const caf = (
+    globalThis as { cancelAnimationFrame?: (h: number) => void }
+  ).cancelAnimationFrame;
+  if (typeof caf === "function") {
+    caf(handle);
+  }
+  clearTimeout(handle);
+}
+
+/**
+ * The register/reconcile mutation API a descendant uses to publish a pin's
+ * anchor into the layer registry and to align the registry with the live DOM.
+ * Additive over the XOB-019 read-only registry: `useAnchorRegistry()` keeps
+ * returning the same `Map`, and `register`/`unregister` are last-call-wins.
+ */
+export interface AnchorMutationApi {
+  /** Publish (or overwrite) the handle keyed by its anchor element. */
+  register(handle: AffordanceHandle): void;
+  /** Remove the handle keyed by `anchorEl`, if present. */
+  unregister(anchorEl: Element): void;
+  /** Drop every registry entry whose anchor element left the document. */
+  reconcile(): void;
+}
+
+const AnchorMutationContext = createContext<AnchorMutationApi | null>(null);
+
+/**
+ * The register/reconcile mutation API of the nearest `AnchorLayer`. Throws when
+ * used outside one (dev invariant), mirroring `useAnchorRegistry`.
+ */
+export function useAnchorMutation(): AnchorMutationApi {
+  const api = useContext(AnchorMutationContext);
+  if (api === null) {
+    throw new Error("[xb] useAnchorMutation() called outside an AnchorLayer");
+  }
+  return api;
+}
+
+export interface AnchorLayerProps {
+  children?: ReactNode;
+}
+
+/**
+ * Mounts the `MutationObserver` reconcile loop, provides the anchor registry +
+ * its register/reconcile mutation API, and publishes the live `ComposeContext`
+ * (compose-modal detection + the ~350 ms-debounced composer text). The registry
+ * stays empty unless a descendant calls `register` (XOB-025+); zero matches
+ * remains a valid, error-free state.
+ */
+export function AnchorLayer({ children }: AnchorLayerProps): ReactNode {
+  // L3: the registry is owned here and stable for the layer's lifetime.
+  const registryRef = useRef<AnchorRegistry>(new Map());
+
+  // Compose detection state, published via ComposeContext. `composerEl` is the
+  // live element; `composerText` is its ~350 ms-debounced `.textContent`.
+  const [composerEl, setComposerEl] = useState<HTMLElement | null>(null);
+  const [composerText, setComposerText] = useState<string>("");
+
+  // Stable register/reconcile API (last-call-wins; never re-bound across renders).
+  const mutationApi = useRef<AnchorMutationApi>({
+    register(handle) {
+      registryRef.current.set(handle.anchorEl, handle);
+    },
+    unregister(anchorEl) {
+      registryRef.current.delete(anchorEl);
+    },
+    reconcile() {
+      for (const anchorEl of Array.from(registryRef.current.keys())) {
+        if (!anchorEl.isConnected) {
+          registryRef.current.delete(anchorEl);
+        }
+      }
+    },
+  });
+
+  useEffect(() => {
+    const registry = registryRef.current;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let frameHandle: number | null = null;
+
+    /**
+     * Reconcile pass: query the X targets, align the registry, and refresh the
+     * compose-detection state. Zero affordance matches is valid — no `XSelectors`
+     * target auto-mounts a pin; descendants publish pins via the mutation API.
+     */
+    const reconcile = (): void => {
+      // Touch the selectors so the reconcile path is real (miss-counted), even
+      // though no pins are auto-produced.
+      safeQueryAll(document.body, XSelectors.COMPOSER_TEXTAREA);
+      safeQueryAll(document.body, XSelectors.TWEET_ARTICLE);
+      // Drop any registry entries whose anchor left the DOM.
+      mutationApi.current.reconcile();
+      void registry;
+
+      // Refresh compose detection: an identity-stable update (the same element is
+      // a no-op to React) so a quiet SPA tick causes no churn. The composer TEXT
+      // is owned by the debounce effect below, not re-read here.
+      const nextComposer = detectComposer();
+      setComposerEl((prev) => (prev === nextComposer ? prev : nextComposer));
+    };
+
+    /** Cancel any pending tick and schedule a fresh rAF-gated reconcile. */
+    const scheduleReconcile = (): void => {
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
+      if (frameHandle !== null) cancelFrame(frameHandle);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        frameHandle = scheduleFrame(() => {
+          frameHandle = null;
+          reconcile();
+        });
+      }, RECONCILE_DEBOUNCE_MS);
+    };
+
+    const observer = new MutationObserver(() => {
+      scheduleReconcile();
+    });
+
+    /** Disconnect defensively — document teardown can make this throw. */
+    const disconnect = (): void => {
+      try {
+        observer.disconnect();
+      } catch {
+        // Page is unloading; nothing to clean up.
+      }
+    };
+
+    const onVisibilityChange = (): void => {
+      if (document.visibilityState === "hidden") {
+        disconnect();
+      }
+    };
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    // Initial synchronous detection so the first settled render reflects an
+    // already-open composer without waiting for a mutation.
+    reconcile();
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
+      if (frameHandle !== null) cancelFrame(frameHandle);
+      disconnect();
+    };
+  }, []);
+
+  // The ~350 ms-debounced composer-text read: re-seed on element change, then
+  // collapse a typing burst to one trailing read on `input`.
+  useEffect(() => {
+    if (composerEl === null) {
+      setComposerText("");
+      return;
+    }
+
+    // Seed synchronously so the first analyze sees the already-present draft.
+    setComposerText(composerEl.textContent ?? "");
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onInput = (): void => {
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        setComposerText(composerEl.textContent ?? "");
+      }, COMPOSE_TEXT_DEBOUNCE_MS);
+    };
+
+    composerEl.addEventListener("input", onInput);
+    return () => {
+      composerEl.removeEventListener("input", onInput);
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, [composerEl]);
+
+  const composeValue: ComposeContextValue = {
+    composerEl,
+    isActive: composerEl !== null,
+    composerText,
+  };
+
+  return (
+    <AnchorRegistryContext.Provider value={registryRef.current}>
+      <AnchorMutationContext.Provider value={mutationApi.current}>
+        <ComposeContextContext.Provider value={composeValue}>
+          {children}
+        </ComposeContextContext.Provider>
+      </AnchorMutationContext.Provider>
+    </AnchorRegistryContext.Provider>
+  );
+}

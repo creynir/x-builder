@@ -65,6 +65,7 @@ const verdict: JudgeVerdict = {
   headline: "Solid hook, weak closer.",
   strengths: ["Clear, concrete claim"],
   improvements: ["Cut the last sentence"],
+  annotations: [],
 };
 
 const judgedOutcome = {
@@ -95,6 +96,33 @@ describe("POST /drafts/judge", () => {
       const body = judgeDraftResponseSchema.parse(parseJson(response.body));
       expect(body.verdict).toEqual(verdict);
       expect(body.model).toBe("codex-cli");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("carries an empty verdict.annotations array through the response body", async () => {
+    // The route is unchanged; the judge service supplies annotations. When
+    // the injected judge returns a verdict with an empty annotations array, the HTTP
+    // body must surface annotations as a present, empty array (not omitted, not null).
+    const judge = vi.fn(async () => judgedOutcome);
+    const app = buildServer({ judgeDraftService: { judge } });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/drafts/judge",
+        payload: { text: "A draft worth judging." },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const raw = parseJson(response.body) as { verdict: { annotations?: unknown } };
+      expect(raw.verdict).toHaveProperty("annotations");
+      expect(raw.verdict.annotations).toEqual([]);
+
+      const body = judgeDraftResponseSchema.parse(raw);
+      expect(body.verdict.annotations).toEqual([]);
     } finally {
       await app.close();
     }

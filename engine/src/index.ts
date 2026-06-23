@@ -1,4 +1,45 @@
 export * from "./server/server.js";
+// Runner enablement (XOB-015): the runner constructs these in-process. The
+// Fastify server is unchanged — these are barrel re-exports only.
+export {
+  JsonFileAppSettingsRepository,
+  type AppSettingsRepository,
+} from "./server/settings-repository.js";
+export {
+  JsonFilePostLibraryRepository,
+  PostLibraryStorageError,
+  type PostLibraryRepository,
+} from "./server/post-library-repository.js";
+export * from "./capture/live-capture-service.js";
+export * from "./capture/repetition-window-service.js";
+export * from "./capture/live-context-resolver.js";
+export * from "./suggest/generate-category-service.js";
+export * from "./suggest/suggest-post-service.js";
+// Transport-binding enablement (XOB-030): the runner constructs the LLM-backed
+// and archive engine services in-process for the BoundEngineServices bundle.
+// Named re-exports (not `export *`) keep the barrel collision-free.
+export {
+  JudgeDraftService,
+  type JudgeDraft,
+  type JudgeProviderResolver,
+  type JudgeLlmGateway,
+} from "./llm/judge-draft-service.js";
+export { GenerateIdeasService } from "./llm/generate-ideas-service.js";
+export { ApplyJudgeSuggestionsService } from "./llm/apply-judge-suggestions-service.js";
+export {
+  ArchiveImportService,
+  type ArchiveImportServiceOptions,
+} from "./archive/archive-import-service.js";
+export {
+  ArchiveDerivedContextService,
+  type ArchiveDerivedContextServiceOptions,
+} from "./archive/archive-derived-context-service.js";
+export { ArchiveStudioContextResolver } from "./archive/archive-studio-context-resolver.js";
+// Provider wiring primitives the runner uses to construct one in-process
+// StructuredLlmService for the generate / apply / suggest LLM services.
+export { judgeProviderRegistry } from "./llm/judge-provider-registry.js";
+export { createSettingsJudgeProviderResolver } from "./llm/judge-provider-resolver.js";
+export { resolveWorkspaceRoot } from "./server/workspace-root.js";
 export * from "./deterministic/deterministic-analysis-service.js";
 export * from "./deterministic/analyzer.js";
 export * from "./deterministic/format-classifier.js";

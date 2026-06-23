@@ -1,0 +1,101 @@
+{
+  "data": {
+    "user": {
+      "result": {
+        "__typename": "User",
+        "rest_id": "44196397",
+        "timeline_v2": {
+          "timeline": {
+            "instructions": [
+              {
+                "type": "TimelineAddEntries",
+                "entries": [
+                  {
+                    "entryId": "tweet-1700000000000000031",
+                    "sortIndex": "1700000000000000031",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000031",
+                            "legacy": {
+                              "full_text": "An original post that also appears in the with-replies timeline.",
+                              "created_at": "Fri Nov 17 09:00:00 +0000 2023",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 21,
+                              "retweet_count": 3,
+                              "reply_count": 2,
+                              "quote_count": 0,
+                              "bookmark_count": 5,
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [],
+                                "user_mentions": [],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "7400",
+                              "state": "EnabledWithCount"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-1700000000000000032",
+                    "sortIndex": "1700000000000000032",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000032",
+                            "legacy": {
+                              "full_text": "@someone_else replying to another author's thread, which the with-replies timeline includes.",
+                              "created_at": "Fri Nov 17 10:30:00 +0000 2023",
+                              "in_reply_to_status_id_str": "1690000000000000123",
+                              "in_reply_to_user_id_str": "555000111",
+                              "favorite_count": 3,
+                              "retweet_count": 0,
+                              "reply_count": 0,
+                              "quote_count": 0,
+                              "bookmark_count": 0,
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [],
+                                "user_mentions": [
+                                  {
+                                    "screen_name": "someone_else",
+                                    "id_str": "555000111",
+                                    "indices": [0, 13]
+                                  }
+                                ],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "640",
+                              "state": "EnabledWithCount"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

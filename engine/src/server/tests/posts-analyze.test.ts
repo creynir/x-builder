@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   analyzePostsResponseSchema,
   apiErrorSchema,
@@ -7,6 +11,13 @@ import {
   type AnalyzePostsResponse,
 } from "@x-builder/shared";
 import { buildServer } from "../server";
+import { classifyPostFormat } from "../../deterministic/format-classifier";
+import { LiveContextResolver } from "../../capture/live-context-resolver";
+import { RepetitionWindowService } from "../../capture/repetition-window-service";
+import {
+  JsonFilePostLibraryRepository,
+  type CanonicalOwnPostInput,
+} from "../post-library-repository";
 
 type AnalyzePostsFake = (request: AnalyzePostsRequest) => Promise<AnalyzePostsResponse> | AnalyzePostsResponse;
 
@@ -532,6 +543,382 @@ describe("posts analyze API", () => {
         retryable: false,
         status: 500,
       });
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Live auto-context + per-item cooldown (route integration). These tests seed a
+// real JsonFilePostLibraryRepository over a tmpdir, inject a LiveContextResolver
+// + a shared RepetitionWindowService, and exercise the real deterministic
+// scorer through the HTTP boundary.
+//
+// Corpus createdAt values are anchored to the REAL clock (Date.now() minus N
+// days) because the route's per-item cooldown step computes its window against
+// the default RepetitionWindowService (real clock). Keeping posts 0.5..3 days
+// old keeps them in any reasonable 7-day window.
+// ---------------------------------------------------------------------------
+const DAY_MS = 24 * 60 * 60 * 1000;
+const nowMinusDays = (days: number): string =>
+  new Date(Date.now() - Math.round(days * DAY_MS)).toISOString();
+
+// Verified hot_take fixtures (see the in-suite classification guard below).
+const HOT_TAKE_CORPUS = [
+  "Hot take: shipping fast beats shipping perfect every single time.",
+  "Unpopular opinion: most startup advice is survivorship bias dressed up as wisdom.",
+  "Real talk: your landing page does not need another testimonial section.",
+  "Popular opinion: writing tests first actually saves you time later on.",
+] as const;
+
+const HOT_TAKE_REQUEST_TEXT =
+  "Hot take: meetings that could be emails are quietly killing your team.";
+
+const baseEntityFlags = {
+  hasUrls: false,
+  hasMedia: false,
+  hasHashtags: false,
+  hasMentions: false,
+} as const;
+
+let seedIdCounter = 0;
+
+const liveOriginal = (
+  text: string,
+  impressions: number | undefined,
+  createdAt: string,
+): CanonicalOwnPostInput => {
+  seedIdCounter += 1;
+  const platformPostId = `190000000000000${String(seedIdCounter).padStart(4, "0")}`;
+
+  return {
+    id: `live-${seedIdCounter}`,
+    platform: "x",
+    platformPostId,
+    text,
+    createdAt,
+    kind: "original",
+    language: "en",
+    replyReferences: {},
+    entityFlags: { ...baseEntityFlags },
+    weakMetrics: {},
+    metricSnapshots: [
+      {
+        source: "x_live_capture",
+        capturedAt: createdAt,
+        ...(impressions === undefined ? {} : { impressions }),
+        likes: 6,
+      },
+    ],
+    sourceRefs: [
+      {
+        source: "x_live_capture",
+        captureSessionId: "session-1",
+        rawId: platformPostId,
+      },
+    ],
+  };
+};
+
+describe("posts analyze API — live auto-context fixture guard", () => {
+  it("classifies the cooldown corpus and request item as hot_take", () => {
+    for (const text of HOT_TAKE_CORPUS) {
+      expect(classifyPostFormat(text)).toBe("hot_take");
+    }
+    expect(classifyPostFormat(HOT_TAKE_REQUEST_TEXT)).toBe("hot_take");
+  });
+});
+
+describe("posts analyze API — live auto-context and per-item cooldown", () => {
+  let root: string;
+  let repository: JsonFilePostLibraryRepository;
+
+  const buildLiveServer = () => {
+    const windowService = new RepetitionWindowService(repository);
+    const liveContextResolver = new LiveContextResolver(repository, windowService);
+
+    // `liveContextResolver` is the option Green adds to BuildServerOptions.
+    // Until then this is an expected typecheck RED (TS2353).
+    return buildServer({
+      postLibraryRepository: repository,
+      liveContextResolver,
+    });
+  };
+
+  const liveAnalyzeBody = (
+    overrides: Partial<AnalyzePostsRequest> = {},
+  ): AnalyzePostsRequest => ({
+    items: [
+      {
+        id: "candidate-1",
+        text: "genuine question: which onboarding clue tells you the product is landing?",
+        sourceFormat: "debate-question",
+      },
+    ],
+    scoringContext: {},
+    presentation: { postCoachMode: "preview" },
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    seedIdCounter = 0;
+    root = await mkdtemp(join(tmpdir(), "x-builder-posts-analyze-live-"));
+    repository = new JsonFilePostLibraryRepository({ root });
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("injects trailingMedianImpressions so the prediction base is trailing_median when followers are omitted", async () => {
+    await repository.pushProfileSnapshot({
+      platformUserId: "u-1",
+      screenName: "founder",
+      followers: 12000,
+      capturedAt: nowMinusDays(1),
+    });
+    // Ten original live posts with varying impressions; median is well-defined.
+    const impressions = [120, 240, 360, 90, 480, 200, 310, 150, 420, 270];
+    await repository.upsertPosts(
+      impressions.map((value, index) =>
+        liveOriginal(`Live post number ${index} with an impressions snapshot here.`, value, nowMinusDays(index + 1)),
+      ),
+    );
+
+    const app = buildLiveServer();
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/posts/analyze",
+        // No followers in the body: the resolver must supply context.
+        payload: liveAnalyzeBody(),
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const result = analyzePostsResponseSchema.parse(JSON.parse(response.body));
+
+      for (const item of result.items) {
+        expect(item.status).toBe("scored");
+        if (item.status !== "scored") {
+          throw new Error("Expected scored item.");
+        }
+        expect(item.prediction.status).toBe("available");
+        if (item.prediction.status !== "available") {
+          throw new Error("Expected available prediction.");
+        }
+        // A trailing median was injected, so the reach base is the median, not a
+        // follower estimate.
+        expect(item.prediction.baseSource).toBe("trailing_median");
+        // The only request item is a genuine_question, and the seeded corpus has
+        // no in-window genuine_question activity (the filler posts classify as
+        // wisdom_one_liner). With no signal for the item's format, cooldown is
+        // absent — the designed state (cooldownSignalSchema is optional, and the
+        // window service never emits a count-0 signal). A real present-signal case
+        // is covered by the dedicated hot_take cooldown test below.
+        expect(item).not.toHaveProperty("cooldown");
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("does not overwrite caller-supplied followers in scoringContext", async () => {
+    // A captured profile snapshot is present, but the body already sets
+    // followers AND there are no live impressions, so the resolver must not
+    // inject a trailing median either: the base stays follower_estimate at 5000.
+    await repository.pushProfileSnapshot({
+      platformUserId: "u-1",
+      screenName: "founder",
+      followers: 12000,
+      capturedAt: nowMinusDays(1),
+    });
+
+    const app = buildLiveServer();
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/posts/analyze",
+        payload: liveAnalyzeBody({ scoringContext: { followers: 5000 } }),
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const result = analyzePostsResponseSchema.parse(JSON.parse(response.body));
+      const item = result.items[0];
+      expect(item?.status).toBe("scored");
+      if (!item || item.status !== "scored") {
+        throw new Error("Expected scored item.");
+      }
+      expect(item.prediction.status).toBe("available");
+      if (item.prediction.status !== "available") {
+        throw new Error("Expected available prediction.");
+      }
+      // No trailing median seeded -> the caller-supplied followers (5000) anchor
+      // the base, proving the resolver left followers as supplied.
+      expect(item.prediction.baseSource).toBe("follower_estimate");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("runs LiveContextResolver before the analysis step so the analyzed request already carries live-patched followers", async () => {
+    // Observable-ordering assertion: the route constructs ArchiveStudioContextResolver
+    // internally (no injection seam in BuildServerOptions). We instead capture the
+    // request that reaches the analysis step via an injected analyzePosts spy. The
+    // captured request has flowed through Live -> Archive -> analyze, so a body with
+    // no followers reaching the scorer WITH followers patched proves the live
+    // resolver ran first in the chain.
+    await repository.pushProfileSnapshot({
+      platformUserId: "u-1",
+      screenName: "founder",
+      followers: 12000,
+      capturedAt: nowMinusDays(1),
+    });
+
+    const seenRequests: AnalyzePostsRequest[] = [];
+    const windowService = new RepetitionWindowService(repository);
+    const liveContextResolver = new LiveContextResolver(repository, windowService);
+    const analyzeSpy = vi.fn(
+      (request: AnalyzePostsRequest): AnalyzePostsResponse => {
+        seenRequests.push(request);
+        return {
+          items: request.items.map((item) => ({
+            status: "score_failed" as const,
+            id: item.id,
+            text: item.text,
+            sourceFormat: item.sourceFormat,
+            reason: "analysis_failed" as const,
+            message: "Spy short-circuit; ordering only.",
+            retryable: true,
+          })),
+        };
+      },
+    );
+
+    const app = buildServer({
+      postLibraryRepository: repository,
+      liveContextResolver,
+      analyzePosts: analyzeSpy,
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/posts/analyze",
+        payload: liveAnalyzeBody(),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(analyzeSpy).toHaveBeenCalledOnce();
+      expect(seenRequests).toHaveLength(1);
+      // followers was absent in the body; the live resolver patched it to 12000
+      // before the analysis step received the request.
+      expect(seenRequests[0]?.scoringContext.followers).toBe(12000);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("attaches cooldown.status cooldown with countInWindow 4 to a hot_take item over a hot_take corpus", async () => {
+    // Four in-window hot_take originals -> the hot_take format is in cooldown.
+    await repository.upsertPosts(
+      HOT_TAKE_CORPUS.map((text, index) => liveOriginal(text, 300, nowMinusDays(index + 0.5))),
+    );
+
+    const app = buildLiveServer();
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/posts/analyze",
+        payload: liveAnalyzeBody({
+          items: [
+            {
+              id: "hot-take-1",
+              text: HOT_TAKE_REQUEST_TEXT,
+              sourceFormat: "one-liner",
+            },
+          ],
+          // Supply followers so the prediction is available; cooldown is the focus.
+          scoringContext: { followers: 4000 },
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const result = analyzePostsResponseSchema.parse(JSON.parse(response.body));
+      const item = result.items[0];
+      expect(item?.status).toBe("scored");
+      if (!item || item.status !== "scored") {
+        throw new Error("Expected scored item.");
+      }
+      expect(item.detectedFormat).toBe("hot_take");
+      expect(item.cooldown).toBeDefined();
+      expect(item.cooldown?.status).toBe("cooldown");
+      expect(item.cooldown?.countInWindow).toBe(4);
+      expect(item.cooldown?.format).toBe("hot_take");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("attaches no cooldown field to a score_failed item while keeping the response valid", async () => {
+    await repository.upsertPosts(
+      HOT_TAKE_CORPUS.map((text, index) => liveOriginal(text, 300, nowMinusDays(index + 0.5))),
+    );
+
+    // A per-item score_failed shape from an injected spy; the route must not add
+    // a cooldown field to it.
+    const windowService = new RepetitionWindowService(repository);
+    const liveContextResolver = new LiveContextResolver(repository, windowService);
+    const analyzeSpy = vi.fn(
+      (request: AnalyzePostsRequest): AnalyzePostsResponse => ({
+        items: [
+          {
+            status: "score_failed" as const,
+            id: request.items[0]!.id,
+            text: request.items[0]!.text,
+            sourceFormat: request.items[0]!.sourceFormat,
+            reason: "analysis_failed" as const,
+            message: "This candidate could not be scored. Try again.",
+            retryable: true,
+          },
+        ],
+      }),
+    );
+
+    const app = buildServer({
+      postLibraryRepository: repository,
+      liveContextResolver,
+      analyzePosts: analyzeSpy,
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/posts/analyze",
+        payload: liveAnalyzeBody({
+          items: [
+            {
+              id: "hot-take-1",
+              text: HOT_TAKE_REQUEST_TEXT,
+              sourceFormat: "one-liner",
+            },
+          ],
+          scoringContext: { followers: 4000 },
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const result = analyzePostsResponseSchema.parse(JSON.parse(response.body));
+      const item = result.items[0];
+      expect(item?.status).toBe("score_failed");
+      expect(item).not.toHaveProperty("cooldown");
     } finally {
       await app.close();
     }

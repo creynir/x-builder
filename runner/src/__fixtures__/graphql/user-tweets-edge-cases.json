@@ -1,0 +1,258 @@
+{
+  "data": {
+    "user": {
+      "result": {
+        "__typename": "User",
+        "rest_id": "44196397",
+        "timeline_v2": {
+          "timeline": {
+            "instructions": [
+              {
+                "type": "TimelineAddEntries",
+                "entries": [
+                  {
+                    "entryId": "tweet-zero-views",
+                    "sortIndex": "1700000000000000041",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000041",
+                            "legacy": {
+                              "full_text": "A post that genuinely has zero recorded impressions.",
+                              "created_at": "Sat Nov 18 09:00:00 +0000 2023",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 0,
+                              "retweet_count": 0,
+                              "reply_count": 0,
+                              "quote_count": 0,
+                              "bookmark_count": 0,
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [],
+                                "user_mentions": [],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "0",
+                              "state": "EnabledWithCount"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-no-favorite-count",
+                    "sortIndex": "1700000000000000042",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000042",
+                            "legacy": {
+                              "full_text": "A post whose favorite_count is entirely absent from the payload.",
+                              "created_at": "Sat Nov 18 10:00:00 +0000 2023",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "retweet_count": 2,
+                              "reply_count": 0,
+                              "quote_count": 0,
+                              "bookmark_count": 0,
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [],
+                                "user_mentions": [],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "120",
+                              "state": "EnabledWithCount"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-bad-date",
+                    "sortIndex": "1700000000000000043",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000043",
+                            "legacy": {
+                              "full_text": "A post whose created_at is not a parseable date and must be skipped.",
+                              "created_at": "not-a-real-date",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 3,
+                              "retweet_count": 0,
+                              "reply_count": 0,
+                              "quote_count": 0,
+                              "bookmark_count": 0,
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [],
+                                "user_mentions": [],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "99",
+                              "state": "EnabledWithCount"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-retweet-and-reply",
+                    "sortIndex": "1700000000000000044",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000044",
+                            "legacy": {
+                              "full_text": "RT @author: this entry carries both a retweet structure and a non-null in_reply_to id.",
+                              "created_at": "Sat Nov 18 12:00:00 +0000 2023",
+                              "in_reply_to_status_id_str": "1690000000000000777",
+                              "in_reply_to_user_id_str": "222333444",
+                              "favorite_count": 0,
+                              "retweet_count": 11,
+                              "reply_count": 0,
+                              "quote_count": 0,
+                              "bookmark_count": 0,
+                              "retweeted_status_result": {
+                                "result": {
+                                  "__typename": "Tweet",
+                                  "rest_id": "1685000000000000000",
+                                  "legacy": {
+                                    "full_text": "this entry carries both a retweet structure and a non-null in_reply_to id.",
+                                    "created_at": "Sat Nov 18 06:00:00 +0000 2023"
+                                  }
+                                }
+                              },
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [],
+                                "user_mentions": [
+                                  {
+                                    "screen_name": "author",
+                                    "id_str": "222333444",
+                                    "indices": [3, 10]
+                                  }
+                                ],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "5000",
+                              "state": "EnabledWithCount"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-duplicate-first",
+                    "sortIndex": "1700000000000000045",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000099",
+                            "legacy": {
+                              "full_text": "First occurrence of the duplicated id (promoted slot).",
+                              "created_at": "Sun Nov 19 08:00:00 +0000 2023",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 1,
+                              "retweet_count": 0,
+                              "reply_count": 0,
+                              "quote_count": 0,
+                              "bookmark_count": 0,
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [],
+                                "user_mentions": [],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "10",
+                              "state": "EnabledWithCount"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-duplicate-second",
+                    "sortIndex": "1700000000000000046",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "1700000000000000099",
+                            "legacy": {
+                              "full_text": "Second occurrence of the duplicated id (organic slot, should win).",
+                              "created_at": "Sun Nov 19 09:00:00 +0000 2023",
+                              "in_reply_to_status_id_str": null,
+                              "in_reply_to_user_id_str": null,
+                              "favorite_count": 42,
+                              "retweet_count": 3,
+                              "reply_count": 1,
+                              "quote_count": 0,
+                              "bookmark_count": 7,
+                              "entities": {
+                                "urls": [],
+                                "hashtags": [],
+                                "user_mentions": [],
+                                "media": []
+                              }
+                            },
+                            "views": {
+                              "count": "9999",
+                              "state": "EnabledWithCount"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
