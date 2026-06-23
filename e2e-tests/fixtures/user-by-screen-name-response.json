@@ -1,0 +1,19 @@
+{
+  "data": {
+    "user": {
+      "result": {
+        "__typename": "User",
+        "id": "VXNlcjo0NDE5NjM5Nw==",
+        "rest_id": "44196397",
+        "legacy": {
+          "screen_name": "local_first_dev",
+          "name": "Local First Dev",
+          "followers_count": 4200,
+          "friends_count": 188,
+          "statuses_count": 5310,
+          "description": "Building local-first tools that survive offline."
+        }
+      }
+    }
+  }
+}
