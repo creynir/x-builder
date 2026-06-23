@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # XOB-033: Browser-safe overlay bundle + `window.__xbTransport` assembly seam (overlay-mount remediation)
@@ -58,6 +58,13 @@ Production entry: `runner/bin/x-builder.js` → `RunnerApp.start()` (`addInitScr
 ### 2026-06-23 — in-progress
 - Authored as remediation for XOB-031 `IMPLEMENTATION_BROKEN`. Red (`af4a2d6`) added `runner/src/transport-assembly.test.ts` (assembly-seam contract); Blue **Validate Red: APPROVE** (falsifiable; AC-3 deferral to E2E gate confirmed sound).
 - **Scope expanded pre-Green:** orchestrator diligence found a third gap — `window.__xbBootstrap()` is never invoked by the runner (defect #3 above). Folded into scope (same overlay-mount defect class; user had authorized "fix now"). E2E-gated.
+
+### 2026-06-23 — DONE (1 Green cycle, 0 rejections)
+- **Green** (`0a7a743`): `runner/src/transport-assembly.ts` (`assembleTransport`, registry-derived from `ENGINE_TRANSPORT_BINDINGS`, single canonical impl serialized into the page); `runner/src/runner-app.ts` injectable `bootstrapOverlay` default (assemble `__xbTransport` + invoke `__xbBootstrap` after bindings exposed + page ready; `PageLike` gained optional `addInitScript`/`evaluate`, no-ops on the structural test fake so the 12 call-order tests stay green); `overlay/vite.config.ts` `define` (NODE_ENV/process → bundle 734KB→340KB, **zero** bare `process` in the rebuilt artifact). Red `transport-assembly.test.ts` 8/8; runner 94/94; overlay 316/316; typecheck 10/10, lint 7/7.
+- **Validation:** Blue **Validate Green: APPROVE** (artifact-verified define; canonical assembly; seam non-breaking). Yellow **APPROVE** (5-segment mount trace wired end-to-end; no stubs/orphans; matches epic transport-seam intent).
+- **Fixture fix (Purple `f91b632`, validated separately):** corrected 2 XOB-031 harness mis-tunings (length→marker-tiered `scoreFor` so the typed draft → 78 → "Slight rework" while the rewrite → 88 keeps the never-worse guard honest; +250ms judge "ok" latency so the pulse is observable). Blue **Validate Purple: APPROVE_WITH_CONCERNS** — confirmed a legitimate deterministic fixture (band label from untouched production `deriveJudgeVerdict`; guard falsifiable), not a tautology.
+- **Outcome:** overlay-mount path restored; **XOB-031 11/11 green** (8 overlay-flow + 3 capture); XOB-031 → done.
+- **Concern (ledger C-033-1 / C-031-1, non-blocking, separate triage):** the studio/client-shell e2e specs (`shell-recovery-smoke.spec.ts:70` genuine /voice placeholder-copy bug, plus `:93/:125/:148` + `writer-deterministic-flow.spec.ts:636` which depend on the `:5173` Vite dev server) fail in sandboxed runs — **pre-existing, CAD-* lineage, unrelated to this epic** (no `client/` code touched; failing specs don't import the changed harness). Confirm against main during post-epic gates.
 
 ## Edge Cases
 

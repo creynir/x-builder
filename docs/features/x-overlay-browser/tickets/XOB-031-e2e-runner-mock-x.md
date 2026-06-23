@@ -1,5 +1,5 @@
 ---
-status: escalated
+status: done
 labels: [test]
 ---
 
@@ -113,3 +113,7 @@ All LLM calls injected via `FakeStructuredLlmService` (deterministic, per-purpos
   3. Downstream: no-op transport `getOverlayReadiness()` → `{}` → cockpit judge gate (`compose-cockpit.tsx:155`) never fires.
 - **Status:** escalated to user (2026-06-23). Tests are committed and correct; XOB-031 cannot reach Done until the production defects are fixed and the 8 specs pass. Epic tail (post-epic gates, XOB-032 [DOC]) is BLOCKED behind this.
 - **Unrelated, flagged for separate triage:** `e2e-tests/tests/shell-recovery-smoke.spec.ts:70` fails deterministically (copy-string mismatch in the `/writer` strangler-fallback area, CAD-0xx) — pre-existing, not part of this epic.
+
+### 2026-06-23 — RESOLVED → DONE
+- Production defects fixed by **XOB-033** (`0a7a743`: browser-safe bundle + `window.__xbTransport` assembly + `__xbBootstrap` invocation). Two latent fixture mis-tunings in this suite (band overshoot + too-fast pulse) fixed by **Purple `f91b632`** (Blue **Validate Purple: APPROVE_WITH_CONCERNS** — honest deterministic fixture, falsifiability preserved).
+- **All 11 tests pass** (8 overlay-flow A/B/C/E/F + inv #3/#4/#5; 3 capture Flow D + inv #1/#2). The escalation is closed; the suite now verifies a working overlay-mount path end-to-end. Status → done.
