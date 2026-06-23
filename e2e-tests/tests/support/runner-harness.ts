@@ -66,24 +66,55 @@ export interface FakeLlmPolicy {
    * / inv#6). An empty string emits no annotation.
    */
   annotationQuote: string;
+  /**
+   * Artificial latency (ms) for the judge's "ok" path, so the cockpit's "AI judge
+   * running" pulse is observable. Does not apply to "hang"/"fail".
+   */
+  judgeLatencyMs: number;
 }
 
 export function defaultLlmPolicy(): FakeLlmPolicy {
-  return { judge: "ok", annotationQuote: "specific phrase" };
+  return { judge: "ok", annotationQuote: "specific phrase", judgeLatencyMs: 250 };
 }
 
-// A length-derived score in [0,100]. Tuned so a typical typed sentence lands in
-// the slight_rework / approved band (>= 70) and a longer rewrite scores strictly
-// higher (the Apply-all never-worse guard then keeps the improved text).
-function scoreFor(text: string): number {
-  const trimmed = text.trim();
-  // 70 floor for any non-trivial draft, +1 per 4 chars beyond 40, capped at 96.
-  const bonus = Math.floor(Math.max(0, trimmed.length - 40) / 4);
-  return Math.max(0, Math.min(96, 70 + bonus));
+/** A simple promise delay (used to make the judge "ok" pulse observable). */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// The signature the Apply-all rewrite appends (see the writer_first_pass branch).
+// Only a rewritten draft carries it, so the re-judge can score it strictly above
+// the original WITHOUT relying on raw length (the displayed drafts and the
+// generated-candidate drafts vary wildly in length across flows). This keeps the
+// never-worse guard honest while letting the displayed band be deterministic.
+const REWRITE_SIGNATURE = "more answerable closing question";
+
+// Deterministic, input-derived overall score that maps cleanly onto the real
+// `deriveJudgeVerdict` bands (shared, untouched: >=85 post_now, >=70 slight_rework,
+// >=40 major_rework). Three tiers, checked in priority order:
+//   1. A rewrite (carries REWRITE_SIGNATURE)            -> 88  (post_now, approved)
+//      — strictly above the displayed-draft tier so the Apply-all never-worse
+//        guard keeps the improved text regardless of either draft's length.
+//   2. A draft carrying the annotation quote            -> 78  (slight_rework)
+//      — the user-typed / edited draft that the flows display while user_written;
+//        slight_rework is the correct state for OFFERING Apply-all (post_now +
+//        Apply-all would be contradictory).
+//   3. Anything else (e.g. generate→judge candidates)   -> 90  (post_now, approved)
+//      — keeps the generated candidates pre-approved for the Flow B entry path.
+// The score is still input-derived (different inputs -> different tiers), so two
+// distinct drafts can differ and the verdict is never a stored constant.
+function scoreFor(text: string, annotationQuote: string): number {
+  if (text.includes(REWRITE_SIGNATURE)) {
+    return 88;
+  }
+  if (annotationQuote.length > 0 && text.includes(annotationQuote)) {
+    return 78;
+  }
+  return 90;
 }
 
 function verdictModelOutput(text: string, annotationQuote: string): unknown {
-  const s = scoreFor(text);
+  const s = scoreFor(text, annotationQuote);
   const score13 = {
     overall: s,
     replies: s,
@@ -160,13 +191,21 @@ function createFakeLlm(policy: FakeLlmPolicy): FakeLlm {
           completedAt: ISO,
         };
       }
+      // A small artificial latency so the cockpit's "AI judge running" pulse
+      // renders long enough to be observable (an instantly-resolving judge would
+      // flip running → judged within one microtask burst, before Playwright could
+      // catch the pulse). Only the "ok" path delays; "hang"/"fail" are untouched,
+      // so inv#3 (hang) and inv#4 (fail) keep their behavior. The delay is short
+      // (default 250 ms) so the suite stays fast and is not timing-fragile —
+      // assertions still use auto-waiting, never a hard sleep.
+      await delay(policy.judgeLatencyMs);
       const raw = verdictModelOutput(userContent, policy.annotationQuote);
       return {
         status: "success" as const,
         provider: "codex-cli",
         requestId: "req-fake-judge",
         output: request.structuredOutput.parser(raw),
-        durationMs: 1,
+        durationMs: policy.judgeLatencyMs,
         completedAt: ISO,
       };
     }

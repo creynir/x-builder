@@ -30,10 +30,12 @@ async function typeDraft(page: Page, text: string): Promise<void> {
   await page.keyboard.type(text);
 }
 
-// A draft that lands in the approved band and contains the annotation quote the
-// fake judge underlines (blue). The default fake policy quote is "specific phrase".
+// A user-typed draft that lands in the slight_rework band (the fake judge scores
+// any draft carrying the annotation quote at 78 → slight_rework, the correct
+// state for OFFERING Apply-all) and contains the annotation quote the fake judge
+// underlines (blue). The default fake policy quote is "specific phrase".
 const TYPED_DRAFT =
-  "Most onboarding decks explain the product when they should get the user to one finished task — that is the specific phrase that matters.";
+  "Good onboarding gets the user to one finished task; that specific phrase is the whole job.";
 
 // Flow A — type → user_written → blue annotations → Apply all → improved → green.
 test("Flow A: typing fills the static column, the judge pulses then lands a verdict with blue annotations + Apply-all, and Apply-all rewrites to a green/approved generated post", async () => {
@@ -47,10 +49,14 @@ test("Flow A: typing fills the static column, the judge pulses then lands a verd
     await expect(h.page.getByText("Static score")).toBeVisible();
     await expect(h.page.getByText("Reach prediction")).toBeVisible();
 
-    // The judge pulses, then lands the verdict band + the 13 dimensions.
+    // The judge pulses, then lands the verdict band + the 13-dimension grid. The
+    // band Badge text is EXACTLY "Slight rework" (the aria-live announcement embeds
+    // the same label in a longer string, so match exactly to target the Badge).
+    // "Stranger answerability" is a distinctive dimension label that proves the
+    // 13-dim ScoreBar grid rendered.
     await expect(h.page.getByText(/AI judge running/)).toBeVisible();
-    await expect(h.page.getByText("Slight rework")).toBeVisible();
-    await expect(h.page.getByText("Overall")).toBeVisible();
+    await expect(h.page.getByText("Slight rework", { exact: true })).toBeVisible();
+    await expect(h.page.getByText("Stranger answerability").first()).toBeVisible();
 
     // Blue annotation underlay is painted over the exact quoted substring.
     const blue = h.page.locator('[role="mark"]');
@@ -117,7 +123,8 @@ test("Flow C: editing a generated (green) post flips provenance to user_written,
     // Provenance flips → the approval badge clears, the judge re-runs, and blue
     // annotations + Apply-all return on the fresh verdict.
     await expect(h.page.getByText("✓ Judge approved")).toHaveCount(0);
-    await expect(h.page.getByText("Slight rework")).toBeVisible();
+    // Match the verdict Badge exactly (the aria-live announcement embeds the label).
+    await expect(h.page.getByText("Slight rework", { exact: true })).toBeVisible();
     await expect(h.page.locator('[role="mark"]').first()).toBeVisible();
     await expect(h.page.getByRole("button", { name: /Apply all suggestions/ })).toBeVisible();
   } finally {
