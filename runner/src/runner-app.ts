@@ -26,6 +26,7 @@ import {
   judgeProviderRegistry,
   resolveWorkspaceRoot,
 } from "@x-builder/engine";
+import { ENGINE_TRANSPORT_BINDINGS } from "@x-builder/shared";
 
 import { BrowserController } from "./browser-controller.js";
 import {
@@ -35,8 +36,16 @@ import {
 import { ExposeFunctionTransport } from "./expose-function-transport.js";
 import { GraphQlCaptureObserver } from "./graphql-capture-observer.js";
 import { type ObserverLike } from "./overlay-readiness.js";
+import { assembleTransport } from "./transport-assembly.js";
 
 const require = createRequire(import.meta.url);
+
+declare global {
+  interface Window {
+    /** Overlay mount entrypoint, assigned by the injected overlay bundle. */
+    __xbBootstrap?: () => void;
+  }
+}
 
 /**
  * Structural surfaces of the Playwright Page/Context the bootstrap actually
@@ -47,6 +56,24 @@ const require = createRequire(import.meta.url);
  */
 export interface PageLike {
   goto(url: string): Promise<unknown>;
+  // Page-level init script registration (real Playwright `Page.addInitScript`).
+  // Optional on the structural surface: the lifecycle-ordering test fakes a page
+  // with only `goto`, so the default overlay-bootstrap seam treats its absence as
+  // "no real page to mount into" and skips. A real `Page` always provides it.
+  // Method syntax (bivariant param check) so a real `Page.addInitScript` —
+  // `<Arg>(script: PageFunction<Arg> | {content}, arg?) => Promise<Disposable>` —
+  // is structurally assignable here. The function-form `script` arg is `unknown`
+  // (bivariance accepts Playwright's `Unboxed<Arg>` transform); the caller pins
+  // the concrete arg type at the call site.
+  addInitScript?<Arg>(
+    script: ((arg: unknown) => unknown) | { content: string },
+    arg?: Arg,
+  ): Promise<unknown> | unknown;
+  // Evaluate a function or string expression in the page (real Playwright
+  // `Page.evaluate`, whose `PageFunction` is `string | Function`). Optional for the
+  // same structural-fake reason as `addInitScript`. Method syntax so the real
+  // `Page.evaluate` overloads stay structurally assignable.
+  evaluate?<R>(pageFunction: string | ((arg: unknown) => R), arg?: unknown): Promise<R>;
 }
 
 export interface BrowserContextLike {
@@ -89,6 +116,7 @@ export interface RunnerAppOptions {
     context: BrowserContextLike,
     onBatch: (batch: unknown) => unknown,
   ) => void | Promise<void>;
+  bootstrapOverlay?: (page: PageLike) => void | Promise<void>;
 }
 
 /**
@@ -138,6 +166,23 @@ const buildDefaultStructuredLlm = (): StructuredLlmGateway => {
   return new StructuredLlmService({ providers });
 };
 
+// Build the page init-script / evaluate source that mounts the overlay: install
+// the ONE canonical `assembleTransport` (serialized from its compiled source — no
+// duplicate inline copy), call it against the real `window` with the binding
+// registry embedded as JSON, then invoke the overlay bootstrap. Idempotent: a
+// re-run (init scripts re-execute on navigation) re-assembles the transport and
+// re-invokes the (host-id-guarded) bootstrap.
+const buildOverlayMountScript = (): string => {
+  const bindingsJson = JSON.stringify({ ...ENGINE_TRANSPORT_BINDINGS });
+  return [
+    "(function(){",
+    `var __xbAssemble = ${assembleTransport.toString()};`,
+    `__xbAssemble(window, ${bindingsJson});`,
+    "if (typeof window.__xbBootstrap === 'function') { window.__xbBootstrap(); }",
+    "})();",
+  ].join("\n");
+};
+
 export class RunnerApp {
   private readonly engineSettingsDir: string;
   private readonly browserProfileDir: string;
@@ -156,6 +201,7 @@ export class RunnerApp {
     context: BrowserContextLike,
     onBatch: (batch: unknown) => unknown,
   ) => void | Promise<void>;
+  private readonly bootstrapOverlay: (page: PageLike) => void | Promise<void>;
 
   private started = false;
   private context?: BrowserContextLike;
@@ -178,6 +224,11 @@ export class RunnerApp {
     this.bindTransport = options.bindTransport ?? ((page, services) => this.defaultBindTransport(page, services));
     this.attachObserver =
       options.attachObserver ?? ((context, onBatch) => this.defaultAttachObserver(context, onBatch));
+    // The real (XOB-033) default: assemble window.__xbTransport from the exposed
+    // bindings and invoke the overlay bootstrap, both as page init scripts so they
+    // (re-)run on every navigation. An injected override still wins.
+    this.bootstrapOverlay =
+      options.bootstrapOverlay ?? ((page) => this.defaultBootstrapOverlay(page));
   }
 
   // The shared capture observer for the default seams. Created on first use so
@@ -232,6 +283,37 @@ export class RunnerApp {
     });
   }
 
+  // Default overlay-mount wiring (XOB-033). Runs AFTER navigation so the page is
+  // ready and the exposed __xbuilder_* bindings are callable:
+  //   1. Register the transport-assembly init script so window.__xbTransport is
+  //      (re-)assembled on every future document (a full reload re-runs init
+  //      scripts; the one canonical `assembleTransport` is serialized in, with the
+  //      binding registry embedded as JSON since the closure import is absent in
+  //      the page). Its methods resolve their binding lazily.
+  //   2. On the CURRENT (already-loaded) document — which the init script above
+  //      does not cover — assemble the transport and invoke the overlay bootstrap
+  //      (window.__xbBootstrap, assigned by the injected bundle). Doing this after
+  //      the page is ready means getOverlayReadiness and the other bindings the
+  //      provider/cockpit read on mount are callable, so the overlay mounts
+  //      against the real engine rather than racing a not-yet-bound transport.
+  //
+  // A structural-fake page without `addInitScript`/`evaluate` (the lifecycle test)
+  // has no real document to mount into, so the step is a clean no-op there.
+  private async defaultBootstrapOverlay(page: PageLike): Promise<void> {
+    const mountScript = buildOverlayMountScript();
+    // Future documents (a full reload re-runs init scripts): re-assemble + re-mount.
+    // Registered AFTER navigation, so it does NOT run on the current document —
+    // that one is handled below, once bindings are callable.
+    if (typeof page.addInitScript === "function") {
+      await page.addInitScript({ content: mountScript });
+    }
+    // Current (already-loaded) document: run the same canonical mount script as a
+    // string expression now that the page is ready and the bindings are callable.
+    if (typeof page.evaluate === "function") {
+      await page.evaluate(mountScript);
+    }
+  }
+
   async start(): Promise<void> {
     // Guard re-entry: a second start() without an intervening stop() must not
     // launch a second context.
@@ -263,6 +345,12 @@ export class RunnerApp {
     await this.attachObserver(this.context, (batch) => services.liveCapture.ingest(batch));
 
     await this.page.goto("https://x.com");
+
+    // Assemble window.__xbTransport and invoke the overlay bootstrap AFTER the page
+    // is ready, so the exposed __xbuilder_* bindings are callable when the provider
+    // and cockpit read the transport on mount (AC-4). Done last so it cannot race
+    // the navigation or the binding exposure.
+    await this.bootstrapOverlay(this.page);
 
     console.log("[x-builder] Ready — x.com loaded with overlay.");
   }
