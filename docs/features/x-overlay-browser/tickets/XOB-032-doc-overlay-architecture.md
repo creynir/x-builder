@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 labels: [test]
 ---
 
@@ -112,3 +112,11 @@ Click the settings button (top-left). Under "Archive," upload your downloaded X 
 **If the overlay stops appearing**
 
 X occasionally changes the structure of its page. If the overlay affordances stop appearing, check the settings panel — it will show "X layout changed — affordances paused" if the overlay detected a structural change it could not adapt to. This is a known limitation. The engine and all analysis still work; the overlay UI affordances are paused until a selector update ships.
+
+## Pipeline Log
+
+### 2026-06-23 — DONE (White, doc-pipeline)
+- Two pages written, verified against shipped behavior:
+  - `docs/features/x-overlay-browser/explanation.md` (Explanation) — transport seam, observe-only capture, X policy boundary, provenance two-state model, the 70+ approval rule, blue annotations, metric explainer. **Folded in (Crimson L1):** a contributor note that the in-page transport trusts the authenticated x.com session (local-first single-user trust model).
+  - `docs/how-to/run-x-overlay-browser.md` (How-To) — first run, login, data locations, archive import, recovery.
+- **Corrected aspirational claim (White facts-only):** the draft's `npx x-builder` is not yet runnable (`@x-builder/runner` is a private workspace package). Documented the REAL launch — build overlay+runner, then `node runner/bin/x-builder.js` — with `npx x-builder` labeled an explicit future. Cross-links made relative (no docs site generator per Project Profile).
