@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 labels: [test]
 ---
 
@@ -126,3 +126,12 @@ Each invariant is falsifiable: a facade or stub implementation will fail the cor
 **Fixture ownership:** X-shaped fixture DOM (composer dialog + tweet articles + selector-miss variants) owned in this ticket's test directory. Canned binding request/response payloads (one per method, structurally valid under the shared Zod schemas) also owned here. All LLM calls mocked via injected `StructuredLlmService` fake (mirror `judge-draft-service.test.ts`). No live `x.com` contact.
 
 **Suite location:** `e2e-tests/` integration suite (or the relevant package's `src/**/*.integration.test.ts` per workspace convention). Fixtures co-located with this suite.
+
+## Pipeline Log
+
+### 2026-06-23 — DONE (standard lane, 0 rejection cycles)
+- **Red** (`f790f73`): two suites — Group A `runner/src/transport-engine-bindings.integration.test.ts` (new-build, must-fail) + Group B `overlay/src/compose-anchor-provenance.integration.test.tsx` (verify-only, passing). Blue **Validate Red: APPROVE** — invariants #1–#6 falsifiable; Group A fails on the absent `bound-engine-services.ts` (correct), Group B passes as scoped. Scope gate CLEAN; ticket-ids lead (XOB-* in a comment header) verified non-violation.
+- **Green** (`1b0b7ae`): built `runner/src/bound-engine-services.ts` (`createBoundEngineServices` — 17-binding bundle, judgeDraft outcome-unwrap, analyzePosts per-item cooldown re-attach mirroring `server.ts attachCooldownSignals`, getStatus/getOverlayReadiness composition); flipped `RunnerApp` NO-OP defaults → real `bindAll` + observer→`liveCapture.ingest` wiring (capture was inert until this); `engine/src/index.ts` barrel re-exports; new exported `createDefaultReadinessService`; type-only precision fix to `ENGINE_TRANSPORT_BINDINGS`. Group A 11/11; full regression green (runner 86, engine 716, shared 207, overlay 316, client 268); typecheck 10/10, lint 7/7.
+- **Validation:** Blue **Validate Green: APPROVE** (4 scrutiny points each evidence-resolved; shared retype runtime-identical; observer change is new-code not [RFR]-worthy; barrel/StructuredLlmService one-path mirrors `buildServer`). Yellow **APPROVE_WITH_CONCERNS** (both production traces wired; watch-point judged intent-aligned per epic Component Breakdown).
+- **Concern (ledger C-030-1, non-blocking):** engine barrel carries unused **type-only** companion re-exports (`ArchiveImportServiceOptions`, `ArchiveDerivedContextServiceOptions`; Yellow also flagged `JudgeDraft`/`JudgeProviderResolver` — Blue found those two consumed). No AC/DoD touched, type-erased at runtime, build green, not lint-flagged (`tsc --noEmit`, no unused-modules rule). Triage at merge.
+- **Watch-point fired & resolved (for user note at merge):** the 5 approved barrel exports were insufficient — GenerateIdeas/ApplyJudgeSuggestions/SuggestPost have no `createDefault*` factory, so Green re-exported 3 more provider primitives (`judgeProviderRegistry`, `createSettingsJudgeProviderResolver`, `resolveWorkspaceRoot`) + `ArchiveStudioContextResolver` and built one shared `StructuredLlmService` inline in `RunnerApp` (mirrors `buildServer`). Both validators judged this in-scope/one-path. Offered follow-up alternative: a `[RFR]` adding `createDefault{GenerateIdeas,ApplyJudgeSuggestions,SuggestPost}Service` factories.
