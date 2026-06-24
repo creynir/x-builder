@@ -39,7 +39,13 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { OverlayBundleNotFoundError, RunnerApp } from "./runner-app";
+import {
+  OverlayBundleNotFoundError,
+  RunnerApp,
+  type BrowserContextLike,
+  type BrowserLike,
+  type PageLike,
+} from "./runner-app";
 
 const OVERLAY_BUNDLE_CONTENT = '(function(){"use strict";globalThis.__xbuilder_overlay=1})();';
 
@@ -386,6 +392,240 @@ describe("RunnerApp.stop", () => {
     await app.stop();
 
     expect(fake.close).toHaveBeenCalledTimes(1);
+  });
+});
+
+// A fake Playwright Page on x.com for reconnect mode: url() matches x.com, and
+// goto/evaluate/addInitScript are spies that push into the shared ordered log.
+// Typed as PageLike so the structural surface (method-syntax evaluate<R>) holds —
+// a bare vi.fn collapses the generic, so the recording spy is exposed separately
+// and the page's evaluate delegates to it.
+type FakeXPage = PageLike & {
+  url: ReturnType<typeof vi.fn>;
+  goto: ReturnType<typeof vi.fn>;
+  evaluate: ReturnType<typeof vi.fn>;
+  addInitScript: ReturnType<typeof vi.fn>;
+};
+
+function createFakeXPage(record: (label: string) => void, options?: { url?: string }): FakeXPage {
+  const url = vi.fn(() => options?.url ?? "https://x.com/home");
+  const goto = vi.fn(async () => {
+    record("goto");
+  });
+  const evaluate = vi.fn((_script: string) => {
+    record("evaluate");
+    return Promise.resolve(undefined);
+  });
+  const addInitScript = vi.fn(async (_script: { content: string }) => {
+    record("page.addInitScript");
+  });
+  return { url, goto, evaluate, addInitScript, label: "x-page" } as unknown as FakeXPage;
+}
+
+// A fake connectOverCDP browser whose contexts()[0] is a fake live context that
+// owns `pages`. close() records (CDP disconnect); context.close() must never run.
+function createFakeCdpBrowser(
+  record: (label: string) => void,
+  pages: ReturnType<typeof createFakeXPage>[],
+) {
+  const contextClose = vi.fn(async () => {
+    record("context.close");
+  });
+  const contextAddInitScript = vi.fn(async (_script: { content: string }) => {
+    record("context.addInitScript");
+  });
+  const newPage = vi.fn(async () => createFakeXPage(record));
+  const context: BrowserContextLike = {
+    addInitScript: contextAddInitScript,
+    pages: () => pages,
+    newPage,
+    close: contextClose,
+  };
+  const browserClose = vi.fn(async () => {
+    record("browser.close");
+  });
+  const browser: BrowserLike = {
+    contexts: () => [context],
+    close: browserClose,
+  };
+  return { browser, context, contextClose, contextAddInitScript, newPage, browserClose };
+}
+
+describe("RunnerApp.start — reconnect mode (connectOverCDP)", () => {
+  const ENDPOINT = "http://127.0.0.1:9222";
+
+  it("connects over CDP and does not launch its own browser", async () => {
+    const recorder = createRecorder();
+    const xPage = createFakeXPage(recorder.record);
+    const fakeCdp = createFakeCdpBrowser(recorder.record, [xPage]);
+    const { services } = createFakeServices();
+
+    const launchBrowser = vi.fn();
+    const connectBrowser = vi.fn(async () => fakeCdp.browser);
+
+    const app = new RunnerApp({
+      engineSettingsDir: join(tempDir, "engine-settings"),
+      browserProfileDir: join(tempDir, "browser-profile"),
+      overlayBundlePath: bundlePath,
+      connectEndpoint: ENDPOINT,
+      services,
+      launchBrowser,
+      connectBrowser,
+      bindTransport: vi.fn(),
+      attachObserver: vi.fn(),
+      bootstrapOverlay: vi.fn(),
+    });
+
+    await app.start();
+
+    expect(connectBrowser).toHaveBeenCalledWith(ENDPOINT);
+    expect(launchBrowser).not.toHaveBeenCalled();
+  });
+
+  it("reuses the existing x.com tab and injects into the live document without navigating", async () => {
+    const recorder = createRecorder();
+    const xPage = createFakeXPage(recorder.record, { url: "https://x.com/home" });
+    const fakeCdp = createFakeCdpBrowser(recorder.record, [xPage]);
+    const { services } = createFakeServices();
+
+    const app = new RunnerApp({
+      engineSettingsDir: join(tempDir, "engine-settings"),
+      browserProfileDir: join(tempDir, "browser-profile"),
+      overlayBundlePath: bundlePath,
+      connectEndpoint: ENDPOINT,
+      services,
+      connectBrowser: vi.fn(async () => fakeCdp.browser),
+      bindTransport: vi.fn(),
+      attachObserver: vi.fn(),
+      bootstrapOverlay: vi.fn(),
+    });
+
+    await app.start();
+
+    // Live-document injection runs the bundle string; no navigation happens.
+    expect(xPage.evaluate).toHaveBeenCalledWith(OVERLAY_BUNDLE_CONTENT);
+    expect(xPage.goto).not.toHaveBeenCalled();
+    // The bundle is also registered for future documents on the live context.
+    expect(fakeCdp.contextAddInitScript).toHaveBeenCalledWith({
+      content: OVERLAY_BUNDLE_CONTENT,
+    });
+  });
+
+  it("navigates an off-x.com tab to x.com/home instead of injecting into the current document", async () => {
+    const recorder = createRecorder();
+    const offX = createFakeXPage(recorder.record, { url: "https://example.com/" });
+    const fakeCdp = createFakeCdpBrowser(recorder.record, [offX]);
+    const { services } = createFakeServices();
+
+    const app = new RunnerApp({
+      engineSettingsDir: join(tempDir, "engine-settings"),
+      browserProfileDir: join(tempDir, "browser-profile"),
+      overlayBundlePath: bundlePath,
+      connectEndpoint: ENDPOINT,
+      services,
+      connectBrowser: vi.fn(async () => fakeCdp.browser),
+      bindTransport: vi.fn(),
+      attachObserver: vi.fn(),
+      bootstrapOverlay: vi.fn(),
+    });
+
+    await app.start();
+
+    expect(offX.goto).toHaveBeenCalledWith("https://x.com/home");
+    expect(offX.evaluate).not.toHaveBeenCalled();
+  });
+
+  it("binds transport then bootstraps the overlay (in order) and attaches the observer to the live context", async () => {
+    const recorder = createRecorder();
+    const xPage = createFakeXPage(recorder.record);
+    const fakeCdp = createFakeCdpBrowser(recorder.record, [xPage]);
+    const { services } = createFakeServices();
+
+    const bindTransport = vi.fn(async () => {
+      recorder.record("bindTransport");
+    });
+    const attachObserver = vi.fn(async () => {
+      recorder.record("attachObserver");
+    });
+    const bootstrapOverlay = vi.fn(async () => {
+      recorder.record("bootstrapOverlay");
+    });
+
+    const app = new RunnerApp({
+      engineSettingsDir: join(tempDir, "engine-settings"),
+      browserProfileDir: join(tempDir, "browser-profile"),
+      overlayBundlePath: bundlePath,
+      connectEndpoint: ENDPOINT,
+      services,
+      connectBrowser: vi.fn(async () => fakeCdp.browser),
+      bindTransport,
+      attachObserver,
+      bootstrapOverlay,
+    });
+
+    await app.start();
+
+    expect(bindTransport).toHaveBeenCalledWith(xPage, services);
+    expect(bootstrapOverlay).toHaveBeenCalledWith(xPage);
+    expect(attachObserver).toHaveBeenCalledWith(fakeCdp.context, expect.any(Function));
+
+    // bindTransport precedes bootstrapOverlay.
+    expect(recorder.calls.indexOf("bindTransport")).toBeLessThan(
+      recorder.calls.indexOf("bootstrapOverlay"),
+    );
+  });
+
+  it("throws a clear error when the connected browser has no context", async () => {
+    const recorder = createRecorder();
+    const noCtxBrowser: BrowserLike = {
+      contexts: () => [],
+      close: vi.fn(async () => undefined),
+    };
+    const { services } = createFakeServices();
+
+    const app = new RunnerApp({
+      engineSettingsDir: join(tempDir, "engine-settings"),
+      browserProfileDir: join(tempDir, "browser-profile"),
+      overlayBundlePath: bundlePath,
+      connectEndpoint: ENDPOINT,
+      services,
+      connectBrowser: vi.fn(async () => noCtxBrowser),
+      bindTransport: vi.fn(),
+      attachObserver: vi.fn(),
+      bootstrapOverlay: vi.fn(),
+    });
+
+    await expect(app.start()).rejects.toThrow(/No browser context found over CDP/);
+    void recorder;
+  });
+});
+
+describe("RunnerApp.stop — reconnect mode", () => {
+  const ENDPOINT = "http://127.0.0.1:9222";
+
+  it("disconnects the CDP session (browser.close) without closing the user's context", async () => {
+    const recorder = createRecorder();
+    const xPage = createFakeXPage(recorder.record);
+    const fakeCdp = createFakeCdpBrowser(recorder.record, [xPage]);
+    const { services } = createFakeServices();
+
+    const app = new RunnerApp({
+      engineSettingsDir: join(tempDir, "engine-settings"),
+      browserProfileDir: join(tempDir, "browser-profile"),
+      overlayBundlePath: bundlePath,
+      connectEndpoint: ENDPOINT,
+      services,
+      connectBrowser: vi.fn(async () => fakeCdp.browser),
+      bindTransport: vi.fn(),
+      attachObserver: vi.fn(),
+      bootstrapOverlay: vi.fn(),
+    });
+
+    await app.start();
+    await app.stop();
+
+    expect(fakeCdp.browserClose).toHaveBeenCalledTimes(1);
+    expect(fakeCdp.contextClose).not.toHaveBeenCalled();
   });
 });
 

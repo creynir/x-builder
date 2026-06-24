@@ -1,15 +1,23 @@
 /**
- * RunnerApp bootstrap: launches a persistent Chromium context, injects the
- * prebuilt overlay bundle once per document via `addInitScript`, wires the
- * (XOB-016) transport and (XOB-017) capture observer through injectable seams,
- * and navigates to x.com.
+ * RunnerApp bootstrap, in one of two modes:
  *
- * Every collaborator `start()` touches is injectable through {@link RunnerAppOptions}
- * so the lifecycle can be tested with no real browser, engine services, or
- * network. The `bindTransport` / `attachObserver` defaults (XOB-030) bind the 17
- * `__xbuilder_*` engine bindings through {@link ExposeFunctionTransport} and
- * register the {@link GraphQlCaptureObserver} response listener; an injected
- * override still wins, so every seam stays testable.
+ *  - Launch mode (default): launches a persistent Chromium context, injects the
+ *    prebuilt overlay bundle once per document via `addInitScript`, and navigates
+ *    to x.com.
+ *  - Reconnect mode (a `connectEndpoint` / `XB_CDP_ENDPOINT` is set): ATTACHES to
+ *    an already-running Chrome over CDP (`connectOverCDP`) — one the user started
+ *    and logged into — and injects the overlay into the live tab. The keychain-
+ *    native session lives in that Chrome and is never touched by automation, which
+ *    sidesteps the macOS login/Keychain walls.
+ *
+ * Both modes then wire the (XOB-016) transport and (XOB-017) capture observer
+ * through the same injectable seams. Every collaborator `start()` touches is
+ * injectable through {@link RunnerAppOptions} so the lifecycle can be tested with
+ * no real browser, engine services, or network. The `bindTransport` /
+ * `attachObserver` defaults (XOB-030) bind the 17 `__xbuilder_*` engine bindings
+ * through {@link ExposeFunctionTransport} and register the
+ * {@link GraphQlCaptureObserver} response listener; an injected override still
+ * wins, so every seam stays testable.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -27,6 +35,7 @@ import {
   resolveWorkspaceRoot,
 } from "@x-builder/engine";
 import { ENGINE_TRANSPORT_BINDINGS } from "@x-builder/shared";
+import { chromium } from "playwright";
 
 import { BrowserController } from "./browser-controller.js";
 import {
@@ -56,6 +65,10 @@ declare global {
  */
 export interface PageLike {
   goto(url: string): Promise<unknown>;
+  // Current page URL (real Playwright `Page.url`). Optional/method-syntax like the
+  // other members so a structural fake can omit it; reconnect mode uses it to find
+  // the x.com tab and to decide whether the live document already needs a goto.
+  url?(): string;
   // Page-level init script registration (real Playwright `Page.addInitScript`).
   // Optional on the structural surface: the lifecycle-ordering test fakes a page
   // with only `goto`, so the default overlay-bootstrap seam treats its absence as
@@ -84,6 +97,17 @@ export interface BrowserContextLike {
 }
 
 /**
+ * Minimal surface of the Playwright `Browser` the reconnect path touches. A
+ * `connectOverCDP` browser owns the live Chrome the user started; `close()`
+ * DISCONNECTS the CDP session without closing that Chrome or its tabs. Typed
+ * structurally so a real `Browser` flows through and a fake stands in for tests.
+ */
+export interface BrowserLike {
+  contexts(): BrowserContextLike[];
+  close(): Promise<unknown> | unknown;
+}
+
+/**
  * The in-process engine service bundle the runner hands to its seams. The runner
  * itself only touches `liveCapture` (the observer's onBatch forwards a captured
  * batch into `liveCapture.ingest`); XOB-016 binds the rest through the transport.
@@ -105,12 +129,21 @@ export interface RunnerAppOptions {
   engineSettingsDir?: string;
   browserProfileDir?: string;
   overlayBundlePath?: string;
+  // CDP endpoint of an already-running Chrome (started with --remote-debugging-port
+  // and logged in by the user). When set — directly or via XB_CDP_ENDPOINT — the
+  // runner ATTACHES over CDP instead of launching its own browser. An empty string
+  // is treated as unset.
+  connectEndpoint?: string;
   services?: EngineServices;
   createServices?: (opts: { engineSettingsDir: string }) => EngineServices;
   launchBrowser?: (opts: {
     userDataDir: string;
     channel: "chromium";
   }) => Promise<BrowserContextLike>;
+  // Reconnect-mode acquisition: attach to the live Chrome over CDP. Default
+  // `chromium.connectOverCDP`. Injectable so the reconnect lifecycle is testable
+  // with a fake browser/context/page and no real Chrome.
+  connectBrowser?: (endpoint: string) => Promise<BrowserLike>;
   bindTransport?: (page: PageLike, services: EngineServices) => void | Promise<void>;
   attachObserver?: (
     context: BrowserContextLike,
@@ -187,12 +220,16 @@ export class RunnerApp {
   private readonly engineSettingsDir: string;
   private readonly browserProfileDir: string;
   private readonly overlayBundlePath: string;
+  // Resolved at construction from option then XB_CDP_ENDPOINT; empty string → unset.
+  // A defined value selects reconnect mode.
+  private readonly connectEndpoint?: string;
   private readonly injectedServices?: EngineServices;
   private readonly createServices: (opts: { engineSettingsDir: string }) => EngineServices;
   private readonly launchBrowser: (opts: {
     userDataDir: string;
     channel: "chromium";
   }) => Promise<BrowserContextLike>;
+  private readonly connectBrowser: (endpoint: string) => Promise<BrowserLike>;
   private readonly bindTransport: (
     page: PageLike,
     services: EngineServices,
@@ -204,7 +241,13 @@ export class RunnerApp {
   private readonly bootstrapOverlay: (page: PageLike) => void | Promise<void>;
 
   private started = false;
+  // True between start() and stop() when start() attached over CDP, so stop()
+  // disconnects the CDP session (browser.close) instead of closing the user's
+  // context/tabs.
+  private reconnected = false;
   private context?: BrowserContextLike;
+  // The connectOverCDP browser in reconnect mode; undefined in launch mode.
+  private browser?: BrowserLike;
   private page?: PageLike;
   // The capture observer is created once per start and shared between the two
   // default seams: the bundle's getOverlayReadiness holds its live state
@@ -215,9 +258,15 @@ export class RunnerApp {
     this.engineSettingsDir = options.engineSettingsDir ?? defaultEngineSettingsDir();
     this.browserProfileDir = options.browserProfileDir ?? defaultBrowserProfileDir();
     this.overlayBundlePath = options.overlayBundlePath ?? defaultOverlayBundlePath();
+    // Empty string (option or env) is treated as unset, so it does not select
+    // reconnect mode.
+    const endpoint = options.connectEndpoint ?? process.env.XB_CDP_ENDPOINT;
+    this.connectEndpoint = endpoint ? endpoint : undefined;
     this.injectedServices = options.services;
     this.createServices = options.createServices ?? defaultCreateServices;
     this.launchBrowser = options.launchBrowser ?? ((opts) => BrowserController.launch(opts));
+    this.connectBrowser =
+      options.connectBrowser ?? ((endpoint) => chromium.connectOverCDP(endpoint));
     // The real (XOB-030) defaults: bind the 17 engine bindings through
     // ExposeFunctionTransport, and observe X GraphQL responses for live capture.
     // An injected override still wins, keeping every seam testable.
@@ -316,7 +365,7 @@ export class RunnerApp {
 
   async start(): Promise<void> {
     // Guard re-entry: a second start() without an intervening stop() must not
-    // launch a second context.
+    // acquire a second browser.
     if (this.started) {
       return;
     }
@@ -325,6 +374,17 @@ export class RunnerApp {
     const services =
       this.injectedServices ?? this.createServices({ engineSettingsDir: this.engineSettingsDir });
 
+    if (this.connectEndpoint !== undefined) {
+      await this.startReconnect(this.connectEndpoint, services);
+      return;
+    }
+
+    await this.startLaunch(services);
+  }
+
+  // Launch mode: open a persistent Chromium context, inject the overlay bundle as
+  // a per-document init script, then bind / observe / navigate / bootstrap.
+  private async startLaunch(services: EngineServices): Promise<void> {
     this.context = await this.launchBrowser({
       userDataDir: this.browserProfileDir,
       channel: "chromium",
@@ -355,10 +415,70 @@ export class RunnerApp {
     console.log("[x-builder] Ready — x.com loaded with overlay.");
   }
 
+  // Reconnect mode: ATTACH to the live Chrome over CDP and inject the overlay into
+  // its existing tab. The browser's first context (and its logged-in session) is
+  // owned by that Chrome — automation never opened it — so the macOS Keychain wall
+  // is sidestepped entirely.
+  private async startReconnect(endpoint: string, services: EngineServices): Promise<void> {
+    this.browser = await this.connectBrowser(endpoint);
+    const context = this.browser.contexts()[0];
+    if (context === undefined) {
+      throw new Error(
+        `No browser context found over CDP at ${endpoint}. Start Chrome with --remote-debugging-port and log in first.`,
+      );
+    }
+    this.context = context;
+    this.reconnected = true;
+
+    // Read the overlay bundle before any injection/bind/observer step. A missing
+    // bundle throws here, so none of those downstream steps run.
+    if (!existsSync(this.overlayBundlePath)) {
+      throw new OverlayBundleNotFoundError(this.overlayBundlePath);
+    }
+    const overlayBundle = readFileSync(this.overlayBundlePath, "utf-8");
+
+    // Prefer a tab already on x.com; else the first tab; else a fresh one.
+    const onX = (page: PageLike): boolean =>
+      typeof page.url === "function" && /^https?:\/\/([^/]*\.)?x\.com\b/.test(page.url());
+    const page = context.pages().find(onX) ?? context.pages()[0] ?? (await context.newPage());
+    this.page = page;
+
+    // Register the bundle for FUTURE documents (init scripts re-run on navigation).
+    await context.addInitScript({ content: overlayBundle });
+
+    // Ensure the chosen page is on X with the overlay present. If it is off-X, a
+    // goto loads x.com/home and the init script above injects the bundle on that
+    // navigation (the logged-in session persists — the connected Chrome owns it).
+    // If it is already on X, inject into the CURRENT document without reloading:
+    // run the bundle IIFE so it assigns window.__xbBootstrap.
+    if (!onX(page)) {
+      await page.goto("https://x.com/home");
+    } else if (typeof page.evaluate === "function") {
+      await page.evaluate(overlayBundle);
+    }
+
+    // Same order as launch mode: bind the 17 bindings (exposeFunction works over
+    // connectOverCDP), attach the capture observer, then bootstrap the overlay.
+    await this.bindTransport(page, services);
+    await this.attachObserver(context, (batch) => services.liveCapture.ingest(batch));
+    await this.bootstrapOverlay(page);
+
+    console.log(`[x-builder] Reconnected to Chrome at ${endpoint} — overlay injected.`);
+  }
+
   async stop(): Promise<void> {
-    await this.context?.close();
+    if (this.reconnected) {
+      // Disconnect the CDP session. This must NOT close the user's Chrome or tabs,
+      // so we close the browser handle and never call context.close().
+      await this.browser?.close();
+    } else {
+      await this.context?.close();
+    }
+
     this.context = undefined;
+    this.browser = undefined;
     this.page = undefined;
+    this.reconnected = false;
     // Drop the observer so a stop -> start gets a fresh one bound to the new
     // context rather than a stale listener.
     this.captureObserver = undefined;
