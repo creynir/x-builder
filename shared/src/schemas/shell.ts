@@ -123,6 +123,10 @@ export const appSettingsSchema = z.object({
   claudeModel: z.string().optional(),
   cursorModel: z.string().optional(),
   accountProfile: z.string().trim().max(600).optional(),
+  // Absolute path to a markdown knowledge base (the reach/format playbook) the
+  // idea generator grounds its drafts in. Unset → generation uses the base
+  // template only.
+  knowledgeBasePath: z.string().trim().max(4096).optional(),
   showDeterministicDetails: z.boolean().default(true),
 });
 

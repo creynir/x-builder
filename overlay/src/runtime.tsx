@@ -13,7 +13,6 @@ import { AnchorLayer } from "./anchor-layer";
 import { ComposeCockpit } from "./compose/compose-cockpit";
 import { overlayExplainerCopy } from "./explainer/copy";
 import { SettingsAffordance } from "./settings/settings-affordance";
-import { SuggestController } from "./suggest/suggest-controller";
 import { OverlayTransportProvider } from "./transport/provider";
 
 export interface OverlayRuntimeProps {}
@@ -24,19 +23,21 @@ export interface OverlayRuntimeProps {}
  * `AnchorLayer` (not inside the node-anchored pin tree) so it stays mounted in
  * the top-left of the shadow layer regardless of which X nodes are present.
  *
- * `ComposeCockpit` and `SuggestController` both mount INSIDE `AnchorLayer` (they
- * consume the `ComposeContext` the layer publishes) and self-guard on it:
- * `ComposeCockpit` renders nothing until the layer detects X's compose modal,
- * while `SuggestController` is the inverse — the page-persistent suggest-post
- * surface that renders only while the compose modal is NOT active. So the runtime
- * stays inert on non-compose routes except for the suggest launcher.
+ * `ComposeCockpit` mounts INSIDE `AnchorLayer` (it consumes the `ComposeContext`
+ * the layer publishes) and renders nothing until the layer detects X's compose
+ * modal. So the runtime stays inert on non-compose routes except for the single
+ * page-persistent `SettingsAffordance` orb.
+ *
+ * The standalone suggest-post launcher (`SuggestController`) was unmounted: a
+ * second always-on ✦ button stacked on X's nav read as a confusing duplicate of
+ * the settings orb. The feature code is parked for later folding into the
+ * settings panel or the compose flow.
  */
 export function OverlayRuntime(_props: OverlayRuntimeProps): ReactNode {
   return (
     <OverlayTransportProvider>
       <AnchorLayer>
         <ComposeCockpit explainer={overlayExplainerCopy} />
-        <SuggestController />
       </AnchorLayer>
       <SettingsAffordance />
     </OverlayTransportProvider>

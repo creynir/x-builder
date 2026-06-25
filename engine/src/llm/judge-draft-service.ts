@@ -49,8 +49,8 @@ const judgeInstructions = [
   "concrete strengths, and up to five concrete improvements.",
   "Also emit an annotations array (up to 12 items) of { quote, severity, recommendation }",
   "where quote is an exact substring of the draft (copy the words verbatim), severity is",
-  "suggestion or warning, and recommendation is a one-line fix. Omit annotations entirely",
-  "if you have none.",
+  "suggestion or warning, and recommendation is a one-line fix. Return an empty",
+  "annotations array if you have none.",
   "Return only JSON matching the output schema.",
 ].join(" ");
 
@@ -75,7 +75,11 @@ const nullableScoreProperty = {
 const verdictOutputSchema: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
-  required: ["scores", "confidence", "headline", "strengths", "improvements"],
+  // Every property must appear in `required`: codex/OpenAI strict structured
+  // output (response_format json_schema) rejects a schema whose `required` omits
+  // any key in `properties`. annotations is required-on-the-wire but may be an
+  // empty array when the draft has no span-level notes.
+  required: ["scores", "confidence", "headline", "strengths", "improvements", "annotations"],
   properties: {
     scores: {
       type: "object",

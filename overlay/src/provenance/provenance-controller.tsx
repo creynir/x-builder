@@ -29,12 +29,19 @@ import {
 } from "@x-builder/shared";
 
 import { deriveProvenanceState, type ProvenanceState } from "./derive-provenance-state";
-import { useComposerText } from "./use-composer-text";
 import { useProvenanceAnchor } from "./use-provenance-anchor";
 
 export interface ProvenanceControllerProps {
   /** The contenteditable composer element; `null` ⇒ always `"user_written"`. */
   composerEl: HTMLElement | null;
+  /**
+   * The live composer text from the parent's MutationObserver-backed read
+   * (AnchorLayer). It MUST come from there, not a self-contained `input`
+   * listener: X's Draft.js does NOT fire `input` on a paste / programmatic
+   * write, so a generated draft would never be observed and would stay stuck
+   * "user_written" (blue) instead of flipping to "generated" (green).
+   */
+  composerText: string;
   /** Annotations from the latest judgeDraft verdict; `[]` when none. */
   annotations: JudgeAnnotation[];
   /** Latest verdict from the parent compose machine; nullish ⇒ `approved=false`. */
@@ -63,10 +70,10 @@ export interface ProvenanceRenderContext {
  * Renders no DOM of its own.
  */
 export function ProvenanceController(props: ProvenanceControllerProps): ReactNode {
-  const { composerEl, annotations, latestVerdict, onProvenanceChange, children } = props;
+  const { composerEl, composerText, annotations, latestVerdict, onProvenanceChange, children } =
+    props;
 
   const { anchor, setAnchor } = useProvenanceAnchor();
-  const composerText = useComposerText(composerEl);
 
   // L5: no active compose session (null composer) is always user_written, so an
   // empty anchor + empty composer read cannot spuriously derive "generated".

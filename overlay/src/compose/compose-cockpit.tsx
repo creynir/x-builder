@@ -36,6 +36,7 @@ import {
 import type { JudgeAnnotation } from "@x-builder/shared";
 
 import { useComposeContext } from "../anchor-layer";
+import { writeIntoComposer } from "../composer-write";
 import { CompositionHighlightLayer } from "../highlight/composition-highlight-layer";
 import { ProvenanceController } from "../provenance/provenance-controller";
 import { useTransport } from "../transport/use-transport";
@@ -62,6 +63,10 @@ export interface ComposeCockpitProps {
 /** A stable empty annotation array — one reference shared across renders so a
  *  no-annotation pass never re-arms the highlight layer's locate effect. */
 const NO_ANNOTATIONS: readonly JudgeAnnotation[] = Object.freeze([]);
+
+/** Whitespace-insensitive content key: tells our own programmatic write from a
+ *  genuine user edit regardless of how Draft.js renders paragraph breaks. */
+const contentKey = (text: string | null): string => (text ?? "").replace(/\s+/g, "");
 
 /** The responsive collapse breakpoint (≤ this width ⇒ stacked single column). */
 const STACK_BREAKPOINT_PX = 1180;
@@ -145,39 +150,16 @@ function deriveAnalyzeState(phase: ComposeMachineState): AnalyzeState {
 }
 
 /**
- * Derive the JudgeStrip state from the machine phase + the live readiness gate.
- * When static landed but the judge is gated off, surface the readiness hint.
+ * The judge UI state, DECOUPLED from the static `ComposeMachineState` (XOB #4):
+ * the judge runs only on an explicit click (never auto on every keystroke), and a
+ * landed verdict survives composer edits — the stale highlight clears (via the
+ * `judgedText` mismatch) while the scores stay visible until the user re-runs.
  */
-function deriveJudgeState(
-  phase: ComposeMachineState,
-  readiness: OverlayReadiness | null,
-): JudgeState {
-  const judgeReady = readiness?.llm?.state === "ready";
-  const unavailableHint =
-    readiness?.llm?.message ?? readiness?.llm?.label ?? "Judge unavailable.";
-
-  switch (phase.phase) {
-    case "idle":
-    case "typing":
-    case "generating":
-      return { status: "waiting" };
-    case "static_ready":
-      return judgeReady ? { status: "running" } : { status: "unavailable", hint: unavailableHint };
-    case "judging":
-      return { status: "running" };
-    case "judged":
-      return { status: "judged", verdict: phase.verdict };
-    case "judge_failed":
-      return { status: "failed", error: phase.error };
-    case "static_failed":
-      // Static failed before the judge ran: the judge channel quietly waits.
-      return { status: "waiting" };
-    case "apply_failed":
-      return phase.verdict !== undefined
-        ? { status: "judged", verdict: phase.verdict }
-        : { status: "failed", error: phase.error };
-  }
-}
+type JudgeUiState =
+  | { status: "idle" }
+  | { status: "judging" }
+  | { status: "judged"; verdict: JudgeVerdict; judgedText: string }
+  | { status: "failed"; error: string };
 
 const ROOT_STYLE: CSSProperties = {
   position: "fixed",
@@ -200,6 +182,9 @@ const PIN_BASE_STYLE: CSSProperties = {
   position: "absolute",
   // Each pin scrolls internally on overflow; it never grows X's layout.
   overflow: "auto",
+  // Keep the scroll INSIDE the pin: reaching the pin's top/bottom must not chain
+  // the wheel to X's page behind it (XOB #2).
+  overscrollBehavior: "contain",
   maxHeight: "80vh",
   pointerEvents: "auto",
 };
@@ -207,6 +192,7 @@ const PIN_BASE_STYLE: CSSProperties = {
 const STACKED_PIN_STYLE: CSSProperties = {
   position: "relative",
   overflow: "auto",
+  overscrollBehavior: "contain",
   maxHeight: "60vh",
   pointerEvents: "auto",
 };
@@ -229,6 +215,11 @@ function ActiveCockpit({
   const [categories, setCategories] = useState<GenerateCategory[]>([]);
   const [followers, setFollowers] = useState<number | undefined>(undefined);
   const [readiness, setReadiness] = useState<OverlayReadiness | null>(null);
+
+  // The judge UI, decoupled from the static machine (XOB #4). It runs manually
+  // (a button), persists across edits, and is aborted-by-token like the rest.
+  const [judgeUi, setJudgeUi] = useState<JudgeUiState>({ status: "idle" });
+  const judgeTokenRef = useRef(0);
 
   // The monotonic request token: bumped on a composer edit; a stale resolution
   // (token !== current) is dropped, so an edit aborts the in-flight judge/apply.
@@ -282,39 +273,45 @@ function ActiveCockpit({
   // ---- The explicit-gesture composer write ---------------------------------
   const writeComposer = useCallback(
     (text: string, anchor: boolean): void => {
-      // A real contenteditable write: set textContent, optionally re-pin the
-      // green anchor to that EXACT text, then fire `input` so React/X notice.
-      composerEl.textContent = text;
+      // A Draft.js-safe write (focus → select-all → synthetic paste). Draft
+      // re-renders its model asynchronously, so anchor provenance and the
+      // own-write dedupe to the REQUESTED text — Draft renders exactly that.
+      writeIntoComposer(composerEl, text);
       lastWriteRef.current = text;
       if (anchor) {
         anchorRef.current = text;
         setProvenanceAnchorRef.current?.(text);
       }
-      composerEl.dispatchEvent(new Event("input", { bubbles: true }));
     },
     [composerEl],
   );
 
-  // Kick the readiness-gated judge flow for `text` (the verdict-less generate
-  // branch and retry path). Guarded by the request token so a later edit aborts.
-  const kickJudge = useCallback(
-    (text: string, analyzeResult: ScoredPostItem | undefined, token: number): void => {
+  // Run the readiness-gated judge for `text` and store the verdict in the
+  // decoupled judge UI. Guarded by the judge token so a later edit/run drops a
+  // stale verdict. The verdict records the EXACT text it judged (`judgedText`) so
+  // the highlight can clear the moment the live text diverges.
+  const runJudge = useCallback(
+    (text: string): void => {
+      if (text.trim() === "") return;
       const ready = readinessRef.current;
       if (ready?.llm?.state !== "ready") {
-        if (analyzeResult !== undefined) dispatch({ type: "judge_unavailable", analyzeResult });
+        setJudgeUi({
+          status: "failed",
+          error: ready?.llm?.message ?? ready?.llm?.label ?? "Judge unavailable.",
+        });
         return;
       }
-      dispatch({ type: "judge_started", analyzeResult });
+      const token = ++judgeTokenRef.current;
+      setJudgeUi({ status: "judging" });
       void (async () => {
         try {
           const verdict = await transport.judgeDraft({ text });
-          if (tokenRef.current !== token) return; // stale verdict dropped
-          dispatch({ type: "judge_succeeded", analyzeResult, verdict: verdict.verdict });
+          if (judgeTokenRef.current !== token) return; // stale verdict dropped
+          setJudgeUi({ status: "judged", verdict: verdict.verdict, judgedText: text });
         } catch (error) {
-          if (tokenRef.current !== token) return;
-          dispatch({
-            type: "judge_failed",
-            analyzeResult,
+          if (judgeTokenRef.current !== token) return;
+          setJudgeUi({
+            status: "failed",
             error: error instanceof Error ? error.message : "judge_failed",
           });
         }
@@ -334,9 +331,9 @@ function ActiveCockpit({
     const text = composerText;
 
     // Our own generated/improved write: the cockpit already drove the judge for
-    // it; do not re-analyze (a generated draft is not statically re-scored, and a
-    // verdict-less generated draft already kicked its own judge).
-    if (text !== "" && text === lastWriteRef.current) {
+    // it; do not re-analyze (whitespace-insensitive — Draft re-renders the
+    // paragraph breaks, so a byte match would miss our own write).
+    if (text !== "" && contentKey(text) === contentKey(lastWriteRef.current)) {
       return;
     }
 
@@ -376,15 +373,15 @@ function ActiveCockpit({
         }
 
         dispatch({ type: "analyze_succeeded", analyzeResult, followers });
-        // Auto-kick the readiness-gated judge on the analyzed text.
-        kickJudge(text, analyzeResult, token);
+        // The judge does NOT auto-run on edits (XOB #4) — only on an explicit
+        // Run judge click. The static score above still updates live as you type.
       })();
     }, ANALYZE_DEBOUNCE_MS);
 
     return () => {
       if (timer !== null) clearTimeout(timer);
     };
-  }, [composerText, transport, followers, kickJudge]);
+  }, [composerText, transport, followers]);
 
   // ---- Raw-input abort: a genuine edit aborts in-flight work immediately ----
   useEffect(() => {
@@ -392,14 +389,31 @@ function ActiveCockpit({
       const live = composerEl.textContent ?? "";
       // Our own programmatic write is not an abort trigger (its flow is handled).
       if (live !== "" && live === lastWriteRef.current) return;
-      // A genuine user edit: bump the token (drop any stale judge/apply result)
-      // and clear the apply affordance; the debounced runner re-analyzes.
+      // A genuine user edit: bump both tokens (drop any in-flight analyze/apply
+      // AND in-flight judge) and clear the apply affordance; the debounced runner
+      // re-analyzes. A COMPLETED verdict is left intact — it stays visible (its
+      // highlight clears via the judgedText mismatch) until the user re-runs (#4).
       tokenRef.current += 1;
+      judgeTokenRef.current += 1;
       dispatch({ type: "typing" });
     };
     composerEl.addEventListener("input", onInput);
     return () => composerEl.removeEventListener("input", onInput);
   }, [composerEl]);
+
+  // ---- Reset the judge on any genuine text change (XOB) ---------------------
+  // A verdict only describes the text it judged, so ANY edit (and full removal)
+  // invalidates it: reset to the initial "Run judge" state and drop any in-flight
+  // judge. Our own programmatic writes (generate / apply) are NOT edits — they
+  // set the judge themselves — so a write whose content matches `lastWriteRef`
+  // (whitespace-insensitive) is skipped.
+  useEffect(() => {
+    if (contentKey(composerText) === contentKey(lastWriteRef.current)) {
+      return;
+    }
+    judgeTokenRef.current += 1;
+    setJudgeUi({ status: "idle" });
+  }, [composerText]);
 
   // ---- Generate (auto-apply-best) ------------------------------------------
   const onGenerate = useCallback(
@@ -411,20 +425,48 @@ function ActiveCockpit({
           const response = await transport.generateIdeas({ format: category.format });
           if (tokenRef.current !== token) return;
           const best = chooseBestCandidate(response.candidates);
+          // A generated draft is ALWAYS "generated" provenance → green wash,
+          // whether or not the candidate arrived pre-judged. The verdict only
+          // governs the "✓ Judge approved" badge, never the green (XOB bug #1).
+          writeComposer(best.text, true);
+          // Draft adopts the text asynchronously, so analyze/judge the REQUESTED
+          // text rather than reading the (stale) composer back synchronously.
+          const written = best.text;
+
+          // Statically analyze the generated text so the RIGHT static-engine
+          // column fills in (XOB bug #5 — generated drafts previously skipped
+          // analyze and the column sat on empty skeleton slots forever). The
+          // static engine is deterministic/cheap; a failure is non-fatal — we
+          // still surface the judge below.
+          let analyzeResult: ScoredPostItem | undefined;
+          try {
+            const analysis = await transport.analyzePosts({
+              items: [{ id: "compose-draft", text: written }],
+              scoringContext: followers !== undefined ? { followers } : {},
+              presentation: { postCoachMode: "preview" },
+            });
+            if (tokenRef.current !== token) return;
+            const first = analysis.items[0];
+            if (first !== undefined && first.status === "scored") {
+              analyzeResult = first;
+            }
+          } catch {
+            if (tokenRef.current !== token) return;
+          }
+
+          // Surface the static result in the right column regardless of judge path.
+          if (analyzeResult !== undefined) {
+            dispatch({ type: "analyze_succeeded", analyzeResult, followers });
+          }
+
           if (best.verdict !== undefined) {
-            // Pre-judged candidate: write + re-pin the green anchor (generated),
-            // and adopt the candidate's verdict (no re-judge).
-            writeComposer(best.text, true);
-            dispatch({ type: "generated_judged", verdict: best.verdict });
+            // Pre-judged candidate: adopt its verdict (generated posts are judged
+            // by default — #8), recording the generated text as the judged text.
+            judgeTokenRef.current += 1;
+            setJudgeUi({ status: "judged", verdict: best.verdict, judgedText: written });
           } else {
-            // Verdict-less candidate: write WITHOUT anchoring (provenance stays
-            // user_written → no pre-approved badge), then kick the NORMAL judge
-            // flow directly on the written text (the debounced analyze runner
-            // skips it as our own write).
-            writeComposer(best.text, false);
-            dispatch({ type: "generated_pending_judge" });
-            const judgeToken = ++tokenRef.current;
-            kickJudge(best.text, undefined, judgeToken);
+            // Verdict-less candidate: run the judge on the written text.
+            runJudge(written);
           }
         } catch {
           if (tokenRef.current !== token) return;
@@ -432,12 +474,12 @@ function ActiveCockpit({
         }
       })();
     },
-    [transport, writeComposer, kickJudge],
+    [transport, writeComposer, runJudge, followers],
   );
 
   // ---- Apply-all (improve) -------------------------------------------------
   const onApplyAll = useCallback((): void => {
-    const text = composerEl.textContent ?? "";
+    const text = composerEl.innerText ?? composerEl.textContent ?? "";
     if (text.trim() === "") return;
     const token = ++tokenRef.current;
     dispatch({ type: "apply_started" });
@@ -447,6 +489,9 @@ function ActiveCockpit({
         if (tokenRef.current !== token) return; // edit aborted the apply
         // Write the improved text + re-pin the green anchor (provenance generated).
         writeComposer(result.text, true);
+        // Adopt the post-apply verdict (judged against the improved text).
+        judgeTokenRef.current += 1;
+        setJudgeUi({ status: "judged", verdict: result.verdict, judgedText: result.text });
         dispatch({
           type: "apply_applied",
           verdict: result.verdict,
@@ -464,8 +509,8 @@ function ActiveCockpit({
 
   // ---- Retry handlers ------------------------------------------------------
   const onRetryStatic = useCallback((): void => {
-    // Re-run the analyze → judge flow for the live text.
-    const text = composerEl.textContent ?? "";
+    // Re-run the static analyze for the live text (paragraph-preserving).
+    const text = composerEl.innerText ?? composerEl.textContent ?? "";
     if (text.trim() === "") return;
     const token = ++tokenRef.current;
     dispatch({ type: "typing" });
@@ -483,7 +528,6 @@ function ActiveCockpit({
           return;
         }
         dispatch({ type: "analyze_succeeded", analyzeResult: first, followers });
-        kickJudge(text, first, token);
       } catch (error) {
         if (tokenRef.current !== token) return;
         dispatch({
@@ -492,26 +536,42 @@ function ActiveCockpit({
         });
       }
     })();
-  }, [composerEl, transport, followers, kickJudge]);
+  }, [composerEl, transport, followers]);
 
-  const onRetryJudge = useCallback((): void => {
-    const phase = state.phase;
-    const analyzeResult =
-      phase.phase === "judge_failed" || phase.phase === "static_ready" ? phase.analyzeResult : undefined;
-    const text = composerEl.textContent ?? "";
-    if (text.trim() === "") return;
-    const token = ++tokenRef.current;
-    kickJudge(text, analyzeResult, token);
-  }, [state.phase, composerEl, kickJudge]);
+  // Manual judge: the always-present Run/Re-run button judges the LIVE composer
+  // text (XOB #4). The judge never runs on its own.
+  const onRunJudge = useCallback((): void => {
+    runJudge(composerEl.innerText ?? composerEl.textContent ?? "");
+  }, [composerEl, runJudge]);
 
   // ---- Derived child props --------------------------------------------------
   const analyzeState = deriveAnalyzeState(state.phase);
-  const judgeState = deriveJudgeState(state.phase, readiness);
   const pendingCategory = state.phase.phase === "generating" ? state.phase.categoryId : undefined;
+
   const latestVerdict: JudgeVerdict | null =
-    state.phase.phase === "judged" ? state.phase.verdict : null;
+    judgeUi.status === "judged" ? judgeUi.verdict : null;
+  const judgeReady = readiness?.llm?.state === "ready";
+  const canRunJudge = composerText.trim().length > 0 && judgeReady;
+
+  // Map the decoupled judge UI onto the JudgeStrip display state.
+  const judgeState: JudgeState =
+    judgeUi.status === "judging"
+      ? { status: "running" }
+      : judgeUi.status === "judged"
+        ? { status: "judged", verdict: judgeUi.verdict }
+        : judgeUi.status === "failed"
+          ? { status: "failed", error: judgeUi.error }
+          : judgeReady
+            ? { status: "waiting" }
+            : {
+                status: "unavailable",
+                hint: readiness?.llm?.message ?? readiness?.llm?.label ?? "Judge unavailable.",
+              };
+
   // A reference-stable annotations array (the frozen empty singleton when there
   // are none) so the highlight layer's locate effect re-arms only on real change.
+  // An edit resets the judge (latestVerdict → null), so the highlights clear on
+  // their own — no stale gating needed.
   const annotations = useMemo<JudgeAnnotation[]>(
     () =>
       latestVerdict !== null && latestVerdict.annotations.length > 0
@@ -534,6 +594,7 @@ function ActiveCockpit({
     >
       <ProvenanceController
         composerEl={composerEl}
+        composerText={composerText}
         annotations={annotations}
         latestVerdict={latestVerdict}
       >
@@ -566,7 +627,9 @@ function ActiveCockpit({
                   judge={judgeState}
                   provenance={ctx.provenanceState}
                   applyState={state.applyState as ApplyState}
-                  onRetryJudge={onRetryJudge}
+                  onRunJudge={onRunJudge}
+                  canRunJudge={canRunJudge}
+                  approved={ctx.approved}
                   onApplyAll={onApplyAll}
                   explainer={explainer}
                 />
@@ -621,7 +684,10 @@ function wideJudgeStyle(modal: SnapshotRect | null): CSSProperties {
  */
 export function ComposeCockpit({ explainer }: ComposeCockpitProps): ReactNode {
   const compose = useComposeContext();
-  if (!compose.isActive || compose.composerEl === null) {
+  // While X's discard/"save post?" confirmation sheet is up it layers OVER the
+  // (still-present) compose modal; the cockpit pins would cover it (XOB bug #6),
+  // so the whole cockpit stands down until the sheet is dismissed.
+  if (!compose.isActive || compose.composerEl === null || compose.confirmationActive) {
     return null;
   }
   return (

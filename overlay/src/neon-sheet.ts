@@ -18,8 +18,8 @@ const HOST_TOKENS = `
   --xb-accent: hsl(174 90% 52%);
   --xb-accent-2: hsl(316 88% 62%);
   --xb-judge: hsl(192 95% 60%);
-  --xb-surface-panel: hsl(210 28% 9% / 0.72);
-  --xb-surface-overlay: hsl(210 30% 7% / 0.88);
+  --xb-surface-panel: hsl(210 24% 14% / 0.96);
+  --xb-surface-overlay: hsl(210 26% 11% / 0.98);
   --xb-border-edge: hsl(174 90% 52% / 0.55);
   --xb-glow-sm: 0 0 8px hsl(174 90% 52% / 0.35);
   --xb-glow-md: 0 0 18px hsl(174 90% 52% / 0.4);
@@ -43,14 +43,17 @@ const HOST_TOKENS = `
 `;
 
 /**
- * `default` (light) theme override: the dark-glass panel becomes near-opaque,
- * body text flips dark, and the neon glows are softened to half intensity so
- * they read on a light backdrop.
+ * `default` (light) theme override: X's page background is light, so the neon
+ * glows are softened to half intensity (they'd bloom on a light backdrop) and
+ * the dark-glass panel is kept near-opaque. The panel stays a DARK card carrying
+ * the base's LIGHT text in EVERY theme (Aurora Glass) — the earlier override
+ * darkened `--xb-text` to ~12% lightness on this ~9–14% panel, i.e. dark text on
+ * a dark panel, which is exactly why the cockpit/rail controls were unreadable
+ * (XOB bug #2). Text/muted are intentionally left to inherit the base light values.
  */
 const DEFAULT_THEME_OVERRIDE = `
-  --xb-surface-panel: hsl(210 28% 9% / 0.94);
-  --xb-surface-overlay: hsl(210 30% 7% / 0.94);
-  --xb-text: hsl(200 30% 12%);
+  --xb-surface-panel: hsl(210 24% 14% / 0.96);
+  --xb-surface-overlay: hsl(210 26% 11% / 0.98);
   --xb-glow-sm: 0 0 8px hsl(174 90% 52% / 0.18);
   --xb-glow-md: 0 0 18px hsl(174 90% 52% / 0.2);
   --xb-glow-judge: 0 0 12px hsl(192 95% 60% / 0.22);

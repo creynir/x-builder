@@ -1,6 +1,6 @@
 import {
   type CooldownReport,
-  type CooldownStatus,
+  type CooldownSignal,
   type GenerateCategory,
 } from "@x-builder/shared";
 
@@ -16,6 +16,10 @@ import {
 // service short-circuits to the fixed default set.
 const CORPUS_THRESHOLD = 10;
 
+// The cooldown window: how many days back "recent" / the clear→warming→cooldown
+// signal is measured over.
+const COOLDOWN_WINDOW_DAYS = 7;
+
 // The fixed cold-start categories, returned verbatim when the corpus is thin or
 // yields no rankable (non-"other") formats. Order is significant — the tests
 // assert this exact sequence.
@@ -27,6 +31,8 @@ const DEFAULT_CATEGORIES: readonly GenerateCategory[] = [
     basis: "default",
     cooldownStatus: "clear",
     sampleCount: 0,
+    recentCount: 0,
+    windowDays: COOLDOWN_WINDOW_DAYS,
   },
   {
     id: "default_founder_story",
@@ -35,6 +41,8 @@ const DEFAULT_CATEGORIES: readonly GenerateCategory[] = [
     basis: "default",
     cooldownStatus: "clear",
     sampleCount: 0,
+    recentCount: 0,
+    windowDays: COOLDOWN_WINDOW_DAYS,
   },
   {
     id: "default_audience_q",
@@ -43,6 +51,8 @@ const DEFAULT_CATEGORIES: readonly GenerateCategory[] = [
     basis: "default",
     cooldownStatus: "clear",
     sampleCount: 0,
+    recentCount: 0,
+    windowDays: COOLDOWN_WINDOW_DAYS,
   },
   {
     id: "default_story",
@@ -51,6 +61,8 @@ const DEFAULT_CATEGORIES: readonly GenerateCategory[] = [
     basis: "default",
     cooldownStatus: "clear",
     sampleCount: 0,
+    recentCount: 0,
+    windowDays: COOLDOWN_WINDOW_DAYS,
   },
 ];
 
@@ -116,19 +128,23 @@ export class GenerateCategoryService {
       return DEFAULT_CATEGORIES.map((category) => ({ ...category }));
     }
 
-    const report = await this.windowService.compute(7);
-    const cooldownByFormat = this.cooldownLookup(report);
+    const report = await this.windowService.compute(COOLDOWN_WINDOW_DAYS);
+    const signalByFormat = this.signalLookup(report);
 
     const categories: GenerateCategory[] = ranked.map((entry, index) => {
-      const cooldownStatus = cooldownByFormat.get(entry.format) ?? "clear";
+      const signal = signalByFormat.get(entry.format);
 
       return {
         id: `corpus_${entry.format}`,
         label: labelForFormat(entry.format),
         format: entry.format,
         basis: index === 0 ? "top_performer" : "frequent",
-        cooldownStatus,
+        // `cooldownStatus` + `recentCount` come from the WINDOW (what "recent"
+        // means); `sampleCount` stays the all-time corpus count for ranking.
+        cooldownStatus: signal?.status ?? "clear",
         sampleCount: entry.sampleCount,
+        recentCount: signal?.countInWindow ?? 0,
+        windowDays: signal?.windowDays ?? COOLDOWN_WINDOW_DAYS,
       };
     });
 
@@ -208,11 +224,11 @@ export class GenerateCategoryService {
     return ranked;
   }
 
-  private cooldownLookup(report: CooldownReport): Map<PostFormat, CooldownStatus> {
-    const lookup = new Map<PostFormat, CooldownStatus>();
+  private signalLookup(report: CooldownReport): Map<PostFormat, CooldownSignal> {
+    const lookup = new Map<PostFormat, CooldownSignal>();
 
     for (const signal of report.signals) {
-      lookup.set(signal.format, signal.status);
+      lookup.set(signal.format, signal);
     }
 
     return lookup;

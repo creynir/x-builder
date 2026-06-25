@@ -37,7 +37,7 @@ import type { JudgeAnnotation } from "@x-builder/shared";
 import { BlueHighlight } from "./blue-highlight";
 import { GreenWash } from "./green-wash";
 import { useComposerRect } from "./use-composer-rect";
-import { useHighlightRects } from "./use-highlight-rects";
+import { useFullTextRects, useHighlightRects } from "./use-highlight-rects";
 
 export interface CompositionHighlightLayerProps {
   /** The contenteditable composer element; `null` ⇒ the layer renders nothing. */
@@ -110,6 +110,9 @@ export function CompositionHighlightLayer({
   // infinite loop under a `runAllTimers`-style drain).
   const composerRect = useComposerRect(composerEl);
   const highlightRects = useHighlightRects(composerEl, showGreen ? EMPTY_ANNOTATIONS : annotations);
+  // The generated-state green now follows the text line-by-line (same per-node
+  // geometry as the blue underlays), not one flat block over the whole region.
+  const greenRects = useFullTextRects(composerEl, showGreen);
 
   // composerEl === null ⇒ render nothing (no layer, no error).
   if (composerEl === null) {
@@ -127,16 +130,21 @@ export function CompositionHighlightLayer({
   let content: ReactElement | null = null;
 
   if (showGreen) {
-    // Generated state: a single wash over the composer's text region. An all-zero
-    // / unlaid-out composer (composerRect === null) paints nothing and retries.
-    if (composerRect !== null && composerLeft !== null) {
+    // Generated state: a green wash per text line (follows the glyphs, skips the
+    // empty lines between paragraphs) — same origin-relative geometry as blue.
+    if (composerLeft !== null && greenRects.length > 0) {
       content = (
-        <GreenWash
-          top={composerRect.top - origin.top}
-          left={composerRect.left - composerLeft}
-          width={composerRect.width}
-          height={composerRect.height}
-        />
+        <>
+          {greenRects.map((rect, i) => (
+            <GreenWash
+              key={i}
+              top={rect.top - origin.top}
+              left={rect.left - composerLeft}
+              width={rect.width}
+              height={rect.height}
+            />
+          ))}
+        </>
       );
     }
   } else if (annotations.length > 0 && composerLeft !== null) {

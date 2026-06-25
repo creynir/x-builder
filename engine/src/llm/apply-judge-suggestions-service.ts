@@ -46,20 +46,55 @@ const rewriteOutputSchema: Record<string, unknown> = {
   },
 };
 
-// Shape and validate the rewrite model output. The real StructuredLlmService
-// runs this parser against raw provider output; an off-contract payload throws
-// here and the LLM layer turns it into a structured_output_invalid failure. The
-// parser yields the rewritten string, so the service reads result.output directly.
+// Extract the rewritten draft, yielding the bare string. Robust to three shapes:
+//   1. `{ text: "<draft>" }` — the schema-shaped object (codex's first parse).
+//   2. `"<draft>"` — an already-extracted string. The structured-LLM pipeline
+//      applies this parser TWICE (provider parse, then StructuredLlmService
+//      re-parse), so the second pass MUST accept the bare string idempotently —
+//      otherwise it throws → "structured output did not match the contract".
+//   3. `"{\"text\":\"<draft>\"}"` — some models double-encode the draft as a JSON
+//      `{text}` string INSIDE the text field; unwrap that envelope too.
 const toRewrittenText = (value: unknown): string => {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    typeof (value as { text?: unknown }).text !== "string"
-  ) {
-    throw new Error("Rewrite output did not match the rewrite contract.");
+  let current: unknown = value;
+
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (
+      typeof current === "object" &&
+      current !== null &&
+      typeof (current as { text?: unknown }).text === "string"
+    ) {
+      current = (current as { text: string }).text;
+      continue;
+    }
+
+    if (typeof current === "string") {
+      const text: string = current;
+      const trimmed = text.trim();
+      // A string that is itself a `{"text": ...}` envelope → unwrap one level.
+      if (trimmed.startsWith("{") && trimmed.includes('"text"')) {
+        try {
+          const parsed: unknown = JSON.parse(trimmed);
+          if (
+            parsed !== null &&
+            typeof parsed === "object" &&
+            typeof (parsed as { text?: unknown }).text === "string"
+          ) {
+            current = (parsed as { text: string }).text;
+            continue;
+          }
+        } catch {
+          // Not JSON — it is the final rewritten text.
+        }
+      }
+      if (text.length > 0) {
+        return text;
+      }
+    }
+
+    break;
   }
 
-  return (value as { text: string }).text;
+  throw new Error("Rewrite output did not match the rewrite contract.");
 };
 
 // JudgeProviderResolver is `string | (() => string | Promise<string>)`; resolve
@@ -98,7 +133,7 @@ const rewriteInstructions = (verdict: JudgeVerdict): string => {
 
   lines.push(
     "Return only JSON matching the output schema: a single text field carrying the",
-    "rewritten draft.",
+    "rewritten draft as PLAIN TEXT (not nested JSON, no quotes around the whole draft).",
   );
 
   return lines.join(" ");

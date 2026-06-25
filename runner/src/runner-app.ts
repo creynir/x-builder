@@ -87,6 +87,13 @@ export interface PageLike {
   // same structural-fake reason as `addInitScript`. Method syntax so the real
   // `Page.evaluate` overloads stay structurally assignable.
   evaluate?<R>(pageFunction: string | ((arg: unknown) => R), arg?: unknown): Promise<R>;
+  // Emulate page media features (real Playwright `Page.emulateMedia`). Optional on
+  // the structural surface (the lifecycle-test fake omits it). Used to CLEAR the
+  // forced color scheme so X follows the user's real OS appearance instead of
+  // Playwright's default light emulation (which left x.com rendering white).
+  emulateMedia?(options?: {
+    colorScheme?: "light" | "dark" | "no-preference" | null;
+  }): Promise<unknown> | unknown;
 }
 
 export interface BrowserContextLike {
@@ -449,6 +456,21 @@ export class RunnerApp {
       typeof page.url === "function" && /^https?:\/\/([^/]*\.)?x\.com\b/.test(page.url());
     const page = context.pages().find(onX) ?? context.pages()[0] ?? (await context.newPage());
     this.page = page;
+
+    // Connecting over CDP pins the emulated `prefers-color-scheme` to light, so
+    // x.com — which has no saved theme on a fresh profile and follows the media
+    // query — renders white even on a dark-mode OS. Force the scheme to dark so X
+    // renders dark regardless of the connect-time default. Applied to every open
+    // tab in the context (last-write-wins; harmless if already dark).
+    for (const openPage of context.pages()) {
+      if (typeof openPage.emulateMedia === "function") {
+        try {
+          await openPage.emulateMedia({ colorScheme: "dark" });
+        } catch {
+          // emulateMedia unavailable / rejected — leave the scheme as-is.
+        }
+      }
+    }
 
     // Register the bundle for FUTURE documents (init scripts re-run on navigation).
     await context.addInitScript({ content: overlayBundle });

@@ -39,20 +39,24 @@ export interface HighlightRect {
   recommendation: string;
 }
 
-/** Resolved leaf Text node + local character offset for a textContent index. */
-interface LeafLocation {
-  node: Text;
-  offset: number;
-}
-
 /**
- * Walk the composer's Text leaves (TreeWalker, SHOW_TEXT) and resolve the global
- * `textContent` index to the leaf Text node and its local offset. The composer
- * root is NOT assumed to be a single Text node (X wraps rich text in nested
- * spans), so we accumulate leaf lengths until `index` falls inside one. Returns
- * `null` only when `index` is beyond the total text length.
+ * Collect client rects for the `[startIndex, endIndex)` slice of the composer's
+ * textContent, built PER TEXT NODE rather than from one range spanning the whole
+ * slice. This is the §16.4 quote location with one correction: a single range
+ * across the quote also covers the EMPTY Draft.js blocks between paragraphs, and
+ * `getClientRects()` returns a full-width rect for each of those blank lines —
+ * which painted blue bars over the gaps (XOB bug). Sub-ranging each text node
+ * means empty blocks (no Text node) contribute no rect, so only real glyphs are
+ * highlighted. The composer is NOT a single Text node (X nests rich-text spans),
+ * so we accumulate leaf lengths and clip each leaf to the slice.
  */
-function locateLeaf(root: HTMLElement, index: number): LeafLocation | null {
+export function collectSpanRects(
+  root: HTMLElement,
+  startIndex: number,
+  endIndex: number,
+  lineHeight: number | null,
+): DOMRect[] {
+  const out: DOMRect[] = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let consumed = 0;
 
@@ -62,15 +66,31 @@ function locateLeaf(root: HTMLElement, index: number): LeafLocation | null {
     node = walker.nextNode() as Text | null
   ) {
     const len = node.data.length;
-    // `<=` so an index sitting exactly at a leaf boundary resolves to the END of
-    // the current leaf (range end uses this) rather than failing to land.
-    if (index <= consumed + len) {
-      return { node, offset: index - consumed };
+    const nodeStart = consumed;
+    const nodeEnd = consumed + len;
+    consumed = nodeEnd;
+
+    // Overlap of [startIndex, endIndex) with this leaf's [nodeStart, nodeEnd).
+    const from = Math.max(startIndex, nodeStart);
+    const to = Math.min(endIndex, nodeEnd);
+    if (from < to) {
+      const range = document.createRange();
+      range.setStart(node, from - nodeStart);
+      range.setEnd(node, to - nodeStart);
+      for (const rect of Array.from(range.getClientRects())) {
+        // Skip degenerate rects (collapsed / zero-area whitespace fragments).
+        if (rect.width > 0 && rect.height > 0) {
+          out.push(snapRectToLine(rect, lineHeight));
+        }
+      }
     }
-    consumed += len;
+
+    if (nodeEnd >= endIndex) {
+      break;
+    }
   }
 
-  return null;
+  return out;
 }
 
 /**
@@ -78,7 +98,7 @@ function locateLeaf(root: HTMLElement, index: number): LeafLocation | null {
  * `"normal"` keyword (or otherwise unparseable). Used to snap glyph-tight client
  * rects to their full line box.
  */
-function computedLineHeight(composerEl: HTMLElement): number | null {
+export function computedLineHeight(composerEl: HTMLElement): number | null {
   const raw = getComputedStyle(composerEl).lineHeight;
   const px = Number.parseFloat(raw);
   return Number.isFinite(px) && raw.endsWith("px") ? px : null;
@@ -123,19 +143,11 @@ function locateAll(composerEl: HTMLElement, annotations: JudgeAnnotation[]): Hig
       continue;
     }
 
-    const start = locateLeaf(composerEl, idx);
-    const end = locateLeaf(composerEl, idx + quote.length);
-    if (start === null || end === null) {
-      continue;
-    }
-
-    const range = document.createRange();
-    range.setStart(start.node, start.offset);
-    range.setEnd(end.node, end.offset);
-
-    const rects = range.getClientRects();
+    // Per-text-node rects: real glyphs only, never the empty blocks between
+    // paragraphs (which a whole-quote range would paint as full-width bars).
+    const rects = collectSpanRects(composerEl, idx, idx + quote.length, lineHeight);
     if (rects.length === 0) {
-      // Empty rects (collapsed/hidden) → silently drop, do NOT advance.
+      // Collapsed/hidden / unlocatable → silently drop, do NOT advance.
       continue;
     }
 
@@ -143,10 +155,10 @@ function locateAll(composerEl: HTMLElement, annotations: JudgeAnnotation[]): Hig
     // later annotation with the same quote string locates the NEXT occurrence.
     consumedOffset = idx + quote.length;
 
-    for (let r = 0; r < rects.length; r += 1) {
+    for (const rect of rects) {
       out.push({
         annotationIndex,
-        rect: snapRectToLine(rects[r]!, lineHeight),
+        rect,
         severity,
         recommendation,
       });
@@ -214,6 +226,57 @@ export function useHighlightRects(
     };
     // Re-arm when the composer element or the annotations reference changes.
   }, [composerEl, annotations]);
+
+  return rects;
+}
+
+/**
+ * Hook: per-line client rects covering the ENTIRE composer text, so the
+ * generated-state green highlight can follow the text line-by-line (like the
+ * blue underlays) instead of painting one flat block over the whole region —
+ * empty lines between paragraphs are skipped (no text node → no rect).
+ * Re-measures on a rAF-debounced resize/scroll; returns `[]` when disabled.
+ */
+export function useFullTextRects(composerEl: HTMLElement | null, enabled: boolean): DOMRect[] {
+  const [rects, setRects] = useState<DOMRect[]>([]);
+
+  useEffect(() => {
+    if (composerEl === null || !enabled) {
+      setRects([]);
+      return;
+    }
+
+    const measure = (): void => {
+      let next: DOMRect[] = [];
+      try {
+        const text = composerEl.textContent ?? "";
+        next = collectSpanRects(composerEl, 0, text.length, computedLineHeight(composerEl));
+      } catch {
+        next = [];
+      }
+      flushSync(() => {
+        setRects(next);
+      });
+    };
+
+    const debounce = createRafDebounce(measure);
+    debounce.schedule();
+
+    const resizeObserver = new ResizeObserver(() => debounce.schedule());
+    resizeObserver.observe(composerEl);
+    const onScroll = (): void => debounce.schedule();
+    window.addEventListener("scroll", onScroll, { passive: true, capture: true });
+
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      try {
+        resizeObserver.disconnect();
+      } catch {
+        // Page unloading; nothing to clean up.
+      }
+      debounce.cancel();
+    };
+  }, [composerEl, enabled]);
 
   return rects;
 }

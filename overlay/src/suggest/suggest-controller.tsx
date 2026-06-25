@@ -18,6 +18,7 @@ import type { CooldownSignal, SuggestPostResponse } from "@x-builder/shared";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { useComposeContext } from "../anchor-layer";
+import { writeIntoComposer } from "../composer-write";
 import { safeQuery, XSelectors } from "../selectors";
 import { useTransport } from "../transport/use-transport";
 import { SuggestAffordance, type SuggestState } from "./suggest-affordance";
@@ -107,8 +108,9 @@ export function SuggestController(): ReactElement | null {
   const onUse = useCallback((text: string): void => {
     const composerEl = safeQuery(document.body, XSelectors.COMPOSER_TEXTAREA);
     if (!(composerEl instanceof HTMLElement)) return;
-    composerEl.textContent = text;
-    composerEl.dispatchEvent(new Event("input", { bubbles: true }));
+    // The SAME Draft.js-safe edit gesture the cockpit uses (focus → select-all →
+    // insertText); a raw textContent set does not enter X's editor model.
+    writeIntoComposer(composerEl, text);
   }, []);
 
   // Suggest is the non-compose surface: stay unmounted while the cockpit is up.

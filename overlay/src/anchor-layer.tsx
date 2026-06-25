@@ -62,6 +62,8 @@ export interface ComposeContextValue {
   isActive: boolean;
   /** The composer's `.textContent`, debounced ~350 ms; `""` when inactive. */
   composerText: string;
+  /** `true` while X's discard/"save post?" confirmation sheet is layered up. */
+  confirmationActive: boolean;
 }
 
 const ComposeContextContext = createContext<ComposeContextValue | null>(null);
@@ -101,6 +103,21 @@ function detectComposer(): HTMLElement | null {
     }
   }
   return null;
+}
+
+/**
+ * Detect X's discard/"save post?" confirmation sheet. Uses a raw query (NOT
+ * `safeQuery`) because this element is EXPECTED to be absent almost always —
+ * routing it through the miss-counter would spuriously inflate the "X layout
+ * changed" signal on every quiet reconcile. A thrown selector degrades to
+ * `false` (sheet treated as absent).
+ */
+function detectConfirmationDialog(): boolean {
+  try {
+    return document.body.querySelector(XSelectors.CONFIRMATION_DIALOG) !== null;
+  } catch {
+    return false;
+  }
 }
 
 /** ~150ms debounce window; absorbs SPA navigation re-render bursts. */
@@ -176,6 +193,7 @@ export function AnchorLayer({ children }: AnchorLayerProps): ReactNode {
   // live element; `composerText` is its ~350 ms-debounced `.textContent`.
   const [composerEl, setComposerEl] = useState<HTMLElement | null>(null);
   const [composerText, setComposerText] = useState<string>("");
+  const [confirmationActive, setConfirmationActive] = useState<boolean>(false);
 
   // Stable register/reconcile API (last-call-wins; never re-bound across renders).
   const mutationApi = useRef<AnchorMutationApi>({
@@ -218,6 +236,10 @@ export function AnchorLayer({ children }: AnchorLayerProps): ReactNode {
       // is owned by the debounce effect below, not re-read here.
       const nextComposer = detectComposer();
       setComposerEl((prev) => (prev === nextComposer ? prev : nextComposer));
+
+      // Track X's confirmation sheet so the cockpit can stand down while it is up.
+      const nextConfirmation = detectConfirmationDialog();
+      setConfirmationActive((prev) => (prev === nextConfirmation ? prev : nextConfirmation));
     };
 
     /** Cancel any pending tick and schedule a fresh rAF-gated reconcile. */
@@ -275,21 +297,41 @@ export function AnchorLayer({ children }: AnchorLayerProps): ReactNode {
       return;
     }
 
+    // Read via `innerText`, NOT `textContent`: Draft.js concatenates paragraph
+    // blocks with no separator in `textContent` ("a\n\nb" → "ab"), so the judge
+    // saw run-together text and quoted across paragraphs. `innerText` preserves
+    // the rendered line breaks, so analyze/judge see real paragraphs (the
+    // highlight layer keeps indexing `textContent` for within-paragraph quotes).
+    const readText = (): string => composerEl.innerText ?? composerEl.textContent ?? "";
+
     // Seed synchronously so the first analyze sees the already-present draft.
-    setComposerText(composerEl.textContent ?? "");
+    setComposerText(readText());
 
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const onInput = (): void => {
+    const scheduleRead = (): void => {
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        setComposerText(composerEl.textContent ?? "");
+        setComposerText(readText());
       }, COMPOSE_TEXT_DEBOUNCE_MS);
     };
 
-    composerEl.addEventListener("input", onInput);
+    // `input` catches typing, but X's Draft.js editor does NOT fire a native
+    // `input` for a paste (it intercepts the paste and re-renders via its model),
+    // nor for programmatic writes — so a MutationObserver on the composer subtree
+    // catches every text change (paste, Draft re-render, our own writes) and the
+    // analyze/judge flow fires regardless of how the text arrived (XOB #1).
+    composerEl.addEventListener("input", scheduleRead);
+    const observer = new MutationObserver(scheduleRead);
+    observer.observe(composerEl, { childList: true, subtree: true, characterData: true });
+
     return () => {
-      composerEl.removeEventListener("input", onInput);
+      composerEl.removeEventListener("input", scheduleRead);
+      try {
+        observer.disconnect();
+      } catch {
+        // Document teardown during fast navigation; nothing to clean up.
+      }
       if (timer !== null) clearTimeout(timer);
     };
   }, [composerEl]);
@@ -298,6 +340,7 @@ export function AnchorLayer({ children }: AnchorLayerProps): ReactNode {
     composerEl,
     isActive: composerEl !== null,
     composerText,
+    confirmationActive,
   };
 
   return (

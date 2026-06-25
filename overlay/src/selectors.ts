@@ -17,6 +17,8 @@ export const XSelectors = {
   COMPOSER_DIALOG: '[role="dialog"]',
   TWEET_ARTICLE: 'article[data-testid="tweet"]',
   TWEET_TEXT: 'div[data-testid="tweetText"]',
+  // X's discard/"save post?" confirmation sheet, layered over the compose modal.
+  CONFIRMATION_DIALOG: '[data-testid="confirmationSheetDialog"]',
 } as const;
 
 /**

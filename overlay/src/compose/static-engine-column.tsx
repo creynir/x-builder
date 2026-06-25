@@ -91,6 +91,13 @@ const LIST_STYLE = {
   listStyle: "none",
 };
 
+const PASSING_SUMMARY_STYLE = {
+  cursor: "pointer" as const,
+  font: "var(--type-label)",
+  color: "var(--xb-text-muted)",
+  userSelect: "none" as const,
+};
+
 /** A metric label followed by its inline MetricExplainer ⓘ trigger. */
 function MetricLabel({
   text,
@@ -151,20 +158,32 @@ function PostCoachStrip({
   const { postCoach } = result;
   if (postCoach.state !== "ready") return null;
 
+  // Only the actionable checks (red Fix / yellow Nudge) show by default; the
+  // passing (green) checks collapse behind a count so the column stays scannable
+  // (XOB #6). An all-passing draft shows just the "N passing" disclosure.
   return (
     <section style={{ display: "grid", gap: "var(--space-2)" }}>
       <MetricLabel text="Post Coach" metricKey="postCoach" source={source} value={postCoach.value} />
-      <ul style={LIST_STYLE}>
-        {postCoach.failed.map((check) => (
-          <CoachItem key={check.id} label={check.label} variant="danger" badgeText="Fix" />
-        ))}
-        {postCoach.warned.map((check) => (
-          <CoachItem key={check.id} label={check.label} variant="warning" badgeText="Nudge" />
-        ))}
-        {postCoach.passed.map((check) => (
-          <CoachItem key={check.id} label={check.label} variant="success" badgeText="On point" />
-        ))}
-      </ul>
+      {postCoach.failed.length > 0 || postCoach.warned.length > 0 ? (
+        <ul style={LIST_STYLE}>
+          {postCoach.failed.map((check) => (
+            <CoachItem key={check.id} label={check.label} variant="danger" badgeText="Fix" />
+          ))}
+          {postCoach.warned.map((check) => (
+            <CoachItem key={check.id} label={check.label} variant="warning" badgeText="Nudge" />
+          ))}
+        </ul>
+      ) : null}
+      {postCoach.passed.length > 0 ? (
+        <details>
+          <summary style={PASSING_SUMMARY_STYLE}>{postCoach.passed.length} passing</summary>
+          <ul style={{ ...LIST_STYLE, marginTop: "var(--space-1)" }}>
+            {postCoach.passed.map((check) => (
+              <CoachItem key={check.id} label={check.label} variant="success" badgeText="On point" />
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </section>
   );
 }
@@ -273,8 +292,8 @@ function ReadyBody({
           <Badge variant="warning">{cooldown.message}</Badge>
         </div>
       ) : null}
-      <PostCoachStrip result={result} source={source} />
       <ReachPredictionBlock result={result} source={source} />
+      <PostCoachStrip result={result} source={source} />
       <RecommendationsList result={result} />
     </div>
   );

@@ -56,12 +56,27 @@ export interface SuggestAffordanceProps {
   onToggle: () => void;
 }
 
+// The launcher is page-persistent and must NOT live in the document flow (a
+// static element scrolls with X's feed — XOB bug #7). It is pinned `fixed`
+// top-left, stacked just below the SettingsAffordance, at the panel z-layer.
+const LAUNCHER_ROOT_STYLE: CSSProperties = {
+  position: "fixed",
+  top: "64px",
+  left: "var(--space-3)",
+  zIndex: "var(--xb-z-panel)",
+  display: "flex",
+  flexDirection: "column",
+  maxWidth: "320px",
+};
+
 const CARD_STYLE: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: "var(--space-3)",
   marginTop: "var(--space-2)",
   padding: "var(--space-3)",
+  maxHeight: "70vh",
+  overflowY: "auto",
   background: "var(--xb-surface-panel)",
   border: "var(--border-width-thin) solid var(--xb-border-edge)",
   borderRadius: "var(--radius-md)",
@@ -189,7 +204,7 @@ export function SuggestAffordance({
   onToggle,
 }: SuggestAffordanceProps): ReactElement {
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
+    <div style={LAUNCHER_ROOT_STYLE}>
       <span
         style={{
           display: "inline-flex",

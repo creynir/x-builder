@@ -23,6 +23,13 @@ export interface ButtonProps {
   trailingIcon?: ReactNode;
   variant?: ButtonVariant;
   size?: ButtonSize;
+  // Full-width layout that spreads content: the label grows left-aligned and a
+  // trailingIcon is pinned to the right edge. Opt-in — default stays the
+  // content-width, centered button, so existing usages are unchanged.
+  block?: boolean;
+  // Suppress the neon glow for dense/flat toolbars. Opt-in — default keeps the
+  // glow so existing usages are unchanged.
+  flat?: boolean;
 }
 
 /** Background / foreground / border token triple per variant. */
@@ -90,16 +97,19 @@ export function Button({
   trailingIcon,
   variant = "secondary",
   size = "md",
+  block = false,
+  flat = false,
 }: ButtonProps): ReactElement {
   const style: CSSProperties = {
-    display: "inline-flex",
+    display: block ? "flex" : "inline-flex",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: block ? "flex-start" : "center",
+    width: block ? "100%" : undefined,
     gap: "var(--gap-inline-control)",
     borderRadius: "var(--radius-md)",
     cursor: disabled ? "default" : "pointer",
     opacity: disabled ? 0.55 : 1,
-    boxShadow: "var(--xb-glow-sm)",
+    boxShadow: flat ? "none" : "var(--xb-glow-sm)",
     ...VARIANT_STYLE[variant],
     ...SIZE_STYLE[size],
   };
@@ -117,7 +127,9 @@ export function Button({
       }}
     >
       {loading ? <Spinner /> : leadingIcon}
-      <span>{children}</span>
+      <span style={block ? { flexGrow: 1, minWidth: 0, textAlign: "left" } : undefined}>
+        {children}
+      </span>
       {trailingIcon}
     </button>
   );

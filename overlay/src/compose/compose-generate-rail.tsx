@@ -21,6 +21,7 @@ import type { ReactElement } from "react";
 
 import { Badge } from "../../../client/src/ui/v2/badge";
 import { Button } from "../../../client/src/ui/v2/button";
+import { Tooltip } from "../tooltip";
 
 export interface ComposeGenerateRailProps {
   categories: GenerateCategory[];
@@ -28,9 +29,28 @@ export interface ComposeGenerateRailProps {
   onGenerate: (category: GenerateCategory) => void;
 }
 
-/** Cooldown badge text built only from fields present on GenerateCategory. */
+/**
+ * Cooldown badge text. `recentCount` is how many times this format appears
+ * WITHIN the cooldown window (`windowDays`) — the number that actually drives
+ * the clear/warming/cooldown signal — so "cooldown · 5 in 7d" reads honestly.
+ * (The old badge showed the all-time corpus count mislabeled "recent".)
+ */
 function cooldownLabel(category: GenerateCategory): string {
-  return `${category.cooldownStatus} · ${category.sampleCount}×`;
+  return `${category.cooldownStatus} · ${category.recentCount} in ${category.windowDays}d`;
+}
+
+/** Hover explanation of what the cooldown/warming signal means and why. */
+function cooldownTooltip(category: GenerateCategory): string {
+  const n = category.recentCount;
+  const d = category.windowDays;
+  const times = `${n} time${n === 1 ? "" : "s"}`;
+  if (category.cooldownStatus === "cooldown") {
+    return `On cooldown — you've posted in the "${category.label}" format ${times} in the last ${d} days. Repeating a format decays its reach; a fresher format will travel further.`;
+  }
+  if (category.cooldownStatus === "warming") {
+    return `Warming up — posted in the "${category.label}" format ${times} in the last ${d} days. Vary your formats to keep reach up.`;
+  }
+  return "";
 }
 
 /** The LEFT-zone vertical rail of generate-category pills. */
@@ -61,12 +81,15 @@ export function ComposeGenerateRail({
           <Button
             key={category.id}
             variant="ghost"
+            block
             loading={isPending}
             disabled={isPending}
             onClick={() => onGenerate(category)}
             trailingIcon={
               showCooldown ? (
-                <Badge variant="warning">{cooldownLabel(category)}</Badge>
+                <Tooltip content={cooldownTooltip(category)} placement="bottom">
+                  <Badge variant="warning">{cooldownLabel(category)}</Badge>
+                </Tooltip>
               ) : undefined
             }
           >

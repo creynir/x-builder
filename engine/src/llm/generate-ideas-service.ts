@@ -106,7 +106,11 @@ const resolveProviderId = async (
 ): Promise<string> =>
   typeof source === "function" ? source() : source;
 
-const generationInstructions = (format: DetectedPostFormat, idea?: string): string => {
+const generationInstructions = (
+  format: DetectedPostFormat,
+  idea?: string,
+  guidance?: string,
+): string => {
   const lines = [
     "You are an expert X (Twitter) writer.",
     `Produce exactly ${generatedCandidateCount} distinct draft posts in the "${format}" format.`,
@@ -120,7 +124,16 @@ const generationInstructions = (format: DetectedPostFormat, idea?: string): stri
     `${generatedCandidateCount} items, each with a short id and the draft text.`,
   ];
 
-  return lines.join(" ");
+  const base = lines.join(" ");
+
+  // The reach/format playbook + the author's own voice examples (when configured
+  // and captured) are appended as a verbatim block so the model writes drafts
+  // that follow what actually performs and sound like the author.
+  if (guidance !== undefined && guidance.trim().length > 0) {
+    return `${base}\n\nGround your drafts in the following guidance — it reflects what actually reaches on X and the author's own voice. Prefer its recommendations over generic advice:\n\n${guidance.trim()}`;
+  }
+
+  return base;
 };
 
 export class GenerateIdeasService {
@@ -132,6 +145,9 @@ export class GenerateIdeasService {
     private readonly resolveProvider: JudgeProviderResolver,
     private readonly resolveJudgeAccountProfile: () => Promise<string | undefined>,
     chainTimeoutMs: number = defaultChainTimeoutMs,
+    // Optional: resolves the generation guidance block (reach/format knowledge
+    // base + the author's captured voice). Absent → drafts use the base template.
+    private readonly resolveGenerationGuidance?: () => Promise<string | undefined>,
   ) {
     this.chainTimeoutMs = chainTimeoutMs;
   }
@@ -175,11 +191,12 @@ export class GenerateIdeasService {
   ): Promise<GenerateIdeaResponse> {
     const stepTimeoutMs = Math.floor(this.chainTimeoutMs / 4);
     const provider = await resolveProviderId(this.resolveProvider);
+    const guidance = await this.resolveGuidanceSafely();
 
     const request: StructuredLlmRequest<GeneratedDrafts> = {
       provider,
       purpose: "writer_variants",
-      instructions: generationInstructions(format, idea),
+      instructions: generationInstructions(format, idea, guidance),
       turns: [
         {
           role: "user",
@@ -257,6 +274,19 @@ export class GenerateIdeasService {
   private async resolveProfileSafely(): Promise<string | undefined> {
     try {
       return await this.resolveJudgeAccountProfile();
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Resolve the generation guidance, never throwing: a missing resolver or a
+  // failed read collapses to undefined so generation falls back to the template.
+  private async resolveGuidanceSafely(): Promise<string | undefined> {
+    if (this.resolveGenerationGuidance === undefined) {
+      return undefined;
+    }
+    try {
+      return await this.resolveGenerationGuidance();
     } catch {
       return undefined;
     }

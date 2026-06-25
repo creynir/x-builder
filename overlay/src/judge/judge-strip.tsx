@@ -23,8 +23,8 @@
 // `:host`; the v2 primitives are consumed cross-package the same way
 // `static-engine-column.tsx` and `compose-generate-rail.tsx` do.
 
-import { deriveApproved, type JudgeVerdict, type JudgeVerdictLabel } from "@x-builder/shared";
-import type { CSSProperties, ReactElement } from "react";
+import { type JudgeVerdict, type JudgeVerdictLabel } from "@x-builder/shared";
+import type { CSSProperties, ReactElement, ReactNode } from "react";
 
 import { Alert } from "../../../client/src/ui/v2/alert";
 import { Badge } from "../../../client/src/ui/v2/badge";
@@ -58,7 +58,12 @@ export interface JudgeStripProps {
   judge: JudgeState;
   provenance: ProvenanceState;
   applyState: ApplyState;
-  onRetryJudge: () => void;
+  /** Run / re-run the judge on the live composer text (the manual button). */
+  onRunJudge: () => void;
+  /** Whether the judge can run now (text present + the LLM judge is ready). */
+  canRunJudge: boolean;
+  /** `deriveApproved(verdict)` — drives the "✓ Judge approved" badge on generated. */
+  approved: boolean;
   onApplyAll: () => void;
   explainer: ExplainerSource;
 }
@@ -89,6 +94,10 @@ const SCORE_DIMS: ReadonlyArray<{ key: MetricKey & keyof JudgeVerdict["scores"];
   { key: "replyVsQuoteOrientation", label: "Reply vs quote" },
   { key: "audienceMatch", label: "Audience match" },
 ];
+
+/** Overall is always shown; the other twelve live behind a collapsible (XOB #5). */
+const OVERALL_DIM = SCORE_DIMS[0]!;
+const SECONDARY_DIMS = SCORE_DIMS.slice(1);
 
 /** Verdict band → human label + the Badge/band token that paints the channel. */
 const BAND_LABEL: Record<JudgeVerdictLabel, string> = {
@@ -148,6 +157,42 @@ const QUIET_TEXT_STYLE: CSSProperties = {
   color: "var(--xb-text-muted)",
   margin: 0,
 };
+
+const COLLAPSIBLE_STYLE: CSSProperties = {
+  borderTop: "var(--border-width-thin) solid var(--xb-border-edge)",
+  paddingTop: "var(--space-2)",
+};
+
+const SUMMARY_STYLE: CSSProperties = {
+  cursor: "pointer",
+  font: "var(--type-label)",
+  color: "var(--xb-text-muted)",
+  userSelect: "none",
+};
+
+/**
+ * A native `<details>` collapsible — no JS state, accessible, keyboard-togglable.
+ * Collapsed by default so the judge box stays short (only Overall + the verdict
+ * band show until the user expands). The disclosure marker is left to the UA.
+ */
+function Collapsible({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}): ReactElement {
+  return (
+    <details open={defaultOpen} style={COLLAPSIBLE_STYLE}>
+      <summary style={SUMMARY_STYLE}>{title}</summary>
+      <div style={{ marginTop: "var(--space-2)", display: "grid", gap: "var(--space-2)" }}>
+        {children}
+      </div>
+    </details>
+  );
+}
 
 /**
  * The component-local keyframe sheet. Rendered INTO the shadow subtree so the
@@ -222,18 +267,18 @@ function JudgeWaitingIndicator(): ReactElement {
   );
 }
 
-/** The verdict band Badge + confidence + provenance-gated approval Badge. */
+/**
+ * The verdict band Badge + confidence, plus the "✓ Judge approved" badge when the
+ * draft is generated AND the verdict is approved — the signal that an LLM-written
+ * (or applied) draft was vetted before it reached the composer (XOB).
+ */
 function JudgeVerdictHeader({
   verdict,
-  provenance,
+  showApproved,
 }: {
   verdict: JudgeVerdict;
-  provenance: ProvenanceState;
+  showApproved: boolean;
 }): ReactElement {
-  // "✓ Judge approved" shows IFF the text came from the generator AND the verdict
-  // is approved (post_now / slight_rework, via shared's single source of truth).
-  const showApproved = provenance === "generated" && deriveApproved(verdict);
-
   return (
     <div style={LABEL_ROW_STYLE}>
       <Badge variant="neutral">{BAND_LABEL[verdict.verdict]}</Badge>
@@ -243,17 +288,19 @@ function JudgeVerdictHeader({
   );
 }
 
-/** The 13-dim ScoreBar grid; identity stays neutral (no `--xb-judge` tint). */
+/** A ScoreBar grid over the supplied dims; identity stays neutral (no tint). */
 function JudgeScoreGrid({
   verdict,
   source,
+  dims,
 }: {
   verdict: JudgeVerdict;
   source: ExplainerSource;
+  dims: typeof SCORE_DIMS;
 }): ReactElement {
   return (
     <div style={{ display: "grid", gap: "var(--space-2)" }}>
-      {SCORE_DIMS.map((dim) => {
+      {dims.map((dim) => {
         const value = verdict.scores[dim.key];
         return (
           <div key={dim.key} style={{ display: "grid", gap: "var(--space-1)" }}>
@@ -266,8 +313,14 @@ function JudgeScoreGrid({
   );
 }
 
-/** Strengths + improvements notes. */
-function JudgeNotesList({ verdict }: { verdict: JudgeVerdict }): ReactElement {
+/** Strengths (always) + improvements (suppressed for generated drafts — XOB #8). */
+function JudgeNotesList({
+  verdict,
+  showImprovements,
+}: {
+  verdict: JudgeVerdict;
+  showImprovements: boolean;
+}): ReactElement {
   return (
     <div style={{ display: "grid", gap: "var(--space-2)" }}>
       <section style={{ display: "grid", gap: "var(--space-1)" }}>
@@ -280,64 +333,85 @@ function JudgeNotesList({ verdict }: { verdict: JudgeVerdict }): ReactElement {
           ))}
         </ul>
       </section>
-      <section style={{ display: "grid", gap: "var(--space-1)" }}>
-        <p style={SECTION_TITLE_STYLE}>Improvements</p>
-        <ul style={LIST_STYLE}>
-          {verdict.improvements.map((note) => (
-            <li key={note} style={{ font: "var(--type-body-small)", color: "var(--xb-text)" }}>
-              {note}
-            </li>
-          ))}
-        </ul>
-      </section>
-    </div>
-  );
-}
-
-/** The judged body: header + grid + notes + the polite verdict announcement. */
-function JudgedBody({
-  verdict,
-  provenance,
-  source,
-}: {
-  verdict: JudgeVerdict;
-  provenance: ProvenanceState;
-  source: ExplainerSource;
-}): ReactElement {
-  return (
-    <div style={{ display: "grid", gap: "var(--space-3)" }}>
-      <JudgeVerdictHeader verdict={verdict} provenance={provenance} />
-      <JudgeScoreGrid verdict={verdict} source={source} />
-      <JudgeNotesList verdict={verdict} />
+      {showImprovements ? (
+        <section style={{ display: "grid", gap: "var(--space-1)" }}>
+          <p style={SECTION_TITLE_STYLE}>Improvements</p>
+          <ul style={LIST_STYLE}>
+            {verdict.improvements.map((note) => (
+              <li key={note} style={{ font: "var(--type-body-small)", color: "var(--xb-text)" }}>
+                {note}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }
 
 /**
- * The Apply-all affordance (XOB-027). The "✦ Apply all suggestions" Button is a
- * judge-cyan ghost (`--xb-judge` border, judge-cyan label) — NEVER a primary
- * `--xb-accent` fill — so it stays inside the judge channel and never reads as
- * the post CTA. Clicking it fires `onApplyAll`, which `ComposeCockpit` (XOB-029)
- * routes into `applyJudgeSuggestions({ text })`.
+ * The judged body: band header + the always-visible Overall bar, then two
+ * collapsibles (the other twelve metrics; strengths/improvements) so the box
+ * stays short by default (XOB #5). Generated drafts hide the improvements
+ * (they are pre-vetted — XOB #8), so their second section is "Strengths" only.
+ */
+function JudgedBody({
+  verdict,
+  provenance,
+  approved,
+  source,
+}: {
+  verdict: JudgeVerdict;
+  provenance: ProvenanceState;
+  approved: boolean;
+  source: ExplainerSource;
+}): ReactElement {
+  const showImprovements = provenance !== "generated";
+  return (
+    <div style={{ display: "grid", gap: "var(--space-3)" }}>
+      <JudgeVerdictHeader verdict={verdict} showApproved={provenance === "generated" && approved} />
+      <JudgeScoreGrid verdict={verdict} source={source} dims={[OVERALL_DIM]} />
+      <Collapsible title={`Show ${SECONDARY_DIMS.length} more metrics`}>
+        <JudgeScoreGrid verdict={verdict} source={source} dims={SECONDARY_DIMS} />
+      </Collapsible>
+      <Collapsible title={showImprovements ? "Strengths & improvements" : "Strengths"}>
+        <JudgeNotesList verdict={verdict} showImprovements={showImprovements} />
+      </Collapsible>
+    </div>
+  );
+}
+
+/**
+ * The Run / Re-run judge button — the MANUAL judge trigger (XOB #4). A real
+ * `secondary` v2 Button so it reads as a button. "Re-run judge" once a verdict
+ * exists, "Run judge" before.
+ */
+function RunJudgeButton({
+  judged,
+  onRunJudge,
+}: {
+  judged: boolean;
+  onRunJudge: () => void;
+}): ReactElement {
+  // Once judged, re-running is a utility → subtle ghost. Before, it's the only
+  // action → the filled (secondary) one. Small + flat (no glow) for the toolbar.
+  return (
+    <Button variant={judged ? "ghost" : "secondary"} size="sm" flat onClick={onRunJudge}>
+      {judged ? "↻ Re-run" : "Run judge"}
+    </Button>
+  );
+}
+
+/**
+ * The Apply-all button (restyled XOB #6): the filled action in the header
+ * toolbar — small + flat (the prior ghost-in-a-bordered-span with a glow read
+ * as broken). Clicking it routes into `applyJudgeSuggestions`.
  */
 function ApplyAllButton({ onApplyAll }: { onApplyAll: () => void }): ReactElement {
-  // The ghost Button keeps a transparent fill (never the primary `--xb-accent`
-  // CTA); the judge-cyan edge accent rides on a wrapping span so the affordance
-  // stays inside the judge channel without touching the v2 Button surface.
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        borderRadius: "var(--radius-md)",
-        border: "var(--border-width-thin) solid var(--xb-judge)",
-        color: "var(--xb-judge)",
-        boxShadow: "var(--xb-glow-judge)",
-      }}
-    >
-      <Button variant="ghost" onClick={onApplyAll}>
-        ✦ Apply all suggestions
-      </Button>
-    </span>
+    <Button variant="secondary" size="sm" flat onClick={onApplyAll}>
+      ✦ Apply all suggestions
+    </Button>
   );
 }
 
@@ -400,43 +474,60 @@ function ApplyFailureBanner({
 }
 
 /**
- * The apply-affordance render for the current `applyState` + `provenance` +
- * `judge`. This is the loop-prevention guard: the Apply-all button is rendered
- * ONLY in `user_written` + judged + `idle`, so the system never re-improves its
- * own (`generated`) output — and no path here fires `onApplyAll` in `generated`.
+ * The top action row (XOB #3/#6): the manual Run/Re-run judge button plus the
+ * Apply-all button, side by side as real buttons. Apply-all shows ONLY on a
+ * landed verdict over user-written text with apply idle (the loop-prevention
+ * guard — the system never re-improves its own generated output). Run judge
+ * shows whenever the judge can run (text present + LLM ready).
  */
-function ApplySection({
+function JudgeActionRow({
   judge,
   provenance,
   applyState,
+  canRunJudge,
+  onRunJudge,
   onApplyAll,
 }: {
   judge: JudgeState;
   provenance: ProvenanceState;
   applyState: ApplyState;
+  canRunJudge: boolean;
+  onRunJudge: () => void;
   onApplyAll: () => void;
 }): ReactElement | null {
-  if (applyState === "idle") {
-    // Apply-all is shown (not just enabled) only on a landed verdict in
-    // user-written text; absent from the DOM otherwise (generated / not judged).
-    if (provenance === "user_written" && judge.status === "judged") {
-      return <ApplyAllButton onApplyAll={onApplyAll} />;
-    }
+  const isJudged = judge.status === "judged";
+  const showApply = applyState === "idle" && provenance === "user_written" && isJudged;
+
+  if (!canRunJudge && !showApply) {
     return null;
   }
 
+  return (
+    <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", alignItems: "center" }}>
+      {canRunJudge ? <RunJudgeButton judged={isJudged} onRunJudge={onRunJudge} /> : null}
+      {showApply ? <ApplyAllButton onApplyAll={onApplyAll} /> : null}
+    </div>
+  );
+}
+
+/** The apply lifecycle status (applying / already-solid / failure); idle is silent. */
+function ApplyStatus({
+  applyState,
+  onApplyAll,
+}: {
+  applyState: ApplyState;
+  onApplyAll: () => void;
+}): ReactElement | null {
+  if (applyState === "idle") {
+    return null;
+  }
   if (applyState === "applying") {
     return <ApplyingIndicator />;
   }
-
   if (applyState.status === "failed") {
     return <ApplyFailureBanner error={applyState.error} onApplyAll={onApplyAll} />;
   }
-
-  // applied: improvedOverOriginal === false surfaces the AlreadySolid banner;
-  // improvedOverOriginal === true relies on the XOB-026 "✓ Judge approved" badge
-  // already rendered in JudgedBody (gated by provenance + deriveApproved) — no
-  // duplicate banner here.
+  // applied with no improvement → AlreadySolid; an improvement needs no banner.
   if (!applyState.improvedOverOriginal) {
     return <AlreadySolidBanner />;
   }
@@ -465,45 +556,64 @@ export function JudgeStrip({
   judge,
   provenance,
   applyState,
-  onRetryJudge,
+  onRunJudge,
+  canRunJudge,
+  approved,
   onApplyAll,
   explainer,
 }: JudgeStripProps): ReactElement {
   return (
     <div style={CONTAINER_STYLE}>
-      <span style={CAPTION_STYLE}>{CHANNEL_CAPTION}</span>
+      {/* Header toolbar (XOB #2/#6): the caption on the left, the judge actions
+          on the right of the same line — Re-run subtle, Apply filled, both flat. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "var(--space-2)",
+          flexWrap: "wrap",
+        }}
+      >
+        <span style={CAPTION_STYLE}>{CHANNEL_CAPTION}</span>
+        <JudgeActionRow
+          judge={judge}
+          provenance={provenance}
+          applyState={applyState}
+          canRunJudge={canRunJudge}
+          onRunJudge={onRunJudge}
+          onApplyAll={onApplyAll}
+        />
+      </div>
+
+      <ApplyStatus applyState={applyState} onApplyAll={onApplyAll} />
 
       {judge.status === "waiting" ? (
-        <p style={QUIET_TEXT_STYLE}>Waiting for draft…</p>
+        <p style={QUIET_TEXT_STYLE}>
+          {canRunJudge ? "Not judged yet — click “Run judge”." : "Waiting for a draft…"}
+        </p>
       ) : null}
 
       {judge.status === "running" ? <JudgeWaitingIndicator /> : null}
 
       {judge.status === "judged" ? (
-        <JudgedBody verdict={judge.verdict} provenance={provenance} source={explainer} />
+        <JudgedBody
+          verdict={judge.verdict}
+          provenance={provenance}
+          approved={approved}
+          source={explainer}
+        />
       ) : null}
 
       {judge.status === "failed" ? (
         <Alert variant="danger">
           <span>AI judge failed. {judge.error}</span>
-          <div style={{ marginTop: "var(--space-2)" }}>
-            <Button variant="ghost" onClick={onRetryJudge}>
-              Retry judge
-            </Button>
-          </div>
         </Alert>
       ) : null}
 
       {judge.status === "unavailable" ? (
         <p style={QUIET_TEXT_STYLE}>{judge.hint}</p>
       ) : null}
-
-      <ApplySection
-        judge={judge}
-        provenance={provenance}
-        applyState={applyState}
-        onApplyAll={onApplyAll}
-      />
 
       <div aria-live="polite" style={{ font: "var(--type-caption)", color: "var(--xb-text-muted)" }}>
         {announcement(judge)}

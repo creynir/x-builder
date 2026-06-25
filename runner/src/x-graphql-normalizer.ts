@@ -228,10 +228,12 @@ function buildPost(tweetResult: unknown, capturedAt: string): LiveCapturedPost {
  * instructions, tolerating missing intermediate nodes at every hop.
  */
 function collectTweetResults(json: unknown): unknown[] {
-  const instructions = prop(
-    prop(prop(prop(prop(prop(json, "data"), "user"), "result"), "timeline_v2"), "timeline"),
-    "instructions",
-  );
+  const result = prop(prop(prop(json, "data"), "user"), "result");
+  // X migrated the profile timeline from `timeline_v2.timeline` to
+  // `timeline.timeline`; accept either (newest first), tolerating missing hops.
+  const timeline =
+    prop(prop(result, "timeline"), "timeline") ?? prop(prop(result, "timeline_v2"), "timeline");
+  const instructions = prop(timeline, "instructions");
   if (!isArray(instructions)) return [];
 
   const results: unknown[] = [];
@@ -303,9 +305,13 @@ export const XGraphQlNormalizer = {
     try {
       const result = prop(prop(prop(json, "data"), "user"), "result");
       const legacy = prop(result, "legacy");
+      const core = prop(result, "core");
 
       const platformUserId = prop(result, "rest_id");
-      const screenName = prop(legacy, "screen_name");
+      // X migrated identity fields (screen_name, name) out of `legacy` into
+      // `core`; read `core` first and fall back to `legacy` for older shapes.
+      // followers_count remains under `legacy`.
+      const screenName = prop(core, "screen_name") ?? prop(legacy, "screen_name");
 
       if (typeof platformUserId !== "string" || typeof screenName !== "string") {
         return undefined;

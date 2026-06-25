@@ -21,6 +21,7 @@
  *     capture observer's state.
  */
 
+import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import {
@@ -136,6 +137,57 @@ const buildAccountProfileResolver = (
   };
 };
 
+// The generation-guidance budget: the reach/format knowledge base is clipped to
+// this many chars (the LLM round-trip stays well under provider arg/stdin limits),
+// and the author's own voice is sampled from the most recent original posts.
+const MAX_KNOWLEDGE_BASE_CHARS = 24_000;
+const VOICE_EXAMPLE_COUNT = 8;
+
+// Resolve the generation guidance block the idea generator grounds drafts in:
+// the configured reach/format knowledge base plus the author's own recent
+// original posts (captured voice). Never throws — a missing path/corpus simply
+// omits that part, and an empty result leaves generation on the base template.
+const buildGenerationGuidanceResolver = (
+  settingsRepository: JsonFileAppSettingsRepository,
+  postLibraryRepository: JsonFilePostLibraryRepository,
+): (() => Promise<string | undefined>) => {
+  return async () => {
+    const parts: string[] = [];
+
+    try {
+      const { settings } = await settingsRepository.load();
+      const kbPath = settings.knowledgeBasePath?.trim();
+      if (kbPath !== undefined && kbPath.length > 0) {
+        const content = (await readFile(kbPath, "utf8")).trim();
+        if (content.length > 0) {
+          const clipped =
+            content.length > MAX_KNOWLEDGE_BASE_CHARS
+              ? content.slice(0, MAX_KNOWLEDGE_BASE_CHARS)
+              : content;
+          parts.push(`# Reach & format playbook\n${clipped}`);
+        }
+      }
+    } catch {
+      // No knowledge base / unreadable path: omit it.
+    }
+
+    try {
+      const store = await postLibraryRepository.loadStore();
+      const examples = store.posts
+        .filter((post) => post.kind === "original" && typeof post.text === "string")
+        .slice(-VOICE_EXAMPLE_COUNT)
+        .map((post) => `- ${post.text.replace(/\s+/g, " ").trim()}`);
+      if (examples.length > 0) {
+        parts.push(`# The author's own recent posts (match this voice — do not copy)\n${examples.join("\n")}`);
+      }
+    } catch {
+      // No captured corpus yet: omit voice grounding.
+    }
+
+    return parts.length > 0 ? parts.join("\n\n") : undefined;
+  };
+};
+
 /**
  * Construct the real `BoundEngineServices` bundle. The LLM gateway is injected;
  * every other collaborator is built in-process over the supplied repositories.
@@ -191,6 +243,8 @@ export function createBoundEngineServices(
     judgeDraftService,
     resolveProvider,
     resolveAccountProfile,
+    undefined,
+    buildGenerationGuidanceResolver(settingsRepository, postLibraryRepository),
   );
   const applyJudgeSuggestionsService = new ApplyJudgeSuggestionsService(
     judgeDraftService,
