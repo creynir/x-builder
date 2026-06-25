@@ -210,8 +210,15 @@ const buildOverlayMountScript = (): string => {
   return [
     "(function(){",
     `var __xbAssemble = ${assembleTransport.toString()};`,
+    // Assemble window.__xbTransport immediately — safe at document-start, since its
+    // methods resolve their __xbuilder_* binding lazily at call time.
     `__xbAssemble(window, ${bindingsJson});`,
-    "if (typeof window.__xbBootstrap === 'function') { window.__xbBootstrap(); }",
+    // Defer the overlay MOUNT until the DOM is ready. As an init script this runs at
+    // document-start (on reload / SPA navigation), before <body> and X's render
+    // exist — calling __xbBootstrap() then mounts a host that does not survive X's
+    // subsequent render. Waiting for DOMContentLoaded mounts into a ready document.
+    "var __xbMount = function(){ if (typeof window.__xbBootstrap === 'function') { window.__xbBootstrap(); } };",
+    "if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', __xbMount, { once: true }); } else { __xbMount(); }",
     "})();",
   ].join("\n");
 };

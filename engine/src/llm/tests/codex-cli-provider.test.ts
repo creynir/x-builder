@@ -638,6 +638,9 @@ describe("codex command builder", () => {
     builderOptions.schemaFile,
     "--color",
     "never",
+    // Skip ~/.codex/config.toml so the user's MCP plugins (whose worker crashes
+    // can flake `codex exec` non-zero) are never loaded for our calls.
+    "--ignore-user-config",
     "-",
   ];
 

@@ -71,6 +71,12 @@ export class CodexCommandBuilder {
       options.schemaFile,
       "--color",
       "never",
+      // Ignore ~/.codex/config.toml so codex never loads the user's MCP
+      // plugins/servers (e.g. Notion/Linear with expired OAuth), whose worker
+      // crashes can intermittently take `codex exec` non-zero. Model, sandbox,
+      // and output-schema are all passed explicitly above; codex auth lives in
+      // auth.json (not config.toml), so the session still authenticates.
+      "--ignore-user-config",
       "-",
     ];
 
