@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # LPF-005: [INT] Cover storage parity and migration idempotency
@@ -30,3 +30,7 @@ Integration coverage for the SQLite store end-to-end: the one-time migration is 
 - `importPostLibraryJsonToSqlite` (migration + rename + idempotency) and the shared `upgradePostLibraryStoreToV2` (v1 fixture path).
 - The host construction paths `createBoundEngineServices` and `buildServer` (open-once + import-once + SQLite repo).
 - Test helpers `makeTempEngineDb()` / `seedPosts(...)` (owned by LPF-002), exercised here as a consumer to confirm their signatures hold.
+
+## Pipeline Log
+
+- **2026-06-26 — DONE ([INT]: Purple → Blue). 0 rejection cycles.** Commit `e56324a` — `engine/src/server/tests/storage-migration-integration.test.ts` (16 tests) + `runner/src/runner-host-storage-integration.test.ts` (2 tests). All 4 flows covered through real modules (no internal mocks): fresh-install→first-write (with close+reopen durability), upgrade→migrate→serve (v2 + v1-via-`upgradePostLibraryStoreToV2`, served over real `buildServer({storageRoot})` `/archive/posts`), restart-no-op (full table-count records compared before/after, engine + runner `RunnerApp`), interface round-trip (order `created_at DESC, id ASC` + merge dedup). All 5 invariants falsifiable: on-disk SQLite (opens `x-builder.db` directly, asserts `user_version=1` + 7 tables in `sqlite_master` + `.migrated` present + no `post-library.json`), structural idempotency (row counts), transport=17 + repo=6 (counts), kind verbatim (column read, no `'post'`), Snowflake exact-string. **SQLite-only** (zero `JsonFilePostLibraryRepository` refs). Blue Validate-Purple **APPROVE** (18/18 pass, engine regression 235/235, isolation `mkdtemp`/`:memory:` only, live corpus byte-identical post-run). Purple corrected one self-authored assertion (content-identical re-upsert is `updatedCount:1` not `unchangedCount:1` — the repo stamps `updatedAt` at merge, same as the retired JSON repo; pinned the structural dedup invariant instead) — verified correct, not masking a defect. **No concerns.** (Orchestrator note: Purple reported committing but left the files untracked; the orchestrator committed its verified output.)
