@@ -47,3 +47,19 @@ Build order:
 4. `LPF-004: [RFR] Retire JsonFilePostLibraryRepository and the JSON write paths` — migrate the ~10 remaining consumer-test fixtures + the `engine/src/index.ts` export to the SQLite repo via the shared factory, **then** delete the class + write machinery (keep the importer's read path + shared upgrade fn).
 5. `LPF-005: [INT] SQLite storage integration + migration idempotency` — SQLite-only round-trip + idempotency + a "no JSON facade survived" on-disk assertion (parity vs JSON is pinned in LPF-002).
 6. `LPF-006: [DOC] Document the local SQLite store and the one-time migration` — user-facing Reference/Explanation page.
+
+## Pipeline Log (RGB-TDD run, 2026-06-26)
+
+Branch `feat/LPF-local-persistence-foundation`. Implementation tickets LPF-001…005 all **Done** (1 total rejection cycle — Blue caught an unpinned `logical_post_id` invariant in LPF-002 Red; 0 concerns at ticket level). Per-ticket details in each ticket's Pipeline Log.
+
+**Post-Epic Gates (full epic diff `de833af..786d045`):**
+- **Final Blue — APPROVE_WITH_CONCERNS.** LPF-owned packages green: engine `vitest run` 757/1, runner 105/0, engine/runner/shared typecheck+lint+build clean (run directly). SQL fully parameterized; `chmod 0600`; errors wrapped in `PostLibraryStorageError`; `PostLibraryRepository` still 6 methods; `EngineTransport` still 17 (untouched — `shared/` not in diff). Live `~/.x-builder` corpus byte-identical before/after.
+- **Final Yellow — APPROVE.** Corpus traces end-to-end through the unchanged interface to the SQLite tables; zero orphans; zero-trace (no JSON write path, no shim, no vector code); real SQLite source-of-truth, not a facade; strangler complete.
+- **Amber — APPROVE_WITH_CONCERNS.** All cross-ticket seams resolve; one straight path (no dual store); forward deps hold (append-driven `migrations[]`, `logical_post_id`/`metric_obs.tweet_id` keys intact for voice-rag-generation & my-feedback-loop).
+- **Crimson — APPROVE.** No CRITICAL/HIGH/MEDIUM/LOW. Parameterized SQL (only the integer `user_version` pragma is interpolated), host-derived paths (no traversal), `chmod 0600`, `JSON.parse` of Zod-validated payloads (no `eval`), no new network surface.
+
+**Concerns ledger (for merge triage):**
+1. *(residual, NOT LPF)* Aggregate `pnpm test/build/typecheck/lint` fail because `@x-builder/overlay` is broken — `overlay/src/design-tokens.ts` imports `docs/design-system/product-tokens.css` which is **absent at merge-base `de833af`** (already broken on `main`; overlay is not in the LPF diff). LPF-neutral; LPF's own packages verified green directly.
+2. *(LPF-004 artifact)* Dead `export const postLibraryFileName` in `post-library-repository.ts` — its only consumer (the JSON repo) was deleted; the importer uses a local copy. Trivial cleanup (delete the export, or have the importer import it).
+3. *(pre-existing, RFR-candidate)* `engine/src/server/server.ts` 981 lines mixes readiness/LLM-construction/routing — not inflated by this epic (+31); route to a future behavior-preserving `[RFR]`. The standing `size` scan will re-flag it.
+4. *(LOW note, Crimson)* WAL sidecar files (`-wal`/`-shm`) not separately `chmod 0600`'d — immaterial on a local single-user machine.

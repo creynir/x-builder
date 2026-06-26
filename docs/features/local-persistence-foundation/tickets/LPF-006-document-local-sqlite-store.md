@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # LPF-006: [DOC] Document the local SQLite store and one-time migration
@@ -23,3 +23,7 @@ A user-facing page under `docs/` (plain markdown — there is no published docs 
 ## Scope
 
 Documentation only — no code. Do not document internal schema/DDL, the `EngineTransport`, or implementation symbols; keep it to observable, user-facing behavior and the on-disk artifacts.
+
+## Pipeline Log
+
+- **2026-06-26 — DONE ([DOC]: White).** Created `docs/local-data-storage.md` ("Where your data lives") — Reference/Explanation, matching the existing plain-markdown docs style (H1, no frontmatter, prose + table). Documents: the local SQLite DB at `~/.x-builder/engine-settings/storage/x-builder.db` (local-only, `0600`, never uploaded), the move off the flat `post-library.json`, the automatic one-time migration (imports then renames to `post-library.json.migrated`, kept as backup; idempotent), nothing-for-the-user-to-do, the distinction from user-initiated `tweets.js` archive import, and what is/isn't in the DB (forward note: vector index is a later feature). No internal symbols/DDL. Also corrected the now-stale `storage/post-library.json` reference in `docs/component-breakdown.md` to `storage/x-builder.db` and cross-linked the new page. No docs-site generator (plain markdown), so no build step.
