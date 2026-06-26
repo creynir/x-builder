@@ -10,9 +10,9 @@
 import type { ReadinessState, SubsystemStatus, OverlayReadiness } from "@x-builder/shared";
 import type { ReactElement } from "react";
 
-import { Alert } from "../../../client/src/ui/v2/alert";
-import { Badge } from "../../../client/src/ui/v2/badge";
-import type { BadgeVariant } from "../../../client/src/ui/v2/index";
+import { Alert } from "../ui/v2/alert";
+import { Badge } from "../ui/v2/badge";
+import type { BadgeVariant } from "../ui/v2/index";
 
 export interface ReadinessIndicatorProps {
   readiness: OverlayReadiness | "loading" | { error: unknown };

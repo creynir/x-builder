@@ -14,13 +14,13 @@
 // ellipsis and expose the full label via native `title` (the accessible name).
 // All visual values come from --xb-*/--space-* tokens resolved in the overlay
 // shadow :host; v2 primitives are consumed the same way the settings/* surfaces
-// do (relative import into client/src/ui/v2).
+// do (relative import into ../ui/v2).
 
 import type { GenerateCategory } from "@x-builder/shared";
 import type { ReactElement } from "react";
 
-import { Badge } from "../../../client/src/ui/v2/badge";
-import { Button } from "../../../client/src/ui/v2/button";
+import { Badge } from "../ui/v2/badge";
+import { Button } from "../ui/v2/button";
 import { Tooltip } from "../tooltip";
 
 export interface ComposeGenerateRailProps {

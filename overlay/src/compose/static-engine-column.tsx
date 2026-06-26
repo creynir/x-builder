@@ -20,11 +20,11 @@
 import type { AnalyzedPostItem } from "@x-builder/shared";
 import type { ReactElement } from "react";
 
-import { Alert } from "../../../client/src/ui/v2/alert";
-import { Badge } from "../../../client/src/ui/v2/badge";
-import { Button } from "../../../client/src/ui/v2/button";
-import { ScoreBar } from "../../../client/src/ui/v2/score-bar";
-import { Skeleton } from "../../../client/src/ui/v2/skeleton";
+import { Alert } from "../ui/v2/alert";
+import { Badge } from "../ui/v2/badge";
+import { Button } from "../ui/v2/button";
+import { ScoreBar } from "../ui/v2/score-bar";
+import { Skeleton } from "../ui/v2/skeleton";
 
 import { MetricExplainer } from "../explainer/metric-explainer";
 import type { ExplainerSource, MetricKey } from "../explainer/types";

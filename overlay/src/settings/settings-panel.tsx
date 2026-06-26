@@ -17,9 +17,9 @@
 import type { AppSettings, CaptureSummary, OverlayReadiness } from "@x-builder/shared";
 import type { CSSProperties, ReactElement, ReactNode, RefObject } from "react";
 
-import { Alert } from "../../../client/src/ui/v2/alert";
-import { KeyValueList, type KeyValueItem } from "../../../client/src/ui/v2/key-value-list";
-import { Skeleton } from "../../../client/src/ui/v2/skeleton";
+import { Alert } from "../ui/v2/alert";
+import { KeyValueList, type KeyValueItem } from "../ui/v2/key-value-list";
+import { Skeleton } from "../ui/v2/skeleton";
 import { ArchiveUploadSection, type ArchiveUploadState } from "./archive-upload-section";
 import { JudgeProviderSection } from "./judge-provider-section";
 import { ReadinessIndicator } from "./readiness-indicator";

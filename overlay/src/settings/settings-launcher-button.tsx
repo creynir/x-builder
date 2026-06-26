@@ -13,7 +13,7 @@
 import type { OverlayReadiness } from "@x-builder/shared";
 import { forwardRef, type CSSProperties, type ReactElement } from "react";
 
-import { FOCUS_OUTLINE } from "../../../client/src/ui/v2/index";
+import { FOCUS_OUTLINE } from "../ui/v2/index";
 
 export interface SettingsLauncherButtonProps {
   status: OverlayReadiness | "loading";

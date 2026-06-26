@@ -20,7 +20,7 @@
 
 import { useEffect, useRef, type CSSProperties, type ReactElement, type RefObject } from "react";
 
-import { Badge } from "../../../client/src/ui/v2/badge";
+import { Badge } from "../ui/v2/badge";
 import type { ExplainerEntry } from "./types";
 
 export interface ExplainerPopoverProps {

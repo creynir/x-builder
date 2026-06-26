@@ -21,40 +21,6 @@ importers:
         specifier: ^3.0.0
         version: 3.2.6(@types/node@25.9.1)(@vitest/browser@3.2.6)(tsx@4.22.4)
 
-  client:
-    dependencies:
-      '@vitejs/plugin-react':
-        specifier: ^4.3.0
-        version: 4.7.0(vite@6.4.3(@types/node@25.9.1)(tsx@4.22.4))
-      '@x-builder/shared':
-        specifier: workspace:*
-        version: link:../shared
-      react:
-        specifier: ^19.0.0
-        version: 19.2.7
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.2.7(react@19.2.7)
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.16
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.2.3(@types/react@19.2.16)
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vite:
-        specifier: ^6.0.0
-        version: 6.4.3(@types/node@25.9.1)(tsx@4.22.4)
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.6(@types/node@25.9.1)(@vitest/browser@3.2.6)(tsx@4.22.4)
-
   e2e-tests:
     devDependencies:
       '@playwright/test':

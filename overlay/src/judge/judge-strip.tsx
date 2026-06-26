@@ -26,10 +26,10 @@
 import { type JudgeVerdict, type JudgeVerdictLabel } from "@x-builder/shared";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 
-import { Alert } from "../../../client/src/ui/v2/alert";
-import { Badge } from "../../../client/src/ui/v2/badge";
-import { Button } from "../../../client/src/ui/v2/button";
-import { ScoreBar } from "../../../client/src/ui/v2/score-bar";
+import { Alert } from "../ui/v2/alert";
+import { Badge } from "../ui/v2/badge";
+import { Button } from "../ui/v2/button";
+import { ScoreBar } from "../ui/v2/score-bar";
 
 import { MetricExplainer } from "../explainer/metric-explainer";
 import type { ExplainerSource, MetricKey } from "../explainer/types";

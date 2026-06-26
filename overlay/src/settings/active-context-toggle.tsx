@@ -7,7 +7,7 @@
 
 import type { ReactElement } from "react";
 
-import { Switch } from "../../../client/src/ui/v2/switch";
+import { Switch } from "../ui/v2/switch";
 
 export interface ActiveContextToggleProps {
   checked: boolean;

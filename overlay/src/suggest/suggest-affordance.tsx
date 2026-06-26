@@ -21,12 +21,12 @@
 import type { CooldownSignal, DetectedPostFormat } from "@x-builder/shared";
 import type { CSSProperties, ReactElement } from "react";
 
-import { Alert } from "../../../client/src/ui/v2/alert";
-import { Badge } from "../../../client/src/ui/v2/badge";
-import { Button } from "../../../client/src/ui/v2/button";
-import { EmptyState } from "../../../client/src/ui/v2/empty-state";
-import { IconButton } from "../../../client/src/ui/v2/icon-button";
-import { Skeleton } from "../../../client/src/ui/v2/skeleton";
+import { Alert } from "../ui/v2/alert";
+import { Badge } from "../ui/v2/badge";
+import { Button } from "../ui/v2/button";
+import { EmptyState } from "../ui/v2/empty-state";
+import { IconButton } from "../ui/v2/icon-button";
+import { Skeleton } from "../ui/v2/skeleton";
 
 /**
  * The overlay-local suggest UI-state union. The parent affordance holder maps a

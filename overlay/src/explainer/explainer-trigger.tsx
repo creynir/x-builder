@@ -14,7 +14,7 @@
 
 import type { CSSProperties, ReactElement, Ref } from "react";
 
-import { FOCUS_OUTLINE } from "../../../client/src/ui/v2/index";
+import { FOCUS_OUTLINE } from "../ui/v2/index";
 
 export interface ExplainerTriggerProps {
   /** Human metric label, woven into the accessible name. */

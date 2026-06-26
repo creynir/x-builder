@@ -8,7 +8,7 @@
 import { judgeProviderIdSchema, judgeProviderLabels, type JudgeProviderId } from "@x-builder/shared";
 import type { ReactElement } from "react";
 
-import { Select } from "../../../client/src/ui/v2/select";
+import { Select } from "../ui/v2/select";
 
 export interface JudgeProviderSectionProps {
   value: JudgeProviderId;

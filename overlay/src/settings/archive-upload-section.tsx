@@ -8,8 +8,8 @@
 
 import { useRef, type ReactElement } from "react";
 
-import { Alert } from "../../../client/src/ui/v2/alert";
-import { Button } from "../../../client/src/ui/v2/button";
+import { Alert } from "../ui/v2/alert";
+import { Button } from "../ui/v2/button";
 
 export type ArchiveUploadState =
   | "idle"

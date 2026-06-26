@@ -1,6 +1,5 @@
 packages:
   - "engine"
-  - "client"
   - "shared"
   - "runner"
   - "overlay"

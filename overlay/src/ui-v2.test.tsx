@@ -16,19 +16,19 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "vitest-browser-react";
 
-import { Alert } from "../../client/src/ui/v2/alert";
-import { Badge } from "../../client/src/ui/v2/badge";
-import { Button } from "../../client/src/ui/v2/button";
+import { Alert } from "./ui/v2/alert";
+import { Badge } from "./ui/v2/badge";
+import { Button } from "./ui/v2/button";
 // the FRESH v2 `EmptyState` primitive — this file does not exist yet,
 // so importing it is what drives the RED state for the contract block below.
-import { EmptyState } from "../../client/src/ui/v2/empty-state";
-import { IconButton } from "../../client/src/ui/v2/icon-button";
-import { Input } from "../../client/src/ui/v2/input";
-import { KeyValueList } from "../../client/src/ui/v2/key-value-list";
-import { ScoreBar } from "../../client/src/ui/v2/score-bar";
-import { Select } from "../../client/src/ui/v2/select";
-import { Skeleton } from "../../client/src/ui/v2/skeleton";
-import { Switch } from "../../client/src/ui/v2/switch";
+import { EmptyState } from "./ui/v2/empty-state";
+import { IconButton } from "./ui/v2/icon-button";
+import { Input } from "./ui/v2/input";
+import { KeyValueList } from "./ui/v2/key-value-list";
+import { ScoreBar } from "./ui/v2/score-bar";
+import { Select } from "./ui/v2/select";
+import { Skeleton } from "./ui/v2/skeleton";
+import { Switch } from "./ui/v2/switch";
 
 import { mountShadowHost, tokenValue, type ShadowHostHandle } from "./testing/shadow-host";
 

@@ -46,7 +46,7 @@ import { cleanup, render } from "vitest-browser-react";
 
 import { deriveApproved } from "@x-builder/shared";
 
-import { Button } from "../../../../client/src/ui/v2/button";
+import { Button } from "../../ui/v2/button";
 import { overlayExplainerCopy } from "../../explainer/copy";
 import type { ProvenanceState } from "../../provenance/derive-provenance-state";
 import { makeJudgeVerdict } from "../../testing/fixtures";
