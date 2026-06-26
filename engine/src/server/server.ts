@@ -1,4 +1,4 @@
-import { constants, existsSync } from "node:fs";
+import { constants, existsSync, mkdirSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -73,10 +73,12 @@ import {
   type AppSettingsRepository,
 } from "./settings-repository.js";
 import {
-  JsonFilePostLibraryRepository,
   PostLibraryStorageError,
   type PostLibraryRepository,
 } from "./post-library-repository.js";
+import { openEngineDatabase } from "./open-engine-database.js";
+import { SqlitePostLibraryRepository } from "./sqlite-post-library-repository.js";
+import { importPostLibraryJsonToSqlite } from "./import-post-library-json.js";
 import { resolveWorkspaceRoot } from "./workspace-root.js";
 
 export type AnalyzePosts = (request: AnalyzePostsRequest) => Promise<AnalyzePostsResponse> | AnalyzePostsResponse;
@@ -112,6 +114,12 @@ export interface BuildServerOptions {
   readinessTimeoutMs?: number;
   settingsRepository?: AppSettingsRepository;
   postLibraryRepository?: PostLibraryRepository;
+  // Storage root whose `storage/x-builder.db` backs the SQLite corpus and against
+  // whose `storage/post-library.json` the one-time JSON->SQLite importer runs. When
+  // omitted (and no postLibraryRepository is injected) buildServer stays on an empty
+  // in-memory corpus that touches NO home directory — the isolation default for the
+  // bare-call test suites.
+  storageRoot?: string;
   repetitionWindowService?: RepetitionWindowService;
   generateCategoryService?: GenerateCategoryService;
   suggestPostService?: SuggestPostService;
@@ -612,6 +620,32 @@ export const createDefaultJudgeDraftService = (
   );
 };
 
+// Resolve the corpus repository in a fixed precedence, keeping buildServer synchronous:
+//   1. An injected postLibraryRepository wins (the existing test/host injection seam).
+//   2. Else a storageRoot opens <storageRoot>/storage/x-builder.db, runs the one-time
+//      JSON->SQLite importer there, and serves from SQLite (production + the host-swap
+//      tests, which pass a tmpdir).
+//   3. Else (a BARE buildServer() call) an empty in-memory SQLite corpus — NO importer,
+//      ZERO home-directory I/O — so the bare-call test suites stay fully isolated.
+const resolvePostLibraryRepository = (
+  options: BuildServerOptions,
+): PostLibraryRepository => {
+  if (options.postLibraryRepository) {
+    return options.postLibraryRepository;
+  }
+
+  if (options.storageRoot !== undefined) {
+    const storageDir = join(options.storageRoot, "storage");
+    mkdirSync(storageDir, { recursive: true });
+    const db = openEngineDatabase(join(storageDir, "x-builder.db"));
+    importPostLibraryJsonToSqlite(storageDir, db);
+
+    return new SqlitePostLibraryRepository(db);
+  }
+
+  return new SqlitePostLibraryRepository(openEngineDatabase(":memory:"));
+};
+
 export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false, bodyLimit: 26_000_000 });
   configureCors(app, options.allowedCorsOrigins ?? defaultCorsAllowedOrigins);
@@ -621,9 +655,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const analyzePosts = options.analyzePosts ?? defaultAnalyzePosts;
   const settingsRepository =
     options.settingsRepository ?? new JsonFileAppSettingsRepository({ root: defaultSettingsRoot });
-  const postLibraryRepository =
-    options.postLibraryRepository ??
-    new JsonFilePostLibraryRepository({ root: join(defaultSettingsRoot, "storage") });
+  const postLibraryRepository = resolvePostLibraryRepository(options);
   const archiveImportService = new ArchiveImportService({ repository: postLibraryRepository });
   const archiveDerivedContextService = new ArchiveDerivedContextService({
     repository: postLibraryRepository,
@@ -1100,7 +1132,10 @@ export function createEngineRuntimeConfig(
 export async function startEngineServer(
   config: EngineRuntimeConfig = createEngineRuntimeConfig(),
 ): Promise<FastifyInstance> {
-  const app = buildServer();
+  // The sole production caller: persist + import the corpus at the default settings
+  // root (~/.x-builder/engine-settings). Bare buildServer() must never hit home — only
+  // this explicit storageRoot does.
+  const app = buildServer({ storageRoot: defaultSettingsRoot });
 
   await app.listen({
     host: config.host,

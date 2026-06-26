@@ -33,7 +33,6 @@ import {
   GenerateCategoryService,
   GenerateIdeasService,
   JsonFileAppSettingsRepository,
-  JsonFilePostLibraryRepository,
   JudgeDraftService,
   LiveCaptureService,
   LiveContextResolver,
@@ -42,6 +41,7 @@ import {
   createDefaultReadinessService,
   createSettingsJudgeProviderResolver,
   type JudgeLlmGateway,
+  type PostLibraryRepository,
   type ReadinessService,
   type StructuredLlmService,
 } from "@x-builder/engine";
@@ -66,7 +66,7 @@ export type StructuredLlmGateway = Pick<StructuredLlmService, "generateStructure
 
 export interface CreateBoundEngineServicesOptions {
   settingsRepository: JsonFileAppSettingsRepository;
-  postLibraryRepository: JsonFilePostLibraryRepository;
+  postLibraryRepository: PostLibraryRepository;
   liveCapture: LiveCaptureService;
   /** Structured-LLM gateway for generate / apply-suggestions / suggest. */
   llm: StructuredLlmGateway;
@@ -149,7 +149,7 @@ const VOICE_EXAMPLE_COUNT = 8;
 // omits that part, and an empty result leaves generation on the base template.
 const buildGenerationGuidanceResolver = (
   settingsRepository: JsonFileAppSettingsRepository,
-  postLibraryRepository: JsonFilePostLibraryRepository,
+  postLibraryRepository: PostLibraryRepository,
 ): (() => Promise<string | undefined>) => {
   return async () => {
     const parts: string[] = [];

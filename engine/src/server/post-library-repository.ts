@@ -158,6 +158,35 @@ export class PostLibraryStorageError extends Error {
   }
 }
 
+// The single source of the v1->v2 upgrade. Both JsonFilePostLibraryRepository.loadStore
+// and the JSON->SQLite importer call this so the upgrade lives in exactly one place.
+// A schemaVersion:1 raw object gains profileSnapshots:[] and is re-stamped to version 2;
+// a v2 (or version-less) object passes through unchanged; a schemaVersion greater than 2
+// throws PostLibraryStorageError. The returned value is still raw — the caller runs it
+// through postLibraryStoreSchema.parse.
+export const upgradePostLibraryStoreToV2 = (raw: unknown): unknown => {
+  const rawVersion =
+    typeof raw === "object" && raw !== null
+      ? (raw as { schemaVersion?: unknown }).schemaVersion
+      : undefined;
+
+  if (rawVersion === 1) {
+    return {
+      ...(raw as Record<string, unknown>),
+      schemaVersion: 2,
+      profileSnapshots: [],
+    };
+  }
+
+  if (typeof rawVersion === "number" && rawVersion > 2) {
+    throw new PostLibraryStorageError(
+      `Post library store schemaVersion ${rawVersion} is newer than this engine supports.`,
+    );
+  }
+
+  return raw;
+};
+
 export type JsonFilePostLibraryRepositoryOptions = {
   root: string;
 };
@@ -220,26 +249,8 @@ export class JsonFilePostLibraryRepository implements PostLibraryRepository {
     try {
       const contents = await readFile(this.storeFilePath, "utf8");
       const parsed = JSON.parse(contents) as unknown;
-      const rawVersion =
-        typeof parsed === "object" && parsed !== null
-          ? (parsed as { schemaVersion?: unknown }).schemaVersion
-          : undefined;
 
-      if (rawVersion === 1) {
-        return postLibraryStoreSchema.parse({
-          ...(parsed as Record<string, unknown>),
-          schemaVersion: 2,
-          profileSnapshots: [],
-        });
-      }
-
-      if (typeof rawVersion === "number" && rawVersion > 2) {
-        throw new PostLibraryStorageError(
-          `Post library store schemaVersion ${rawVersion} is newer than this engine supports.`,
-        );
-      }
-
-      return postLibraryStoreSchema.parse(parsed);
+      return postLibraryStoreSchema.parse(upgradePostLibraryStoreToV2(parsed));
     } catch (error) {
       if (error instanceof PostLibraryStorageError) {
         throw error;

@@ -20,19 +20,22 @@
  * wins, so every seam stays testable.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 import {
   JsonFileAppSettingsRepository,
-  JsonFilePostLibraryRepository,
   LiveCaptureService,
   NodeProcessRunner,
+  SqlitePostLibraryRepository,
   StructuredLlmService,
+  importPostLibraryJsonToSqlite,
   judgeProviderRegistry,
+  openEngineDatabase,
   resolveWorkspaceRoot,
+  type PostLibraryRepository,
 } from "@x-builder/engine";
 import { ENGINE_TRANSPORT_BINDINGS } from "@x-builder/shared";
 import { chromium } from "playwright";
@@ -129,7 +132,7 @@ export interface LiveCaptureLike {
 export interface EngineServices {
   liveCapture: LiveCaptureLike;
   settingsRepository?: JsonFileAppSettingsRepository;
-  postLibraryRepository?: JsonFilePostLibraryRepository;
+  postLibraryRepository?: PostLibraryRepository;
 }
 
 export interface RunnerAppOptions {
@@ -183,9 +186,15 @@ const defaultOverlayBundlePath = (): string =>
 // bundle is built by the default bindTransport wiring (XOB-030) from these.
 const defaultCreateServices = (opts: { engineSettingsDir: string }): EngineServices => {
   const settingsRepository = new JsonFileAppSettingsRepository({ root: opts.engineSettingsDir });
-  const postLibraryRepository = new JsonFilePostLibraryRepository({
-    root: join(opts.engineSettingsDir, "storage"),
-  });
+  // SQLite host (LPF-003): open <engineSettingsDir>/storage/x-builder.db, run the
+  // one-time JSON->SQLite importer over that same dir, then serve the corpus from
+  // SQLite. Production persists at ~/.x-builder/engine-settings/storage; tests pass a
+  // tmpdir engineSettingsDir, so home is never touched.
+  const storageDir = join(opts.engineSettingsDir, "storage");
+  mkdirSync(storageDir, { recursive: true });
+  const db = openEngineDatabase(join(storageDir, "x-builder.db"));
+  importPostLibraryJsonToSqlite(storageDir, db);
+  const postLibraryRepository = new SqlitePostLibraryRepository(db);
   const liveCapture = new LiveCaptureService(postLibraryRepository);
 
   return { liveCapture, settingsRepository, postLibraryRepository };

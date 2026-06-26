@@ -8,8 +8,10 @@ export {
 export {
   JsonFilePostLibraryRepository,
   PostLibraryStorageError,
+  upgradePostLibraryStoreToV2,
   type PostLibraryRepository,
 } from "./server/post-library-repository.js";
+export { importPostLibraryJsonToSqlite } from "./server/import-post-library-json.js";
 // SQLite-backed corpus store (LPF-002). Not wired into any host yet (LPF-003);
 // re-exported so later features and tests can construct it through the barrel.
 export {
