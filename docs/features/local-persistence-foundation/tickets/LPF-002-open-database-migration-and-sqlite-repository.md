@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # LPF-002: [FND] openEngineDatabase, migration 1 DDL, SqlitePostLibraryRepository, and row mappers
@@ -188,3 +188,7 @@ Parity fixtures must include: an archive post with **two** snapshots sharing `ob
 - A post with NULL `in_reply_to_*` reloads with `replyReferences` defaulting to `{}`.
 - A live metric/source row stores `''` for the archive-only columns (`imported_at`, `import_run_id`, `source_hash`) and round-trips back to an absent field, never an empty-string value in the reconstructed `CanonicalOwnPost`.
 - `active_context` written twice updates the single `singleton = 1` row rather than inserting a second.
+
+## Pipeline Log
+
+- **2026-06-26 — DONE (FND: Red → Blue → Green → Blue+Yellow → Architecture checkpoint).** Commits: tests `b10528a` + `8823749` (Red), impl `9e6b2a7` (Green) — files `open-engine-database.ts`, `sqlite-post-library-repository.ts`, `post-row-mapping.ts`, `sqlite-test-helpers.ts`, `index.ts` (barrel re-exports). **1 rejection cycle** at Validate-Red: Blue caught AC-11's `logical_post_id == platform_post_id` unpinned (the stand-in only exercised the `platform_post_id` UNIQUE index — a different column); Red added a direct white-box column-read assertion. Validate-Green **APPROVE** (target suite 23/23; related 18/18; typecheck clean; the 4 full-suite failures — `posts-analyze` ×3, `judge-draft-service` ×1 — independently confirmed pre-existing via byte-identical tests at baseline `8823749` + import-graph isolation; SQL fully parameterized; one batch transaction; additive `index.ts`). Yellow **APPROVE** (real SQLite store, not a facade — `loadStore` reassembles from normalized tables + re-parses through `postLibraryStoreSchema`; `''` sentinels reconstruct to absent fields; no `'post'` token; zero out-of-scope trace — no vector/importer/host-wiring). Architecture checkpoint **APPROVE** (handle ownership, append-safe `migrations[]` for 2/3, canonical-tables-as-source-of-truth, payload tables opaque; foundation buildable by LPF-003 / voice-rag-generation / my-feedback-loop). **No concerns recorded.** SQLite repo intentionally not wired into any host yet (LPF-003).
