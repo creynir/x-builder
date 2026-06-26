@@ -599,13 +599,31 @@ describe("SQLite post library repository", () => {
       expect([...byId.values()]).not.toContain("post");
     });
 
-    // logical_post_id == platform_post_id is an internal column with no public read seam on
-    // the repository surface. We assert the observable consequence: a post is addressed by
-    // its platform key, round-trips its platformPostId verbatim, and (since logical id is
-    // derived from it) collapses correctly under the platform key on re-upsert. The raw
-    // logical_post_id column read is left to a Green-side mapper/migration test; flagged here
-    // as a seam gap rather than reaching into SQLite internals from this behavioral suite.
-    it("addresses a post by its platform post id verbatim (logical id derived, observed via platform-key identity)", async () => {
+    // logical_post_id == platform_post_id is a named storage-column invariant of this FND
+    // ticket (DDL: logical_post_id TEXT NOT NULL, distinct from platform_post_id and its own
+    // index). For a storage ticket the schema IS the contract, so we read the column directly
+    // from the post table via the live db handle this suite already constructs. An impl that
+    // sets logical_post_id to anything else (post.id, NULL, '') — yet still keys on
+    // platform_post_id — must fail this test.
+    it("writes logical_post_id equal to platform_post_id verbatim in the post table", async () => {
+      const db = openEngineDatabase(":memory:");
+      const repository = new SqlitePostLibraryRepository(db);
+
+      await repository.upsertPosts([post({ platformPostId: "1700000000000000001" })]);
+      const rows = db
+        .prepare("SELECT logical_post_id, platform_post_id FROM post")
+        .all() as Array<{ logical_post_id: string; platform_post_id: string }>;
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.logical_post_id).toBe("1700000000000000001");
+      expect(rows[0]?.platform_post_id).toBe("1700000000000000001");
+      expect(rows[0]?.logical_post_id).toBe(rows[0]?.platform_post_id);
+    });
+
+    // Complementary behavioral check (does NOT substitute for the column assertion above):
+    // re-upserting under the same platformPostId collapses to one row via the platform-key
+    // identity, regardless of the new id.
+    it("collapses a re-upsert under the same platform post id to a single row", async () => {
       const repository = memorySqliteRepository();
 
       await repository.upsertPosts([post({ platformPostId: "1700000000000000001" })]);
