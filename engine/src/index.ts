@@ -35,6 +35,11 @@ export {
   type JudgeLlmGateway,
 } from "./llm/judge-draft-service.js";
 export { GenerateIdeasService } from "./llm/generate-ideas-service.js";
+export {
+  createGenerationGuidanceResolver,
+  type CreateGenerationGuidanceResolverInput,
+  type GenerationGuidanceResolver,
+} from "./llm/generation-guidance.js";
 export { ApplyJudgeSuggestionsService } from "./llm/apply-judge-suggestions-service.js";
 export {
   ArchiveImportService,

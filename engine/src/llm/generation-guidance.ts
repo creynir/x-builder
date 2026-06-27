@@ -2,10 +2,15 @@ import { readFile } from "node:fs/promises";
 import type { DetectedPostFormat } from "@x-builder/shared";
 
 import type { CanonicalOwnPost, PostLibraryRepository } from "../server/post-library-repository.js";
+import type { AppSettingsRepository } from "../server/settings-repository.js";
 
 const PLAYBOOK_SLICE_CHAR_LIMIT = 6_000;
 const VOICE_SAMPLE_LIMIT = 5;
 const VOICE_SAMPLE_GUIDANCE_CHAR_LIMIT = 2_400;
+const PLAYBOOK_GUIDANCE_HEADER = "# Requested format playbook";
+const VOICE_SAMPLE_GUIDANCE_HEADER = "# Voice samples (match tone, do not copy)";
+const FOUNDER_STORY_GUARDRAIL =
+  "Founder-story guardrail: never invent, suggest, or prompt emotional content; only preserve stakes the user supplied.";
 
 export type GenerationGuidanceRequest = {
   format: DetectedPostFormat;
@@ -58,6 +63,11 @@ export type RenderedVoiceSamples = {
   content: string;
   charCount: number;
   truncated: boolean;
+};
+
+export type CreateGenerationGuidanceResolverInput = {
+  settingsRepository: Pick<AppSettingsRepository, "load">;
+  postLibraryRepository: Pick<PostLibraryRepository, "loadStore">;
 };
 
 export type GenerationContext = {
@@ -319,6 +329,78 @@ export const renderVoiceSampleGuidance = (samples: VoiceSamplePost[]): RenderedV
     content,
     charCount: content.length,
     truncated,
+  };
+};
+
+const resolveKnowledgeBasePath = async (
+  settingsRepository: Pick<AppSettingsRepository, "load">,
+): Promise<string | undefined> => {
+  try {
+    const { settings } = await settingsRepository.load();
+    const rawKnowledgeBasePath = (settings as { knowledgeBasePath?: unknown }).knowledgeBasePath;
+    const knowledgeBasePath =
+      typeof rawKnowledgeBasePath === "string" ? rawKnowledgeBasePath.trim() : undefined;
+
+    return knowledgeBasePath === undefined || knowledgeBasePath.length === 0
+      ? undefined
+      : knowledgeBasePath;
+  } catch {
+    return undefined;
+  }
+};
+
+const renderGenerationGuidance = (
+  request: GenerationGuidanceRequest,
+  playbook: PlaybookSlice,
+  renderedVoiceSamples: RenderedVoiceSamples,
+): string | undefined => {
+  const sections: string[] = [];
+
+  if (playbook.content.length > 0) {
+    sections.push(`${PLAYBOOK_GUIDANCE_HEADER}\n${playbook.content}`);
+  }
+
+  if (renderedVoiceSamples.content.length > 0) {
+    sections.push(`${VOICE_SAMPLE_GUIDANCE_HEADER}\n${renderedVoiceSamples.content}`);
+  }
+
+  if (sections.length === 0) {
+    return undefined;
+  }
+
+  if (request.format === "founder_story") {
+    sections.push(FOUNDER_STORY_GUARDRAIL);
+  }
+
+  return sections.join("\n\n");
+};
+
+export const createGenerationGuidanceResolver = (
+  input: CreateGenerationGuidanceResolverInput,
+): GenerationGuidanceResolver => {
+  return async (request) => {
+    try {
+      const knowledgeBasePath = await resolveKnowledgeBasePath(input.settingsRepository);
+      const [playbook, voiceSamples] = await Promise.all([
+        resolvePlaybookSlice({
+          format: request.format,
+          knowledgeBasePath,
+        }),
+        selectVoiceSamples({
+          postLibraryRepository: input.postLibraryRepository,
+          useKnownPostIds: request.useKnownPostIds,
+          voiceProfileId: request.voiceProfileId,
+        }),
+      ]);
+
+      return renderGenerationGuidance(
+        request,
+        playbook,
+        renderVoiceSampleGuidance(voiceSamples),
+      );
+    } catch {
+      return undefined;
+    }
   };
 };
 
