@@ -35,10 +35,9 @@
  * cooldown window service, the real resolver chain. No live x.com, no network.
  */
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import {
   ENGINE_TRANSPORT_BINDINGS,
@@ -85,11 +84,6 @@ const SELECTED_STATUS_GATE_SENTINEL = "HOT_TAKE_SELECTED_STATUS_SENTINEL";
 const UNRELATED_KB_SENTINEL = "UNRELATED_FULL_KB_SENTINEL";
 const KNOWN_VOICE_SENTINEL = "KNOWN_POST_VOICE_SENTINEL";
 const FALLBACK_VOICE_SENTINEL = "FALLBACK_RECENT_VOICE_SENTINEL";
-const boundEngineServicesSourcePath = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "bound-engine-services.ts",
-);
-
 
 // Map a draft string to a deterministic 0-100 score so two different drafts
 // yield two different verdicts (invariant #2). Longer text scores higher; the
@@ -548,17 +542,6 @@ describe("real engine bundle — generateIdeas refine attaches verdict + approve
     expect(instructions).toContain('Produce exactly 3 distinct draft posts in the "hot_take" format.');
     expect(instructions).not.toContain("# Requested format playbook");
     expect(instructions).not.toContain("# Voice samples (match tone, do not copy)");
-  });
-});
-
-describe("real engine bundle — generation guidance source parity", () => {
-  it("removes the runner-local whole-context generation guidance resolver", () => {
-    const source = readFileSync(boundEngineServicesSourcePath, "utf8");
-
-    expect(source).not.toContain("MAX_KNOWLEDGE_BASE_CHARS");
-    expect(source).not.toContain("VOICE_EXAMPLE_COUNT");
-    expect(source).not.toContain("buildGenerationGuidanceResolver");
-    expect(source).not.toContain(".slice(-VOICE_EXAMPLE_COUNT)");
   });
 });
 

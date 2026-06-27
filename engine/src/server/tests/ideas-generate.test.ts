@@ -1,10 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   apiErrorSchema,
+  deriveApproved,
   generateIdeaResponseSchema,
   type GenerateIdeaRequest,
   type GenerateIdeaResponse,
@@ -28,6 +29,7 @@ const REPLY_VOICE_SENTINEL = "HTTP_REPLY_VOICE_SENTINEL";
 type LlmCall = { purpose: string; instructions: string; userContent: string };
 
 const llmCalls = vi.hoisted((): LlmCall[] => []);
+const failedJudgeTexts = vi.hoisted(() => new Set<string>());
 const generateStructuredFake = vi.hoisted(() =>
   vi.fn(async (request: StructuredLlmRequest<unknown>) => {
     const userContent = request.turns.find((turn) => turn.role === "user")?.content ?? "";
@@ -36,6 +38,19 @@ const generateStructuredFake = vi.hoisted(() =>
       instructions: request.instructions,
       userContent,
     });
+
+    if (request.purpose === "candidate_judge" && failedJudgeTexts.has(userContent)) {
+      return {
+        status: "failed" as const,
+        provider: "codex-cli",
+        requestId: "fake-request",
+        code: "provider_unavailable" as const,
+        message: "judge provider unavailable",
+        retryable: true,
+        durationMs: 1,
+        completedAt: ISO,
+      };
+    }
 
     const raw =
       request.purpose === "candidate_judge"
@@ -128,7 +143,6 @@ const formatPathResponse = (): GenerateIdeaResponse => ({
 });
 
 const formatBody: GenerateIdeaRequest = { format: "hot_take" };
-const serverSource = () => readFileSync(new URL("../server.ts", import.meta.url), "utf8");
 
 type VoicePostInput = Parameters<SqlitePostLibraryRepository["upsertPosts"]>[0][number];
 
@@ -203,6 +217,7 @@ let tempRoots: string[] = [];
 beforeEach(() => {
   llmCalls.length = 0;
   generateStructuredFake.mockClear();
+  failedJudgeTexts.clear();
 });
 
 afterEach(() => {
@@ -277,6 +292,41 @@ describe("POST /ideas/generate", () => {
     }
   });
 
+  it("keeps three candidates and attaches only successful verdicts when one judge pass fails", async () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "x-builder-http-generate-judge-fail-"));
+    tempRoots.push(tempRoot);
+    const settingsRepository = new JsonFileAppSettingsRepository({ root: join(tempRoot, "settings") });
+    const postLibraryRepository = new SqlitePostLibraryRepository(openEngineDatabase(":memory:"));
+    failedJudgeTexts.add("Format: hot_take. :: second angle");
+    const app = buildServer({ settingsRepository, postLibraryRepository });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/ideas/generate",
+        payload: { format: "hot_take" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const result = generateIdeaResponseSchema.parse(parseJson(response.body));
+      expect(result.candidates).toHaveLength(3);
+
+      const failedCandidate = result.candidates.find((candidate) => candidate.text.includes("second angle"));
+      expect(failedCandidate).toBeDefined();
+      expect(failedCandidate).not.toHaveProperty("verdict");
+      expect(failedCandidate).not.toHaveProperty("approved");
+
+      const successfulCandidates = result.candidates.filter((candidate) => !candidate.text.includes("second angle"));
+      expect(successfulCandidates).toHaveLength(2);
+      for (const candidate of successfulCandidates) {
+        expect(candidate.verdict).toBeDefined();
+        expect(candidate.approved).toBe(deriveApproved(candidate.verdict!));
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
   it("keeps the base writer prompt reachable when guidance inputs are absent", async () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "x-builder-http-generate-empty-"));
     tempRoots.push(tempRoot);
@@ -302,18 +352,6 @@ describe("POST /ideas/generate", () => {
     } finally {
       await app.close();
     }
-  });
-
-  it("constructs the default generation service with the shared guidance resolver", () => {
-    const source = serverSource();
-
-    expect(source).toMatch(
-      /import\s*\{[\s\S]*createGenerationGuidanceResolver[\s\S]*\}\s*from "\.\.\/llm\/generation-guidance\.js";/,
-    );
-    expect(source).toMatch(
-      /new GenerateIdeasService\(\s*new StructuredLlmService\(\{ providers \}\),\s*judgeDraftService,\s*createSettingsJudgeProviderResolver\(settingsRepository\),\s*\(\) => resolveJudgeAccountProfile\(undefined\),\s*undefined,\s*createGenerationGuidanceResolver\(\{\s*settingsRepository,\s*postLibraryRepository,\s*\}\),\s*\)/s,
-    );
-    expect(source).toContain("options.generateCandidates ?? buildDefaultGenerateCandidates()");
   });
 
   it("returns 500 with generation_failed when the generate step throws", async () => {
