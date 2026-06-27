@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # SGC-005: Wire GenerateIdeasService to request-aware guidance
@@ -67,3 +67,6 @@ Coverage level: engine unit tests. Owning suite: existing `GenerateIdeasService`
 
 - 2026-06-27: RGB audit tightened ticket contract before implementation.
 - 2026-06-27: RGB pipeline started; ticket moved to in-progress. Pre-Red contract clarified `GenerationGuidanceResolver` constructor type, request-object invocation, and blank-guidance fail-open behavior.
+- 2026-06-27: Red committed in `990351d`; targeted tests failed before Green because the resolver was still called with no request object.
+- 2026-06-27: Green committed in `e7aa260`; targeted GenerateIdeasService tests pass 12/12, related SGC guidance tests pass 69/69, and engine typecheck passes.
+- 2026-06-27: Yellow initially flagged the runner-local whole-KB resolver; re-audit approved SGC-005 as service-scope complete and assigned that validated finding to SGC-006.
