@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # SGC-006: Wire HTTP and runner parity
@@ -63,3 +63,5 @@ Coverage level: server integration and runner transport integration tests. Ownin
 
 - 2026-06-27: RGB audit tightened ticket contract before implementation.
 - 2026-06-27: RGB pipeline started; ticket moved to in-progress. SGC-005 Yellow validated that `runner/src/bound-engine-services.ts` still used a runner-local whole-KB zero-arg resolver; SGC-006 owns removing that resolver and proving HTTP/runner parity through the shared engine resolver.
+- 2026-06-27: Red committed failing parity coverage in `7fb52fb`; Green wired HTTP and runner defaults through the shared engine resolver in `0b0f8dd`.
+- 2026-06-27: Yellow approved SGC-006 after runner integration tests passed 14/14, engine related tests passed 28/28, engine typecheck passed, `git diff --check dc8da2a..HEAD` passed, and stale-runner scan found only negative test assertions.
