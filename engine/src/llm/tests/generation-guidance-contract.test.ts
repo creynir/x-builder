@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { detectedPostFormatSchema, type DetectedPostFormat } from "@x-builder/shared";
+import type {
+  FormatPlaybookMapping,
+  GenerationContext,
+  GenerationGuidanceRequest,
+  GenerationGuidanceResolver,
+  PlaybookSlice,
+  VoiceSamplePost,
+} from "../generation-guidance.js";
 
 type MappingEntry = {
   sectionIds?: unknown;
@@ -28,6 +36,62 @@ const mappingEntries = async () => {
 };
 
 describe("generation guidance playbook mapping", () => {
+  it("exports the documented generation guidance data model types", () => {
+    expectTypeOf<GenerationGuidanceRequest>().toEqualTypeOf<{
+      format: DetectedPostFormat;
+      idea?: string;
+      voiceProfileId?: string;
+      useKnownPostIds: string[];
+    }>();
+
+    expectTypeOf<FormatPlaybookMapping>().toEqualTypeOf<
+      Readonly<
+        Record<
+          DetectedPostFormat,
+          {
+            sectionIds: string[];
+            priority: "primary" | "secondary";
+            includeFallbackGeneral: boolean;
+          }
+        >
+      >
+    >();
+
+    expectTypeOf<PlaybookSlice>().toEqualTypeOf<{
+      format: DetectedPostFormat;
+      sourcePath?: string;
+      sections: Array<{
+        id: string;
+        heading: string;
+        content: string;
+        charCount: number;
+      }>;
+      content: string;
+      charCount: number;
+      truncated: boolean;
+    }>();
+
+    expectTypeOf<VoiceSamplePost>().toEqualTypeOf<{
+      id: string;
+      platformPostId: string;
+      text: string;
+      createdAt: string;
+      kind: "original";
+      source: "known_post_id" | "profile_sample" | "recent_original";
+    }>();
+
+    expectTypeOf<GenerationContext>().toEqualTypeOf<{
+      request: GenerationGuidanceRequest;
+      playbook: PlaybookSlice;
+      voiceSamples: VoiceSamplePost[];
+      renderedGuidance?: string;
+    }>();
+
+    expectTypeOf<GenerationGuidanceResolver>().toEqualTypeOf<
+      (request: GenerationGuidanceRequest) => Promise<string | undefined>
+    >();
+  });
+
   it("maps every detected post format exactly once", async () => {
     const mapping = await mappingEntries();
 
@@ -39,11 +103,17 @@ describe("generation guidance playbook mapping", () => {
     const entry = mapping[format];
 
     expect(entry).toBeDefined();
-    expect(entry?.sectionIds).toEqual(expect.any(Array));
-    expect(entry?.sectionIds).not.toHaveLength(0);
-    expect(entry?.sectionIds).toEqual(
-      expect.arrayContaining([expect.stringMatching(/^[a-z0-9][a-z0-9-]*$/)]),
-    );
+    const sectionIds = entry?.sectionIds;
+
+    expect(Array.isArray(sectionIds)).toBe(true);
+    if (!Array.isArray(sectionIds)) {
+      throw new Error(`Expected ${format} to declare explicit section ids.`);
+    }
+    expect(sectionIds).not.toHaveLength(0);
+    for (const sectionId of sectionIds) {
+      expect(typeof sectionId).toBe("string");
+      expect(sectionId).toMatch(/^[a-z0-9][a-z0-9-]*$/);
+    }
     expect(entry?.priority).toSatisfy((value) => value === "primary" || value === "secondary");
     expect(typeof entry?.includeFallbackGeneral).toBe("boolean");
   });
