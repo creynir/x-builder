@@ -1,22 +1,30 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # SGC-003: Implement voice sample selection
 
 ## Implementation Details
 
-Replace loose tail-post selection with bounded deterministic voice sample selection. Load the `PostLibraryStore`, filter to local original posts with non-empty text, honor valid `useKnownPostIds` in caller order, then fill remaining slots from newest originals by `createdAt` descending. Treat `voiceProfileId` as request metadata only in this epic: no current profile-to-post relation exists, so it must not change selection unless a concrete source is added before implementation.
+Replace loose tail-post selection with bounded deterministic voice sample selection. Load the `PostLibraryStore` through a supplied `PostLibraryRepository`, filter to local original posts with non-empty text, honor valid `useKnownPostIds` in caller order, then fill remaining slots from newest originals by `createdAt` descending. Treat `voiceProfileId` as request metadata only in this epic: no current profile-to-post relation exists, so it must not change selection unless a concrete source is added before implementation.
+
+Known post ids may match either `CanonicalOwnPost.id` or `CanonicalOwnPost.platformPostId`; dedupe always uses canonical `post.id`. Expose `selectVoiceSamples(input: SelectVoiceSamplesInput): Promise<VoiceSamplePost[]>` and `renderVoiceSampleGuidance(samples: VoiceSamplePost[]): RenderedVoiceSamples` so SGC-004 can compose rendered guidance without inventing a second voice-budget path.
 
 The selector must not use `.slice(-8)`.
 
 ## Data Models
 
-Consumes `PostLibraryStore`, `voiceProfileId?: string` as no-op request metadata, and `useKnownPostIds: string[]`.
+Consumes `PostLibraryRepository`, `PostLibraryStore`, `voiceProfileId?: string` as no-op request metadata, and `useKnownPostIds: string[]`.
 
 Produces:
 
 ```ts
+type SelectVoiceSamplesInput = {
+  postLibraryRepository: Pick<PostLibraryRepository, "loadStore">;
+  useKnownPostIds?: string[];
+  voiceProfileId?: string;
+};
+
 type VoiceSamplePost = {
   id: string;
   platformPostId: string;
@@ -25,13 +33,19 @@ type VoiceSamplePost = {
   kind: "original";
   source: "known_post_id" | "profile_sample" | "recent_original";
 };
+
+type RenderedVoiceSamples = {
+  content: string;
+  charCount: number;
+  truncated: boolean;
+};
 ```
 
-Constraints: known ids preserve caller order; known ids must match original posts; dedupe by canonical post id; cap to 5 posts; cap rendered voice content to 2400 chars; repository read failure returns `[]`.
+Constraints: known ids preserve caller order; known ids must match original posts by canonical id or platform post id; dedupe by canonical post id; cap to 5 posts; `renderVoiceSampleGuidance` caps rendered voice content to 2400 chars; repository read failure returns `[]`.
 
 ## Integration Point
 
-Producer: `selectVoiceSamples`. Consumer: `createGenerationGuidanceResolver`. User entry point: clicked generate format category, optionally with known post ids already present in the generate request. Terminal outcome: compact voice examples in the generation prompt.
+Producer: `selectVoiceSamples` and `renderVoiceSampleGuidance`. Consumer: `createGenerationGuidanceResolver`. User entry point: clicked generate format category, optionally with known post ids already present in the generate request. Terminal outcome: compact voice examples in the generation prompt.
 
 ## Scope Boundaries / Out of Scope
 
@@ -69,4 +83,5 @@ Coverage level: engine unit tests. Owning suite: engine LLM or post-library-adja
 
 ## Pipeline Log
 
+- 2026-06-27: RGB pipeline started; ticket moved to in-progress. Pre-Red contract clarified repository input, known-id matching, and rendered voice-sample budget helper.
 - 2026-06-27: RGB audit tightened ticket contract before implementation.
