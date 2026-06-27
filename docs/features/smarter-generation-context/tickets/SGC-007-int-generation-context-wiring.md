@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # SGC-007: [INT] Verify generation context wiring across engine entry points
@@ -36,3 +36,6 @@ Coverage level: engine/runner integration tests. Owning suites: engine server te
 
 - 2026-06-27: RGB audit tightened ticket contract before implementation.
 - 2026-06-27: RGB `[INT]` pipeline started after pre-flight confirmed SGC-006 done, named engine/runner symbols resolvable, unchanged request/response schemas present, and integration surfaces testable in local suites.
+- 2026-06-27: Purple committed passing integration coverage in `1b6e233`; Blue rejected missing entry-point one-judge-failure coverage and source-inspection proxy assertions.
+- 2026-06-27: Purple fixed the rejection in `ae9df81` by removing source-inspection proxy tests and adding HTTP default-path one-judge-failure coverage that preserves three candidates while attaching verdicts only to successful judge outcomes.
+- 2026-06-27: Blue approved after `git diff --check c6c3828..HEAD` passed, test scope remained limited to engine/runner test files, source-proxy/ticket scans returned no matches, engine targeted tests passed 17/17, runner integration tests passed 14/14, and engine/runner typechecks passed.
