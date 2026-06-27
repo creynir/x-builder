@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # SGC-001: [FND] Define request-aware generation guidance contract and audited format mapping
@@ -96,5 +96,9 @@ Coverage level: engine unit/static tests. Owning suite: engine LLM tests. Fixtur
 
 ## Pipeline Log
 
+- 2026-06-27: Red tests approved after one fix cycle; Green implemented engine guidance contract and audited mapping.
+- 2026-06-27: Blue Green validation APPROVE; Yellow intent validation APPROVE. Targeted `generation-guidance-contract` test passed 21/21. Related engine LLM suite and engine typecheck still fail on pre-existing shared/engine drift, with no `generation-guidance` diagnostics.
+- 2026-06-27: Foundation architecture checkpoint APPROVE.
+- 2026-06-27: Concern recorded for SGC-002: verify exact KB section-id normalization before consuming `formatPlaybookMapping`; this leaves SGC-001 AC/DoD untouched because SGC-001 only defines the audited contract and its tests pass.
 - 2026-06-27: RGB pipeline started; ticket moved to in-progress.
 - 2026-06-27: RGB audit tightened ticket contract before implementation.

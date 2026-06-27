@@ -6,7 +6,9 @@ status: todo
 
 ## Implementation Details
 
-Implement deterministic playbook slicing for the configured knowledge base path supplied by the generation guidance resolver. Parse markdown headings into section ids, select only the sections named by `FormatPlaybookMapping`, and render compact markdown within the prompt budget. This helper does not read settings directly; the resolver owns settings access and passes the configured `knowledgeBasePath` in.
+Implement deterministic playbook slicing for the configured knowledge base path supplied by the generation guidance resolver. Parse markdown headings into stable section ids, select only the sections named by `FormatPlaybookMapping`, and render compact markdown within the prompt budget. This helper does not read settings directly; the resolver owns settings access and passes the configured `knowledgeBasePath` in.
+
+Section-id normalization must be explicit and tested against current knowledge-base heading patterns, including numbered headings such as `## 2. Format taxonomy` and underscore headings such as `## 10. founder_story is real but amplifier-gated`. Mapping ids like `format-taxonomy` and `founder-story` must resolve only through this deterministic normalization, not fuzzy matching.
 
 The selector must never append the full knowledge base. Missing files, unreadable files, empty content, parse misses, or missing mapped sections return an empty `PlaybookSlice` and allow generation to continue without playbook guidance.
 
@@ -55,6 +57,7 @@ Coverage level: engine unit tests. Owning suite: engine LLM tests. Fixture strat
 - Given an unreadable KB path, when the selector runs, then playbook guidance is empty and no exception escapes.
 - Given an over-budget section, when the selector renders it, then content is clipped within the playbook budget and `truncated` is true.
 - Given duplicate headings, when the selector runs, then deterministic section ids decide which content is included.
+- Given numbered or underscore KB headings, when the selector normalizes headings, then mapping ids resolve deterministically without fuzzy matching.
 
 ## Edge Cases
 
@@ -63,7 +66,10 @@ Coverage level: engine unit tests. Owning suite: engine LLM tests. Fixture strat
 - Nested headings under a mapped section.
 - Missing general fallback section.
 - Markdown text containing prompt-like instructions.
+- Numbered headings whose visible text differs from the section id.
+- Underscore headings such as `founder_story` that normalize to hyphenated ids.
 
 ## Pipeline Log
 
+- 2026-06-27: SGC-001 Yellow concern folded in; Red must cover exact KB section-id normalization for numbered and underscore headings.
 - 2026-06-27: RGB audit tightened ticket contract before implementation.
