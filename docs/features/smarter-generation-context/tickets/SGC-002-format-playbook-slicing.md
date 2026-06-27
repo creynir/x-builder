@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # SGC-002: Implement format playbook slicing
@@ -78,6 +78,9 @@ Coverage level: engine unit tests. Owning suite: engine LLM tests. Fixture strat
 
 ## Pipeline Log
 
+- 2026-06-27: Red tests approved after two fix cycles; final suite covers mapped selection, fail-open matrix, budget clipping, duplicate headings, and deterministic normalization.
+- 2026-06-27: Green implemented `resolvePlaybookSlice` and `ResolvePlaybookSliceInput` in the engine LLM guidance module.
+- 2026-06-27: Blue Green validation APPROVE; Yellow intent validation APPROVE. Targeted playbook slicing tests passed 9/9 and related SGC guidance tests passed 30/30. Engine typecheck still fails on pre-existing shared/engine drift, with no `generation-guidance.ts` diagnostics.
 - 2026-06-27: Pre-Red clarification added `resolvePlaybookSlice` input signature and first-heading-wins duplicate policy.
 - 2026-06-27: RGB pipeline started; ticket moved to in-progress after SGC-001 completion.
 - 2026-06-27: SGC-001 Yellow concern folded in; Red must cover exact KB section-id normalization for numbered and underscore headings.
