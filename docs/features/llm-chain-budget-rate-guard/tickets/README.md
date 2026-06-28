@@ -8,7 +8,7 @@ Tickets build top to bottom. This epic changes only engine LLM chain budgeting a
 | LCB-002 | [FND] | Add runner LLM binding guard | runner/transport | done | - |
 | LCB-003 | - | Enforce generate chain budget | engine/llm + engine/api | done | LCB-001 |
 | LCB-004 | - | Enforce apply chain budget | engine/llm + engine/api | done | LCB-001 |
-| LCB-005 | [INT] | Verify budget and guard wiring | engine/runner tests | todo | LCB-002, LCB-003, LCB-004 |
+| LCB-005 | [INT] | Verify budget and guard wiring | engine/runner tests | in-progress | LCB-002, LCB-003, LCB-004 |
 
 ## Pipeline Log
 

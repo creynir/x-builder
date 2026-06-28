@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # LCB-005: [INT] Verify budget and guard wiring
@@ -50,3 +50,4 @@ Isolation boundary: no real LLM provider, browser, live x.com, user settings dir
 
 - 2026-06-28: Ticket authored from approved arch recon.
 - 2026-06-28: RGB audit fix: mirrored generate fan-out timeout-vs-non-timeout invariant.
+- 2026-06-28: RGB pipeline started; ticket moved to in-progress.
