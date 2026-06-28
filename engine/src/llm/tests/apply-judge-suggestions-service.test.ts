@@ -233,6 +233,9 @@ describe("ApplyJudgeSuggestionsService", () => {
   });
 
   it("passes remaining chain budget to the original judge", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-20T12:00:00.000Z"));
+
     const originalVerdict = verdictWithOverall(60);
     const rewriteVerdict = verdictWithOverall(75);
     const { judge, calls } = makeJudgeFake([
@@ -242,9 +245,13 @@ describe("ApplyJudgeSuggestionsService", () => {
     const { llm } = makeLlmFake(rewriteSuccessText("A sharper rewrite."));
     const service = buildService(judge, llm, resolveProfile, 45_000);
 
-    await service.apply(request("The original draft."));
+    try {
+      await service.apply(request("The original draft."));
 
-    expect(calls[0]?.options?.timeoutMs).toBe(45_000);
+      expect(calls[0]?.options?.timeoutMs).toBe(45_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("passes remaining chain budget to the rewrite step", async () => {
@@ -261,6 +268,60 @@ describe("ApplyJudgeSuggestionsService", () => {
 
     const rewriteRequest = generateStructured.mock.calls[0]![0];
     expect(rewriteRequest.options?.timeoutMs).toBe(structuredLlmOptionLimits.timeoutMs);
+  });
+
+  it("passes elapsed remaining chain budget to the rewrite step", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-20T12:00:00.000Z"));
+
+    const originalVerdict = verdictWithOverall(60);
+    const rewriteVerdict = verdictWithOverall(75);
+    const calls: JudgeCall[] = [];
+    const judgeFn: JudgeDraft["judge"] = async (text, accountProfile, options) => {
+      calls.push({ text, accountProfile, options });
+      if (calls.length === 1) {
+        vi.setSystemTime(new Date("2026-06-20T12:00:30.000Z"));
+        return judgedOutcome(originalVerdict);
+      }
+      return judgedOutcome(rewriteVerdict);
+    };
+    const judge: JudgeDraft = { judge: vi.fn(judgeFn) };
+    const { llm, generateStructured } = makeLlmFake(rewriteSuccessText("A sharper rewrite."));
+    const service = buildService(judge, llm, resolveProfile, 90_000);
+
+    try {
+      await service.apply(request("The original draft."));
+
+      const rewriteRequest = generateStructured.mock.calls[0]![0];
+      expect(rewriteRequest.options?.timeoutMs).toBe(60_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails when the chain budget is exhausted before rewrite", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-20T12:00:00.000Z"));
+
+    const originalVerdict = verdictWithOverall(60);
+    const calls: JudgeCall[] = [];
+    const judgeFn: JudgeDraft["judge"] = async (text, accountProfile, options) => {
+      calls.push({ text, accountProfile, options });
+      vi.setSystemTime(new Date("2026-06-20T12:00:31.000Z"));
+      return judgedOutcome(originalVerdict);
+    };
+    const judge: JudgeDraft = { judge: vi.fn(judgeFn) };
+    const { llm, generateStructured } = makeLlmFake(rewriteSuccessText("A sharper rewrite."));
+    const service = buildService(judge, llm, resolveProfile, 30_000);
+
+    try {
+      await expect(service.apply(request("The original draft."))).rejects.toMatchObject({
+        code: "chain_budget_exhausted",
+      });
+      expect(generateStructured).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("passes elapsed remaining chain budget to the re-judge step", async () => {
