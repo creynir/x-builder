@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # LCB-004: Enforce apply chain budget
@@ -99,3 +99,8 @@ Isolation boundary: no real provider, child process, browser, live x.com, runtim
 
 - 2026-06-28: Ticket authored from approved arch recon.
 - 2026-06-28: RGB pipeline started; ticket moved to in-progress.
+- 2026-06-28: Red coverage added in e773672 and tightened in 7752a3c for per-step apply timeout propagation and exhausted-budget failure.
+- 2026-06-28: Green implementation completed in 3530167, enforcing one chain deadline across original judge, rewrite, and re-judge.
+- 2026-06-28: Hardening coverage added in a1a14e0 for exhaustion before the original judge.
+- 2026-06-28: Blue and Yellow reviews approved; focused apply tests and engine typecheck passed.
+- 2026-06-28: Ticket completed.
