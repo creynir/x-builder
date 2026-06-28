@@ -950,6 +950,56 @@ describe("ExposeFunctionTransport — LLM binding guard", () => {
     }
   });
 
+  it("lets representative non-LLM bindings bypass the guard while a guarded call is in flight", async () => {
+    const heldJudge = deferred<typeof judgeResponse>();
+    (services.judgeDraftService.judge as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      heldJudge.promise,
+    );
+
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+
+    const judgeDraft = mockPage.handlers.get(B.judgeDraft)!;
+    const analyzePosts = mockPage.handlers.get(B.analyzePosts)!;
+    const getCooldown = mockPage.handlers.get(B.getCooldown)!;
+    const getCaptureSummary = mockPage.handlers.get(B.getCaptureSummary)!;
+    const getSettings = mockPage.handlers.get(B.getSettings)!;
+    const validateArchive = mockPage.handlers.get(B.validateArchive)!;
+    const inFlight = Promise.resolve(judgeDraft({ text: "A draft worth judging." }));
+
+    expect(services.judgeDraftService.judge).toHaveBeenCalledTimes(1);
+
+    try {
+      const analyzed = await analyzePosts({
+        items: [{ id: "p1", text: "Hello world" }],
+        scoringContext: {},
+      });
+      const cooldown = await getCooldown({ windowDays: 14 });
+      const capture = await getCaptureSummary(undefined);
+      const settings = await getSettings(undefined);
+      const archiveValidation = await validateArchive({
+        fileName: "tweets.js",
+        fileSizeBytes: 1024,
+        contents: '{"tweets":[]}',
+      });
+
+      expect(services.liveContextResolver.mergeAnalysisRequest).toHaveBeenCalledTimes(1);
+      expect(services.archiveStudioContextResolver.mergeAnalysisRequest).toHaveBeenCalledTimes(1);
+      expect(services.deterministicAnalysisService.analyzePosts).toHaveBeenCalledTimes(1);
+      expect(services.repetitionWindowService.compute).toHaveBeenCalledWith(14);
+      expect(services.liveCaptureService.summary).toHaveBeenCalledTimes(1);
+      expect(services.settingsRepository.getSettings).toHaveBeenCalledTimes(1);
+      expect(services.archiveImportService.validate).toHaveBeenCalledTimes(1);
+      expect(analyzed).toEqual(analyzePostsResponse);
+      expect(cooldown).toEqual(cooldownReport(14));
+      expect(capture).toEqual(captureSummaryResponse);
+      expect(settings).toEqual(appSettingsResponse);
+      expect(archiveValidation).toEqual(validateArchiveResponse);
+    } finally {
+      heldJudge.resolve(judgeResponse);
+      await inFlight;
+    }
+  });
+
   it("rejects guarded starts after the default rolling limit with retryAfterMs", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(NOW_ISO));
