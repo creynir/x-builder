@@ -47,7 +47,7 @@ arch-recon
 **Next build queue:**
 
 1. [`smarter-generation-context`](./smarter-generation-context/) - send the LLM only the requested format's playbook slice plus a tight voice sample instead of the whole knowledge base.
-2. **LLM chain budget / rate guard** — cap multi-call generate/apply chains and add basic protection around LLM-spawning bindings.
+2. [`llm-chain-budget-rate-guard`](./llm-chain-budget-rate-guard/) - cap multi-call generate/apply chains and add basic protection around LLM-spawning bindings.
 3. **Refactor hotspots** — split `engine/src/server/server.ts` and `overlay/src/compose/compose-cockpit.tsx` after behavior is pinned.
 
 **Planned feature areas:**
