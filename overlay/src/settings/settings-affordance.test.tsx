@@ -18,6 +18,9 @@ import {
   makeAppSettings,
   makeCaptureSummary,
   makeEmptyContext,
+  makeExternalXSignalPattern,
+  makeExternalXSignalSource,
+  makeExternalXSignalsOverview,
   makeFeedbackLoopSummary,
   makeOverlayReadiness,
 } from "../testing/fixtures";
@@ -50,6 +53,8 @@ function readyTransport(overrides: Partial<FakeEngineTransport> = {}): FakeEngin
     getOverlayReadiness: () => Promise.resolve(makeOverlayReadiness() as never),
     getCaptureSummary: () => Promise.resolve(makeCaptureSummary() as never),
     getFeedbackLoopSummary: () => Promise.resolve(makeFeedbackLoopSummary() as never),
+    getExternalXSignalsOverview: () =>
+      Promise.resolve(makeExternalXSignalsOverview() as never),
     getActiveContext: () => Promise.resolve(makeActiveContext() as never),
     activateContext: () =>
       Promise.resolve({
@@ -177,6 +182,32 @@ function launcher(root: HTMLElement): HTMLElement {
 function panel(root: HTMLElement): HTMLElement | null {
   const el = root.querySelector('[role="dialog"]');
   return el instanceof HTMLElement ? el : null;
+}
+
+function sectionByHeading(root: HTMLElement, title: string): HTMLElement {
+  const heading = Array.from(root.querySelectorAll("h3")).find(
+    (candidate) => candidate.textContent === title,
+  );
+  const section = heading?.closest("section");
+  if (!(section instanceof HTMLElement)) {
+    throw new Error(`section not found: ${title}`);
+  }
+  return section;
+}
+
+function buttonNamed(scope: ParentNode, label: string): HTMLButtonElement {
+  const button = Array.from(scope.querySelectorAll("button")).find(
+    (candidate) => candidate.textContent?.trim() === label,
+  );
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`button not found: ${label}`);
+  }
+  return button;
+}
+
+function setInputValue(input: HTMLInputElement, value: string): void {
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
 }
 
 afterEach(() => {
@@ -539,6 +570,201 @@ describe("SettingsAffordance — feedback loop summary and manual links", () => 
     });
   });
 });
+
+describe("SettingsAffordance — external X signals", () => {
+  it("fetches the external overview and renders the empty state", async () => {
+    const getOverviewSpy = vi.fn(() =>
+      Promise.resolve(makeExternalXSignalsOverview() as never),
+    );
+    const root = mountAffordance(
+      readyTransport({ getExternalXSignalsOverview: getOverviewSpy as never }),
+    );
+
+    launcher(root).click();
+
+    await vi.waitFor(() => {
+      expect(sectionByHeading(root, "External X signals").textContent).toContain(
+        "No external sources",
+      );
+      expect(getOverviewSpy).toHaveBeenCalled();
+    });
+  });
+
+  it("adds a normalized handle and refreshes the overview on success", async () => {
+    const source = makeExternalXSignalSource({ screenName: "external_builder" });
+    let overview = makeExternalXSignalsOverview();
+    const getOverviewSpy = vi.fn(() => Promise.resolve(overview as never));
+    const addSpy = vi.fn(async () => {
+      overview = makeExternalXSignalsOverview({ sources: [source] });
+      return { source, duplicate: false } as never;
+    });
+    const root = mountAffordance(
+      readyTransport({
+        getExternalXSignalsOverview: getOverviewSpy as never,
+        addExternalXSignalSource: addSpy as never,
+      }),
+    );
+
+    launcher(root).click();
+
+    const input = await vi.waitFor(() => {
+      const candidate = sectionByHeading(root, "External X signals").querySelector<HTMLInputElement>(
+        'input[aria-label="External X handle"]',
+      );
+      expect(candidate).not.toBeNull();
+      return candidate!;
+    });
+    const callsBeforeAdd = getOverviewSpy.mock.calls.length;
+
+    setInputValue(input, "@external_builder");
+    const addButton = await vi.waitFor(() => {
+      const button = buttonNamed(sectionByHeading(root, "External X signals"), "Add");
+      expect(button.disabled).toBe(false);
+      return button;
+    });
+    addButton.click();
+
+    await vi.waitFor(() => {
+      expect(addSpy).toHaveBeenCalledWith({ screenName: "external_builder" });
+      expect(getOverviewSpy.mock.calls.length).toBeGreaterThan(callsBeforeAdd);
+      expect(sectionByHeading(root, "External X signals").textContent).toContain(
+        "@external_builder",
+      );
+    });
+  });
+
+  it("refreshes a source and shows the row busy state while the request is pending", async () => {
+    const source = makeExternalXSignalSource({ screenName: "external_builder" });
+    const overview = makeExternalXSignalsOverview({ sources: [source] });
+    let resolveRefresh: ((value: unknown) => void) | undefined;
+    const refreshSpy = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        }) as never,
+    );
+    const root = mountAffordance(
+      readyTransport({
+        getExternalXSignalsOverview: () => Promise.resolve(overview as never),
+        refreshExternalXSignalSource: refreshSpy as never,
+      }),
+    );
+
+    launcher(root).click();
+
+    const row = await vi.waitFor(() => {
+      const candidate = sectionByHeading(root, "External X signals").querySelector(
+        "[data-external-x-source-row]",
+      );
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLElement;
+    });
+    const refreshButton = buttonNamed(row, "Refresh");
+    refreshButton.click();
+
+    await vi.waitFor(() => {
+      expect(refreshSpy).toHaveBeenCalledWith({ sourceId: source.id });
+      expect(refreshButton.getAttribute("aria-busy")).toBe("true");
+    });
+
+    resolveRefresh?.({
+      source,
+      run: {
+        id: "external-refresh-run-1",
+        sourceId: source.id,
+        status: "captured",
+        startedAt: ISO_NOW,
+        completedAt: ISO_NOW,
+        evidenceCount: 1,
+        warningCount: 0,
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(refreshButton.getAttribute("aria-busy")).not.toBe("true");
+    });
+  });
+
+  it("removes a source and refreshes back to the empty overview", async () => {
+    const source = makeExternalXSignalSource({ screenName: "external_builder" });
+    let overview = makeExternalXSignalsOverview({ sources: [source] });
+    const getOverviewSpy = vi.fn(() => Promise.resolve(overview as never));
+    const removeSpy = vi.fn(async () => {
+      overview = makeExternalXSignalsOverview();
+      return { source: { ...source, status: "removed" }, removed: true } as never;
+    });
+    const root = mountAffordance(
+      readyTransport({
+        getExternalXSignalsOverview: getOverviewSpy as never,
+        removeExternalXSignalSource: removeSpy as never,
+      }),
+    );
+
+    launcher(root).click();
+
+    const row = await vi.waitFor(() => {
+      const candidate = sectionByHeading(root, "External X signals").querySelector(
+        "[data-external-x-source-row]",
+      );
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLElement;
+    });
+    const callsBeforeRemove = getOverviewSpy.mock.calls.length;
+    buttonNamed(row, "Remove").click();
+
+    await vi.waitFor(() => {
+      expect(removeSpy).toHaveBeenCalledWith({ sourceId: source.id });
+      expect(getOverviewSpy.mock.calls.length).toBeGreaterThan(callsBeforeRemove);
+      expect(sectionByHeading(root, "External X signals").textContent).toContain(
+        "No external sources",
+      );
+    });
+  });
+
+  it("renders add failures inline and preserves the current overview", async () => {
+    const source = makeExternalXSignalSource({ screenName: "existing_source" });
+    const overview = makeExternalXSignalsOverview({
+      sources: [source],
+      patterns: [makeExternalXSignalPattern({ sourceIds: [source.id] })],
+    });
+    const addSpy = vi.fn(() => Promise.reject(new Error("External source already exists.")));
+    const root = mountAffordance(
+      readyTransport({
+        getExternalXSignalsOverview: () => Promise.resolve(overview as never),
+        addExternalXSignalSource: addSpy as never,
+      }),
+    );
+
+    launcher(root).click();
+
+    const input = await vi.waitFor(() => {
+      const candidate = sectionByHeading(root, "External X signals").querySelector<HTMLInputElement>(
+        'input[aria-label="External X handle"]',
+      );
+      expect(candidate).not.toBeNull();
+      return candidate!;
+    });
+    setInputValue(input, "@existing_source");
+    const addButton = await vi.waitFor(() => {
+      const button = buttonNamed(sectionByHeading(root, "External X signals"), "Add");
+      expect(button.disabled).toBe(false);
+      return button;
+    });
+    addButton.click();
+
+    await vi.waitFor(() => {
+      expect(addSpy).toHaveBeenCalledWith({ screenName: "existing_source" });
+      expect(sectionByHeading(root, "External X signals").textContent).toContain(
+        "External source already exists.",
+      );
+      expect(sectionByHeading(root, "External X signals").textContent).toContain(
+        "@existing_source",
+      );
+      expect(input.value).toBe("@existing_source");
+    });
+  });
+});
+
 
 describe("SettingsAffordance — archive upload orchestration", () => {
   /** Select a file through the panel's file input. */

@@ -13,6 +13,9 @@ import {
   type ActiveArchiveContext,
   type AppSettings,
   type CaptureSummary,
+  type ExternalXSignalPattern,
+  type ExternalXSignalSource,
+  type GetExternalXSignalsOverviewResponse,
   type GetFeedbackLoopSummaryResponse,
   type JudgeVerdict,
   type OverlayReadiness,
@@ -210,6 +213,78 @@ export function makeFeedbackLoopSummary(
     },
     formatLearnings: [],
     recent: [],
+    ...overrides,
+  };
+}
+
+
+export function makeExternalXSignalSource(
+  overrides: Partial<ExternalXSignalSource> = {},
+): ExternalXSignalSource {
+  return {
+    id: "external-source-1",
+    platform: "x",
+    screenName: "indie_hacker",
+    displayName: "Indie Hacker",
+    platformUserId: "44196397",
+    status: "active",
+    evidenceCount: 3,
+    patternCount: 1,
+    createdAt: ISO_NOW,
+    updatedAt: ISO_NOW,
+    lastObservedAt: ISO_NOW,
+    ...overrides,
+  };
+}
+
+export function makeExternalXSignalPattern(
+  overrides: Partial<ExternalXSignalPattern> = {},
+): ExternalXSignalPattern {
+  return {
+    id: "external-x-signals:insight_share",
+    patternType: "format",
+    format: "insight_share",
+    label: "Insight share external pattern",
+    statement: "Three external examples share a compact proof-led insight shape.",
+    confidence: 0.82,
+    supportCount: 3,
+    sourceIds: ["external-source-1"],
+    evidenceIds: ["evidence-1", "evidence-2", "evidence-3"],
+    evidence: [
+      {
+        evidenceId: "evidence-1",
+        sourceId: "external-source-1",
+        screenName: "indie_hacker",
+        platformPostId: "1800000000000000001",
+        text: "Proof beats positioning when buyers can see the work.",
+        metrics: { likes: 12, reposts: 2 },
+      },
+    ],
+    generatedAt: ISO_NOW,
+    version: "external-x-signals:v1",
+    ...overrides,
+  };
+}
+
+export function makeExternalXSignalsOverview(
+  overrides: Partial<GetExternalXSignalsOverviewResponse> = {},
+): GetExternalXSignalsOverviewResponse {
+  const sources = overrides.sources ?? [];
+  const patterns = overrides.patterns ?? [];
+  return {
+    generatedAt: ISO_NOW,
+    sources,
+    totals: {
+      sources: sources.length,
+      activeSources: sources.filter((source) => source.status !== "removed").length,
+      evidence: sources.reduce((sum, source) => sum + source.evidenceCount, 0),
+      patterns: patterns.length,
+      refreshRuns: overrides.refreshRuns?.length ?? 0,
+      ...overrides.totals,
+    },
+    patterns,
+    recentEvidence: [],
+    refreshRuns: [],
     ...overrides,
   };
 }

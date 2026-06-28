@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # EXS-007: Add ExternalXSignals settings section
@@ -86,3 +86,6 @@ Use existing settings density and tokens: `var(--space-2)`, `var(--type-body-sma
 ## Pipeline Log
 
 - 2026-06-28: Ticket authored from approved arch recon.
+- 2026-06-28: Implemented `ExternalXSignalsSettingsSection` in the settings dialog, with `SettingsAffordance` owning canonical transport calls and load/action state.
+- 2026-06-28: Verification: `./node_modules/.bin/vitest run src/settings/settings-panel.test.tsx src/settings/settings-affordance.test.tsx` (31 passed); `git diff --check`; RGB `gates.py all --base c6a83fb`.
+- 2026-06-28: Overlay typecheck was run and remains blocked by pre-existing unrelated test fixture drift in provenance, generate categories, and judge-strip tests; no EXS-007 files appeared in the failure list.
