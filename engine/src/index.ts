@@ -23,6 +23,11 @@ export { makeTempEngineDb, seedPosts } from "./server/sqlite-test-helpers.js";
 export { normalizeFeedbackContent, normalizeFeedbackContentHash } from "./feedback/normalize-feedback-content-hash.js";
 export type { FeedbackLoopRepository } from "./feedback/feedback-loop-repository.js";
 export { SqliteFeedbackLoopRepository } from "./feedback/sqlite-feedback-loop-repository.js";
+export type {
+  ExternalXSignalsRepository,
+  ExternalXSignalsWriteResult,
+} from "./external/external-x-signals-repository.js";
+export { SqliteExternalXSignalsRepository } from "./external/sqlite-external-x-signals-repository.js";
 export { FeedbackLoopService, type FeedbackLoopServiceOptions } from "./feedback/feedback-loop-service.js";
 export * from "./capture/live-capture-service.js";
 export * from "./capture/repetition-window-service.js";

@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # EXS-002: [FND] Append migration 3 and SqliteExternalXSignalsRepository
@@ -82,4 +82,5 @@ Coverage level: engine storage unit tests. Owning suite: engine SQLite repositor
 
 ## Pipeline Log
 
+- 2026-06-28: Implemented migration 3, `SqliteExternalXSignalsRepository`, persisted pattern/evidence-link rows, and storage tests. Verification: engine storage tests, engine typecheck, shared typecheck, runner host storage test, and `gates.py all --base 5fb92d8` passed.
 - 2026-06-28: Ticket authored from approved arch recon.

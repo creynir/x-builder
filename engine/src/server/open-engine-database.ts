@@ -131,6 +131,88 @@ CREATE INDEX idx_feedback_prediction_format ON feedback_prediction(detected_form
 CREATE INDEX idx_feedback_link_post ON feedback_prediction_link(platform_post_id);
 `;
 
+
+const migration3Ddl = `
+CREATE TABLE external_x_signal_source (
+  id TEXT PRIMARY KEY,
+  platform TEXT NOT NULL DEFAULT 'x' CHECK (platform = 'x'),
+  screen_name TEXT NOT NULL,
+  display_name TEXT,
+  platform_user_id TEXT,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_observed_at TEXT
+);
+CREATE UNIQUE INDEX idx_external_x_signal_source_screen_name ON external_x_signal_source(screen_name);
+CREATE INDEX idx_external_x_signal_source_status ON external_x_signal_source(status, updated_at);
+
+CREATE TABLE external_x_signal_evidence (
+  id TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL REFERENCES external_x_signal_source(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL DEFAULT 'x' CHECK (platform = 'x'),
+  platform_post_id TEXT NOT NULL,
+  screen_name TEXT NOT NULL,
+  text TEXT NOT NULL,
+  preview_text TEXT,
+  created_at TEXT,
+  kind TEXT NOT NULL,
+  language TEXT,
+  in_reply_to_post_id TEXT,
+  in_reply_to_user_id TEXT,
+  has_urls INTEGER NOT NULL,
+  has_media INTEGER NOT NULL,
+  has_hashtags INTEGER NOT NULL,
+  has_mentions INTEGER NOT NULL,
+  metrics_json TEXT NOT NULL,
+  evidence_source TEXT NOT NULL,
+  observed_at TEXT NOT NULL,
+  imported_at TEXT,
+  content_hash TEXT,
+  raw_id TEXT,
+  source_hash TEXT,
+  capture_session_id TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX idx_external_x_signal_evidence_identity ON external_x_signal_evidence(source_id, platform_post_id, evidence_source, observed_at);
+CREATE INDEX idx_external_x_signal_evidence_source_time ON external_x_signal_evidence(source_id, observed_at);
+CREATE INDEX idx_external_x_signal_evidence_post ON external_x_signal_evidence(platform_post_id);
+
+CREATE TABLE external_x_signal_refresh_run (
+  id TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL REFERENCES external_x_signal_source(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  evidence_count INTEGER NOT NULL DEFAULT 0,
+  warning_count INTEGER NOT NULL DEFAULT 0,
+  message TEXT
+);
+CREATE INDEX idx_external_x_signal_refresh_source_time ON external_x_signal_refresh_run(source_id, started_at);
+
+CREATE TABLE external_x_signal_pattern (
+  id TEXT PRIMARY KEY,
+  pattern_type TEXT NOT NULL,
+  label TEXT NOT NULL,
+  statement TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  support_count INTEGER NOT NULL,
+  generated_at TEXT NOT NULL,
+  version TEXT NOT NULL,
+  payload TEXT NOT NULL
+);
+CREATE INDEX idx_external_x_signal_pattern_generated ON external_x_signal_pattern(generated_at);
+CREATE INDEX idx_external_x_signal_pattern_type ON external_x_signal_pattern(pattern_type, confidence);
+
+CREATE TABLE external_x_signal_pattern_evidence (
+  pattern_id TEXT NOT NULL REFERENCES external_x_signal_pattern(id) ON DELETE CASCADE,
+  evidence_id TEXT NOT NULL REFERENCES external_x_signal_evidence(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  PRIMARY KEY (pattern_id, evidence_id, role)
+);
+CREATE INDEX idx_external_x_signal_pattern_evidence_evidence ON external_x_signal_pattern_evidence(evidence_id);
+`;
+
 export type Migration = {
   version: number;
   up(db: DatabaseHandle): void;
@@ -150,6 +232,12 @@ export const migrations: Migration[] = [
     version: 2,
     up(db) {
       db.exec(migration2Ddl);
+    },
+  },
+  {
+    version: 3,
+    up(db) {
+      db.exec(migration3Ddl);
     },
   },
 ];

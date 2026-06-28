@@ -213,6 +213,26 @@ export type {
   ApplyJudgeSuggestionsResponse,
 } from "./schemas/apply-judge-suggestions.js";
 export type {
+  AddExternalXSignalSourceRequest,
+  AddExternalXSignalSourceResponse,
+  ExternalXSignalEvidence,
+  ExternalXSignalEvidencePreview,
+  ExternalXSignalEvidenceSource,
+  ExternalXSignalMetricSnapshot,
+  ExternalXSignalPattern,
+  ExternalXSignalPatternType,
+  ExternalXSignalRefreshRun,
+  ExternalXSignalSource,
+  ExternalXSignalSourceStatus,
+  ExternalXSignalsTotals,
+  GetExternalXSignalsOverviewRequest,
+  GetExternalXSignalsOverviewResponse,
+  RefreshExternalXSignalSourceRequest,
+  RefreshExternalXSignalSourceResponse,
+  RemoveExternalXSignalSourceRequest,
+  RemoveExternalXSignalSourceResponse,
+} from "./schemas/external-x-signals.js";
+export type {
   FeedbackActualMetrics,
   FeedbackAmbiguity,
   FeedbackFormatLearning,

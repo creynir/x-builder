@@ -69,10 +69,10 @@ const withTempDbPath = async <T>(run: (dbPath: string) => Promise<T>): Promise<T
 };
 
 describe("SqliteFeedbackLoopRepository", () => {
-  it("opens new databases at migration version 2", () => {
+  it("opens new databases at migration version 3", () => {
     const db = openEngineDatabase(":memory:");
 
-    expect(db.pragma("user_version", { simple: true })).toBe(2);
+    expect(db.pragma("user_version", { simple: true })).toBe(3);
     expect(
       db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(
         "feedback_prediction",
