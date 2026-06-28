@@ -345,6 +345,9 @@ describe("GenerateIdeasService format path", () => {
   });
 
   it("uses the full small remaining chain budget for the writer timeout", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-20T12:00:00.000Z"));
+
     const { generateStructured, llm } = makeLlmFake(generateSuccess());
     const { judge } = makeAllJudgedFake();
     const service = new GenerateIdeasService(
@@ -355,10 +358,14 @@ describe("GenerateIdeasService format path", () => {
       45_000,
     );
 
-    await service.generate(formatRequest());
+    try {
+      await service.generate(formatRequest());
 
-    const request = generateStructured.mock.calls[0]![0];
-    expect(request.options?.timeoutMs).toBe(45_000);
+      const request = generateStructured.mock.calls[0]![0];
+      expect(request.options?.timeoutMs).toBe(45_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("passes one capped remaining timeout to all candidate judges", async () => {
@@ -380,6 +387,34 @@ describe("GenerateIdeasService format path", () => {
       structuredLlmOptionLimits.timeoutMs,
       structuredLlmOptionLimits.timeoutMs,
     ]);
+  });
+
+  it("passes the same elapsed remaining timeout below the provider cap to all candidate judges", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-20T12:00:00.000Z"));
+
+    const generateStructured = vi.fn(async (_request: StructuredLlmRequest<unknown>) => {
+      vi.setSystemTime(new Date("2026-06-20T12:00:30.000Z"));
+      return generateSuccess() as StructuredLlmProviderResult<unknown>;
+    });
+    const llm = { generateStructured } as unknown as ConstructorParameters<
+      typeof GenerateIdeasService
+    >[0];
+    const { judge, calls } = makeAllJudgedFake();
+    const service = new GenerateIdeasService(llm, { judge }, resolveProvider, resolveProfile, 90_000);
+
+    try {
+      await service.generate(formatRequest());
+
+      expect(calls).toHaveLength(3);
+      expect(calls.map((call) => call.options?.timeoutMs)).toEqual([
+        60_000,
+        60_000,
+        60_000,
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("fails the whole format generation when the chain budget is exhausted before judge fan-out", async () => {
