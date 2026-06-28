@@ -57,6 +57,14 @@ const failure = (
   completedAt: "2026-06-10T12:00:00.000Z",
 });
 
+type JudgeDraftServiceWithOptions = JudgeDraftService & {
+  judge(
+    text: string,
+    accountProfile?: string,
+    options?: { timeoutMs?: number },
+  ): ReturnType<JudgeDraftService["judge"]>;
+};
+
 describe("JudgeDraftService", () => {
   it("builds a candidate_judge request and maps a success result to a judged response", async () => {
     const generateStructured = vi.fn(
@@ -83,6 +91,18 @@ describe("JudgeDraftService", () => {
       "My draft worth judging.",
     );
     expect(request.options?.timeoutMs).toBe(180_000);
+  });
+
+  it("passes a caller-supplied judge timeout through to the structured LLM gateway", async () => {
+    const generateStructured = vi.fn(
+      async (_request: StructuredLlmRequest<JudgeVerdict>) => successResult,
+    );
+    const service = new JudgeDraftService({ generateStructured }) as JudgeDraftServiceWithOptions;
+
+    await service.judge("A draft with a chain-owned timeout.", undefined, { timeoutMs: 45_000 });
+
+    const request = generateStructured.mock.calls[0]![0];
+    expect(request.options?.timeoutMs).toBe(45_000);
   });
 
   it("requires additionalProperties false on every object in the judge output schema for strict structured-output providers", async () => {
