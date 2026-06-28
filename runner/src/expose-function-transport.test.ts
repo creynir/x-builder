@@ -753,6 +753,56 @@ describe("ExposeFunctionTransport — LLM binding guard", () => {
     }
   });
 
+  it("guards generateIdeas format requests while another guarded call is in flight", async () => {
+    const heldJudge = deferred<typeof judgeResponse>();
+    (services.judgeDraftService.judge as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      heldJudge.promise,
+    );
+
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+
+    const judgeDraft = mockPage.handlers.get(B.judgeDraft)!;
+    const generateIdeas = mockPage.handlers.get(B.generateIdeas)!;
+    const inFlight = Promise.resolve(judgeDraft({ text: "A draft worth judging." }));
+
+    expect(services.judgeDraftService.judge).toHaveBeenCalledTimes(1);
+
+    try {
+      await expect(generateIdeas({ format: "hot_take" })).rejects.toMatchObject({
+        code: "llm_binding_busy",
+      });
+      expect(services.generateIdeasService.generate).not.toHaveBeenCalled();
+    } finally {
+      heldJudge.resolve(judgeResponse);
+      await inFlight;
+    }
+  });
+
+  it("guards applyJudgeSuggestions while another guarded call is in flight", async () => {
+    const heldJudge = deferred<typeof judgeResponse>();
+    (services.judgeDraftService.judge as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      heldJudge.promise,
+    );
+
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+
+    const judgeDraft = mockPage.handlers.get(B.judgeDraft)!;
+    const applyJudgeSuggestions = mockPage.handlers.get(B.applyJudgeSuggestions)!;
+    const inFlight = Promise.resolve(judgeDraft({ text: "A draft worth judging." }));
+
+    expect(services.judgeDraftService.judge).toHaveBeenCalledTimes(1);
+
+    try {
+      await expect(applyJudgeSuggestions({ text: "A draft to improve." })).rejects.toMatchObject({
+        code: "llm_binding_busy",
+      });
+      expect(services.applyJudgeSuggestionsService.apply).not.toHaveBeenCalled();
+    } finally {
+      heldJudge.resolve(judgeResponse);
+      await inFlight;
+    }
+  });
+
   it("releases guarded capacity when a guarded service rejects", async () => {
     (services.judgeDraftService.judge as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new Error("judge failed"),
