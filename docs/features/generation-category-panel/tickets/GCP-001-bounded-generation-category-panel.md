@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # GCP-001: Bounded Generation Category Panel
@@ -126,3 +126,5 @@ Expected Red tests:
 ## Pipeline Log
 
 - 2026-06-28: Ticket authored from approved arch recon; stacked-mode scroll ownership concern folded into Visual AC and scope boundaries.
+
+- 2026-06-28: RGB pipeline started; pre-flight passed and ticket moved to in-progress.
