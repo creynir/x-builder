@@ -5,19 +5,19 @@ import {
   type JudgeVerdict,
 } from "@x-builder/shared";
 
+import { ChainDeadline } from "./chain-deadline.js";
 import {
   type JudgeDraft,
   type JudgeProviderResolver,
 } from "./judge-draft-service.js";
 import {
   StructuredLlmService,
+  structuredLlmOptionLimits,
   type StructuredLlmRequest,
 } from "./structured-llm-service.js";
 
 // Default per-chain budget: the chain runs three LLM calls in series (judge ->
-// rewrite -> re-judge). Each step gets a third of this budget. JudgeDraft.judge
-// takes no options, so only the rewrite step receives an explicit timeoutMs; the
-// two judge passes are best-effort, bounded by JudgeDraftService's own cap.
+// rewrite -> re-judge), all drawing from the same wall-clock deadline.
 const defaultChainTimeoutMs = 3 * 60_000;
 
 // Caps that keep the prompt bounded: the verdict carries up to 12 annotations and
@@ -36,6 +36,11 @@ export class ApplySuggestionsError extends Error {
     this.name = "ApplySuggestionsError";
   }
 }
+
+const remainingLlmTimeoutMs = (deadline: ChainDeadline): number => {
+  deadline.assertRemaining();
+  return deadline.remainingMs(structuredLlmOptionLimits.timeoutMs);
+};
 
 const rewriteOutputSchema: Record<string, unknown> = {
   type: "object",
@@ -155,11 +160,14 @@ export class ApplyJudgeSuggestionsService {
   async apply(
     request: ApplyJudgeSuggestionsRequest,
   ): Promise<ApplyJudgeSuggestionsResponse> {
+    const deadline = new ChainDeadline({ budgetMs: this.chainTimeoutMs });
     const profile = await this.resolveProfileSafely();
 
     // Step 1 — judge the original. A failed judge is the never-recoverable head
     // of the chain: throw the typed error the route maps to generation_failed.
-    const originalOutcome = await this.judge.judge(request.text, profile);
+    const originalOutcome = await this.judge.judge(request.text, profile, {
+      timeoutMs: remainingLlmTimeoutMs(deadline),
+    });
     if (originalOutcome.status !== "judged") {
       throw new ApplySuggestionsError(
         originalOutcome.message,
@@ -170,7 +178,6 @@ export class ApplyJudgeSuggestionsService {
     const originalOverall = originalVerdict.scores.overall;
 
     // Step 2 — rewrite, applying the verdict's annotations and improvements.
-    const stepTimeoutMs = Math.floor(this.chainTimeoutMs / 3);
     const provider = await resolveProviderId(this.resolveProvider);
 
     const rewriteRequest: StructuredLlmRequest<string> = {
@@ -183,7 +190,7 @@ export class ApplyJudgeSuggestionsService {
         schema: rewriteOutputSchema,
         parser: toRewrittenText,
       },
-      options: { timeoutMs: stepTimeoutMs },
+      options: { timeoutMs: remainingLlmTimeoutMs(deadline) },
     };
 
     const rewriteResult = await this.llm.generateStructured(rewriteRequest);
@@ -197,7 +204,9 @@ export class ApplyJudgeSuggestionsService {
 
     // Step 3 — re-judge the rewrite. A failed re-judge throws as well, so the
     // route cannot return a rewrite whose quality is unknown.
-    const rewriteOutcome = await this.judge.judge(rewrittenText, profile);
+    const rewriteOutcome = await this.judge.judge(rewrittenText, profile, {
+      timeoutMs: remainingLlmTimeoutMs(deadline),
+    });
     if (rewriteOutcome.status !== "judged") {
       throw new ApplySuggestionsError(
         rewriteOutcome.message,
