@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # LCB-002: [FND] Add runner LLM binding guard
@@ -111,3 +111,4 @@ Isolation boundary: no real browser, live x.com page, real engine services, LLM 
 ## Pipeline Log
 
 - 2026-06-28: Ticket authored from approved arch recon.
+- 2026-06-28: RGB pipeline started; ticket moved to in-progress.
