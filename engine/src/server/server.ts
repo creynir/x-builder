@@ -15,6 +15,8 @@ import {
   applyJudgeSuggestionsRequestSchema,
   applyJudgeSuggestionsResponseSchema,
   activeArchiveContextSchema,
+  addExternalXSignalSourceRequestSchema,
+  addExternalXSignalSourceResponseSchema,
   archiveContextActivationResponseSchema,
   archiveImportOverviewSchema,
   archiveInsightsLatestResponseSchema,
@@ -29,6 +31,8 @@ import {
   generateCategorySchema,
   generateIdeaRequestSchema,
   generateIdeaResponseSchema,
+  getExternalXSignalsOverviewRequestSchema,
+  getExternalXSignalsOverviewResponseSchema,
   getFeedbackLoopSummaryRequestSchema,
   getFeedbackLoopSummaryResponseSchema,
   judgeDraftRequestSchema,
@@ -37,6 +41,10 @@ import {
   linkFeedbackPredictionResponseSchema,
   recordFeedbackPredictionRequestSchema,
   recordFeedbackPredictionResponseSchema,
+  refreshExternalXSignalSourceRequestSchema,
+  refreshExternalXSignalSourceResponseSchema,
+  removeExternalXSignalSourceRequestSchema,
+  removeExternalXSignalSourceResponseSchema,
   suggestPostRequestSchema,
   suggestPostResponseSchema,
   subsystemStatusSchema,
@@ -89,6 +97,9 @@ import { importPostLibraryJsonToSqlite } from "./import-post-library-json.js";
 import { FeedbackLoopService } from "../feedback/feedback-loop-service.js";
 import { SqliteFeedbackLoopRepository } from "../feedback/sqlite-feedback-loop-repository.js";
 import type { FeedbackLoopRepository } from "../feedback/feedback-loop-repository.js";
+import { ExternalXSignalsService } from "../external/external-x-signals-service.js";
+import { SqliteExternalXSignalsRepository } from "../external/sqlite-external-x-signals-repository.js";
+import type { ExternalXSignalsRepository } from "../external/external-x-signals-repository.js";
 import { resolveWorkspaceRoot } from "./workspace-root.js";
 
 export type AnalyzePosts = (request: AnalyzePostsRequest) => Promise<AnalyzePostsResponse> | AnalyzePostsResponse;
@@ -125,6 +136,7 @@ export interface BuildServerOptions {
   settingsRepository?: AppSettingsRepository;
   postLibraryRepository?: PostLibraryRepository;
   feedbackLoopService?: FeedbackLoopService;
+  externalXSignalsService?: ExternalXSignalsService;
   // Storage root whose `storage/x-builder.db` backs the SQLite corpus and against
   // whose `storage/post-library.json` the one-time JSON->SQLite importer runs. When
   // omitted (and no postLibraryRepository is injected) buildServer stays on an empty
@@ -255,6 +267,74 @@ const feedbackSummaryFailedError = (): ApiError =>
     retryable: true,
     status: 500,
   });
+
+const externalXSignalsAddFailedError = (): ApiError =>
+  normalize({
+    code: "external_x_signals_add_failed",
+    message: "The external X signal source could not be saved. Try again.",
+    scope: "external-x-signals",
+    retryable: true,
+    status: 500,
+  });
+
+const externalXSignalsRemoveFailedError = (): ApiError =>
+  normalize({
+    code: "external_x_signals_remove_failed",
+    message: "The external X signal source could not be removed. Try again.",
+    scope: "external-x-signals",
+    retryable: true,
+    status: 500,
+  });
+
+const externalXSignalsRefreshFailedError = (): ApiError =>
+  normalize({
+    code: "external_x_signals_refresh_failed",
+    message: "The external X signal source could not be refreshed. Try again.",
+    scope: "external-x-signals",
+    retryable: true,
+    status: 500,
+  });
+
+const externalXSignalsOverviewFailedError = (): ApiError =>
+  normalize({
+    code: "external_x_signals_overview_failed",
+    message: "The external X signal overview could not be loaded. Try again.",
+    scope: "external-x-signals",
+    retryable: true,
+    status: 500,
+  });
+
+const externalXSignalsParamSchema = z.object({
+  sourceId: z.string().trim().min(1).max(160),
+});
+
+const optionalQueryBooleanSchema = z.preprocess((value) => {
+  if (value === undefined || value === true || value === false) {
+    return value;
+  }
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+
+  return value;
+}, z.boolean().optional());
+
+const externalXSignalsOverviewQuerySchema = z.object({
+  sourceId: z.string().trim().min(1).max(160).optional(),
+  includeRemoved: optionalQueryBooleanSchema,
+  sourceLimit: z.coerce.number().int().min(1).max(100).optional(),
+  patternLimit: z.coerce.number().int().min(1).max(100).optional(),
+  recentEvidenceLimit: z.coerce.number().int().min(1).max(100).optional(),
+  refreshRunLimit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+const objectBody = (body: unknown): Record<string, unknown> =>
+  body !== null && typeof body === "object" && !Array.isArray(body)
+    ? (body as Record<string, unknown>)
+    : {};
 
 const publicProviderMessage = (details: Record<string, unknown> | undefined): string | undefined => {
   const value = details?.providerMessage;
@@ -661,6 +741,7 @@ export const createDefaultJudgeDraftService = (
 type EngineStorageRepositories = {
   postLibraryRepository: PostLibraryRepository;
   feedbackLoopRepository: FeedbackLoopRepository;
+  externalXSignalsRepository: ExternalXSignalsRepository;
 };
 
 // Resolve storage repositories in fixed precedence while preserving the production
@@ -672,9 +753,12 @@ const resolveEngineStorageRepositories = (
   options: BuildServerOptions,
 ): EngineStorageRepositories => {
   if (options.postLibraryRepository) {
+    const db = openEngineDatabase(":memory:");
+
     return {
       postLibraryRepository: options.postLibraryRepository,
-      feedbackLoopRepository: new SqliteFeedbackLoopRepository(openEngineDatabase(":memory:")),
+      feedbackLoopRepository: new SqliteFeedbackLoopRepository(db),
+      externalXSignalsRepository: new SqliteExternalXSignalsRepository(db),
     };
   }
 
@@ -687,6 +771,7 @@ const resolveEngineStorageRepositories = (
     return {
       postLibraryRepository: new SqlitePostLibraryRepository(db),
       feedbackLoopRepository: new SqliteFeedbackLoopRepository(db),
+      externalXSignalsRepository: new SqliteExternalXSignalsRepository(db),
     };
   }
 
@@ -695,6 +780,7 @@ const resolveEngineStorageRepositories = (
   return {
     postLibraryRepository: new SqlitePostLibraryRepository(db),
     feedbackLoopRepository: new SqliteFeedbackLoopRepository(db),
+    externalXSignalsRepository: new SqliteExternalXSignalsRepository(db),
   };
 };
 
@@ -715,6 +801,9 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       feedbackRepository: engineStorage.feedbackLoopRepository,
       postLibraryRepository,
     });
+  const externalXSignalsService =
+    options.externalXSignalsService ??
+    new ExternalXSignalsService({ repository: engineStorage.externalXSignalsRepository });
   const archiveImportService = new ArchiveImportService({ repository: postLibraryRepository });
   const archiveDerivedContextService = new ArchiveDerivedContextService({
     repository: postLibraryRepository,
@@ -1141,6 +1230,76 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       }
 
       throw new NormalizedApiError(feedbackSummaryFailedError());
+    }
+  });
+
+  app.get("/external-x/signals/overview", async (request, reply) => {
+    const query = externalXSignalsOverviewQuerySchema.parse(request.query ?? {});
+    const input = getExternalXSignalsOverviewRequestSchema.parse(query);
+
+    try {
+      const result = await externalXSignalsService.getOverview(input);
+
+      return reply.send(parseResponseContract(getExternalXSignalsOverviewResponseSchema, result));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw error;
+      }
+
+      throw new NormalizedApiError(externalXSignalsOverviewFailedError());
+    }
+  });
+
+  app.post("/external-x/signals/sources", async (request, reply) => {
+    const input = addExternalXSignalSourceRequestSchema.parse(request.body);
+
+    try {
+      const result = await externalXSignalsService.addSource(input);
+
+      return reply.send(parseResponseContract(addExternalXSignalSourceResponseSchema, result));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw error;
+      }
+
+      throw new NormalizedApiError(externalXSignalsAddFailedError());
+    }
+  });
+
+  app.delete("/external-x/signals/sources/:sourceId", async (request, reply) => {
+    const params = externalXSignalsParamSchema.parse(request.params);
+    const input = removeExternalXSignalSourceRequestSchema.parse(params);
+
+    try {
+      const result = await externalXSignalsService.removeSource(input);
+
+      return reply.send(parseResponseContract(removeExternalXSignalSourceResponseSchema, result));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw error;
+      }
+
+      throw new NormalizedApiError(externalXSignalsRemoveFailedError());
+    }
+  });
+
+  app.post("/external-x/signals/sources/:sourceId/refresh", async (request, reply) => {
+    const params = externalXSignalsParamSchema.parse(request.params);
+    const input = refreshExternalXSignalSourceRequestSchema.parse({
+      ...objectBody(request.body),
+      sourceId: params.sourceId,
+    });
+
+    try {
+      const result = await externalXSignalsService.refreshSource(input);
+
+      return reply.send(parseResponseContract(refreshExternalXSignalSourceResponseSchema, result));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw error;
+      }
+
+      throw new NormalizedApiError(externalXSignalsRefreshFailedError());
     }
   });
 

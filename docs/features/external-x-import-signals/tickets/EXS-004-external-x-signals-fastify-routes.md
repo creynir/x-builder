@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # EXS-004: Add ExternalXSignals Fastify routes
@@ -80,3 +80,4 @@ Coverage level: engine route tests. Owning suite: Fastify server tests. Fixture 
 ## Pipeline Log
 
 - 2026-06-28: Ticket authored from approved arch recon.
+- 2026-06-28: Implemented canonical Fastify routes with storage-backed default service wiring and route-level query coercion. Verification: `./node_modules/.bin/vitest run src/server/tests/external-x-signals-routes.test.ts`; `./node_modules/.bin/tsc -p tsconfig.json --noEmit`; `git diff --check`; `python3 /Users/michael/.codex/skills/rgb-tdd/scripts/gates.py all --base 5842e0e`.
