@@ -80,11 +80,12 @@ The count is format-repetition over a rolling 7-day window (deterministic, from 
 
 ### How you know what works vs what doesn't
 
-Three signals, stacked:
+Four signals, stacked:
 
 1. **Reach prediction** (static engine) — your odds of escaping your own trailing median, calibrated to your baseline.
 2. **The judge's reach-oriented dimensions** — replies, profile clicks, audience match, negative risk, etc., rather than abstract "quality".
 3. **The reach playbook** — generation and the cooldown nudges encode a format taxonomy from an observational reach study (recognition formats travel; abstract substance dies at low follower counts; repetition decays reach).
+4. **[My Feedback Loop](docs/how-to/use-my-feedback-loop.md)** — deliberate prediction snapshots compare against locally captured actuals so the settings summary can show which formats beat or trail your account baseline.
 
 All of these are **heuristics and structured opinions, not guarantees** — a sharper second read before you post, not a prediction of real numbers.
 
@@ -146,7 +147,9 @@ Local data:
 | Path | Purpose |
 | --- | --- |
 | `~/.x-builder/engine-settings/settings.json` | The settings above. |
-| `~/.x-builder/engine-settings/storage/post-library.json` | Your corpus (captured + imported posts), import summaries, and active archive context. |
+| `~/.x-builder/engine-settings/storage/x-builder.db` | Your corpus (captured + imported posts), metric observations, import summaries, active archive context, and local feedback predictions/links. |
+
+Earlier versions used `storage/post-library.json`. On startup, the runner imports that file into SQLite once and renames it to `post-library.json.migrated` as a backup. It does not delete the backup or recreate the JSON file.
 
 No hosted account, remote database, or X publishing token is involved.
 
@@ -174,9 +177,6 @@ runner/    Playwright runner — connectOverCDP to your Chrome, injects the over
 engine/    Deterministic scoring, the LLM judge/generate/apply services, archive import,
            cooldown/repetition window, settings + post-library repositories
 shared/    Zod schemas + TypeScript contracts shared across packages
-client/    LEGACY web studio (deprecated). Only client/src/ui (the v2 component
-           primitives) is still used — the overlay imports it. The studio app
-           (app/features/shell/api) is no longer part of the product. See Notes.
 docs/      Feature maps, specs, architecture notes, ticket docs
 tools/     Calibration helpers
 ```
@@ -190,7 +190,7 @@ The runner talks to the engine **in-process** through a transport seam (`EngineT
 - **Never auto-posts.** The overlay fills the composer only on an explicit click; you press Post.
 - **Scores are heuristics, not predictions** of real reach.
 - **Capture is passive** — a new post enters the corpus only after you reload/scroll your profile; the home feed isn't captured.
-- **Legacy studio:** the `client/` web app (the old `/writer` `/voice` `/library` `/settings` studio) is deprecated and not part of the overlay product. Its `ui/` primitives are still shared with the overlay; the rest is dead code pending removal.
+- **Legacy studio docs:** older tickets and specs may still mention the `/writer` `/voice` `/library` `/settings` Studio. The shipped product surface is the overlay; the `client/` package has been removed.
 - **Tests:** the unit-test suite has drifted from recent overlay/judge/provenance changes and needs a refresh pass.
 
 ## Useful commands

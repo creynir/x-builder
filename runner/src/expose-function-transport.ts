@@ -1,5 +1,5 @@
 /**
- * ExposeFunctionTransport (XOB-016) — registers all 17 `__xbuilder_<method>`
+ * ExposeFunctionTransport (XOB-016) — registers all 20 `__xbuilder_<method>`
  * bindings on a Playwright page and routes each call, in-process, to the matching
  * engine service.
  *
@@ -41,9 +41,15 @@ import {
   generateCategorySchema,
   generateIdeaRequestSchema,
   generateIdeaResponseSchema,
+  getFeedbackLoopSummaryRequestSchema,
+  getFeedbackLoopSummaryResponseSchema,
   judgeDraftRequestSchema,
   judgeDraftResponseSchema,
+  linkFeedbackPredictionRequestSchema,
+  linkFeedbackPredictionResponseSchema,
   overlayReadinessSchema,
+  recordFeedbackPredictionRequestSchema,
+  recordFeedbackPredictionResponseSchema,
   suggestPostRequestSchema,
   suggestPostResponseSchema,
 } from "@x-builder/shared";
@@ -66,9 +72,15 @@ import type {
   GenerateCategory,
   GenerateIdeaRequest,
   GenerateIdeaResponse,
+  GetFeedbackLoopSummaryRequest,
+  GetFeedbackLoopSummaryResponse,
   JudgeDraftRequest,
   JudgeDraftResponse,
+  LinkFeedbackPredictionRequest,
+  LinkFeedbackPredictionResponse,
   OverlayReadiness,
+  RecordFeedbackPredictionRequest,
+  RecordFeedbackPredictionResponse,
   SuggestPostRequest,
   SuggestPostResponse,
 } from "@x-builder/shared";
@@ -133,6 +145,11 @@ export interface BoundEngineServices {
   };
   applyJudgeSuggestionsService: {
     apply(request: ApplyJudgeSuggestionsRequest): Promise<ApplyJudgeSuggestionsResponse>;
+  };
+  feedbackLoopService: {
+    recordPrediction(request: RecordFeedbackPredictionRequest): Promise<RecordFeedbackPredictionResponse>;
+    linkPrediction(request: LinkFeedbackPredictionRequest): Promise<LinkFeedbackPredictionResponse>;
+    getSummary(request?: GetFeedbackLoopSummaryRequest): Promise<GetFeedbackLoopSummaryResponse>;
   };
 }
 
@@ -244,11 +261,32 @@ function buildHandlers(services: BoundEngineServices): Readonly<Record<string, E
         await services.applyJudgeSuggestionsService.apply(request),
       );
     },
+
+    recordFeedbackPrediction: async (rawArg) => {
+      const request = recordFeedbackPredictionRequestSchema.parse(rawArg);
+      return recordFeedbackPredictionResponseSchema.parse(
+        await services.feedbackLoopService.recordPrediction(request),
+      );
+    },
+
+    linkFeedbackPrediction: async (rawArg) => {
+      const request = linkFeedbackPredictionRequestSchema.parse(rawArg);
+      return linkFeedbackPredictionResponseSchema.parse(
+        await services.feedbackLoopService.linkPrediction(request),
+      );
+    },
+
+    getFeedbackLoopSummary: async (rawArg) => {
+      const request = getFeedbackLoopSummaryRequestSchema.parse(rawArg ?? {});
+      return getFeedbackLoopSummaryResponseSchema.parse(
+        await services.feedbackLoopService.getSummary(request),
+      );
+    },
   };
 }
 
 /**
- * Registers all 17 `__xbuilder_<method>` engine bindings on a page, each routing
+ * Registers all 20 `__xbuilder_<method>` engine bindings on a page, each routing
  * to the matching engine service with request/response Zod validation.
  */
 export class ExposeFunctionTransport {

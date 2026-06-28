@@ -13,6 +13,7 @@ import {
   type ActiveArchiveContext,
   type AppSettings,
   type CaptureSummary,
+  type GetFeedbackLoopSummaryResponse,
   type JudgeVerdict,
   type OverlayReadiness,
   type ReadinessState,
@@ -189,4 +190,26 @@ export function makeActiveContext(
 /** The empty (deactivated) archive context — toggle off. */
 export function makeEmptyContext(): ActiveArchiveContext {
   return { status: "empty" };
+}
+
+
+/** Build a real empty feedback-loop summary; callers can override totals/recent rows. */
+export function makeFeedbackLoopSummary(
+  overrides: Partial<GetFeedbackLoopSummaryResponse> = {},
+): GetFeedbackLoopSummaryResponse {
+  return {
+    generatedAt: ISO_NOW,
+    windowDays: 90,
+    totals: {
+      predictions: 0,
+      linked: 0,
+      pendingUnlinked: 0,
+      ambiguous: 0,
+      partialActuals: 0,
+      actuals: 0,
+    },
+    formatLearnings: [],
+    recent: [],
+    ...overrides,
+  };
 }

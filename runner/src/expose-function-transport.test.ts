@@ -11,7 +11,7 @@
  *     static bindAll(page: PageLike, services: BoundEngineServices): Promise<void>
  *   }
  *
- * `bindAll` registers all 17 `__xbuilder_<method>` bindings on the page via
+ * `bindAll` registers all 20 `__xbuilder_<method>` bindings on the page via
  * `page.exposeFunction`. Each handler: parse the raw arg with the method's
  * request schema, call the bound service/handler, parse the result with the
  * method's response schema, return it. Zod errors propagate — never swallowed.
@@ -50,9 +50,12 @@ import {
   cooldownReportSchema,
   generateCategorySchema,
   generateIdeaResponseSchema,
+  getFeedbackLoopSummaryResponseSchema,
   judgeDraftRequestSchema,
   judgeDraftResponseSchema,
+  linkFeedbackPredictionResponseSchema,
   overlayReadinessSchema,
+  recordFeedbackPredictionResponseSchema,
   suggestPostResponseSchema,
 } from "@x-builder/shared";
 
@@ -254,6 +257,74 @@ const applyJudgeSuggestionsResponse = {
   improvedOverOriginal: true,
 };
 
+const feedbackPredictionRecord = {
+  id: "feedback-1",
+  clientEventId: "event-1",
+  action: "generated_draft_written" as const,
+  platform: "x" as const,
+  text: "A feedback draft.",
+  contentHash: `sha256:${"b".repeat(64)}`,
+  detectedFormat: "insight_share" as const,
+  sourceFormat: "mini-framework" as const,
+  scoreValue: 72,
+  prediction: {
+    status: "available" as const,
+    signals: [],
+    predictedMidImpressions: 480,
+    stallRange: { low: 200, high: 420 },
+    escapeRange: { low: 900, high: 2600 },
+    escapeProbability: 0.18,
+    expectedReplies: 4,
+    baseImpressions: 320,
+    baseSource: "follower_estimate" as const,
+    qualityBasis: "static" as const,
+    reachModelVersion: "reach-v1",
+  },
+  scoringContext: { followers: 1_200 },
+  analyzerVersion: "deterministic-v1",
+  analyzedAt: NOW_ISO,
+  createdAt: NOW_ISO,
+};
+
+const feedbackLink = {
+  predictionId: "feedback-1",
+  platform: "x" as const,
+  platformPostId: "1800000000000000001",
+  method: "manual_platform_post_id" as const,
+  linkedAt: NOW_ISO,
+};
+
+const recordFeedbackPredictionResponse = {
+  record: feedbackPredictionRecord,
+  duplicate: false,
+};
+
+const linkFeedbackPredictionResponse = { link: feedbackLink };
+
+const getFeedbackLoopSummaryResponse = {
+  generatedAt: NOW_ISO,
+  windowDays: 90,
+  totals: {
+    predictions: 1,
+    linked: 0,
+    pendingUnlinked: 1,
+    ambiguous: 0,
+    partialActuals: 0,
+    actuals: 0,
+  },
+  formatLearnings: [
+    {
+      format: "insight_share" as const,
+      predictionCount: 1,
+      linkedCount: 0,
+      actualCount: 0,
+      direction: "insufficient_data" as const,
+      adjustment: "More linked outcomes are needed before adjusting this format.",
+    },
+  ],
+  recent: [{ status: "pending_unlinked" as const, prediction: feedbackPredictionRecord }],
+};
+
 // ---------------------------------------------------------------------------
 // Mock Page that records [name, handler] pairs so handlers can be invoked
 // ---------------------------------------------------------------------------
@@ -326,6 +397,11 @@ function createMockServices() {
   const applyJudgeSuggestionsService = {
     apply: vi.fn(async () => applyJudgeSuggestionsResponse),
   };
+  const feedbackLoopService = {
+    recordPrediction: vi.fn(async () => recordFeedbackPredictionResponse),
+    linkPrediction: vi.fn(async () => linkFeedbackPredictionResponse),
+    getSummary: vi.fn(async () => getFeedbackLoopSummaryResponse),
+  };
 
   const services = {
     getStatus,
@@ -343,6 +419,7 @@ function createMockServices() {
     liveCaptureService,
     generateCategoryService,
     applyJudgeSuggestionsService,
+    feedbackLoopService,
   };
 
   return services as unknown as BoundEngineServices & typeof services;
@@ -378,6 +455,9 @@ const B = {
   getCaptureSummary: binding("getCaptureSummary"),
   getGenerateCategories: binding("getGenerateCategories"),
   applyJudgeSuggestions: binding("applyJudgeSuggestions"),
+  recordFeedbackPrediction: binding("recordFeedbackPrediction"),
+  linkFeedbackPrediction: binding("linkFeedbackPrediction"),
+  getFeedbackLoopSummary: binding("getFeedbackLoopSummary"),
 } as const;
 
 let mockPage: ReturnType<typeof createMockPage>;
@@ -389,20 +469,20 @@ beforeEach(() => {
 });
 
 describe("ExposeFunctionTransport.bindAll — registration", () => {
-  it("registers exactly the 17 binding names from ENGINE_TRANSPORT_BINDINGS", async () => {
+  it("registers exactly the 20 binding names from ENGINE_TRANSPORT_BINDINGS", async () => {
     await ExposeFunctionTransport.bindAll(mockPage.page, services);
 
     const expected = Object.values(B).slice().sort();
     const registered = [...mockPage.handlers.keys()].sort();
 
     expect(registered).toEqual(expected);
-    expect(registered).toHaveLength(17);
+    expect(registered).toHaveLength(20);
   });
 
   it("calls page.exposeFunction once per binding with a function handler", async () => {
     await ExposeFunctionTransport.bindAll(mockPage.page, services);
 
-    expect(mockPage.exposeFunction).toHaveBeenCalledTimes(17);
+    expect(mockPage.exposeFunction).toHaveBeenCalledTimes(20);
     for (const name of Object.values(B)) {
       expect(mockPage.handlers.get(name)).toBeTypeOf("function");
     }
@@ -591,6 +671,45 @@ describe("ExposeFunctionTransport — remaining bindings round-trip their respon
     const result = await mockPage.handlers.get(B.applyJudgeSuggestions)!({ text: "draft" });
     expect(services.applyJudgeSuggestionsService.apply).toHaveBeenCalledTimes(1);
     expect(() => applyJudgeSuggestionsResponseSchema.parse(result)).not.toThrow();
+  });
+
+  it("recordFeedbackPrediction parses its request and returns a valid response", async () => {
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+    const result = await mockPage.handlers.get(B.recordFeedbackPrediction)!({
+      action: "generated_draft_written",
+      text: "A feedback draft.",
+      snapshot: {
+        detectedFormat: "insight_share",
+        scoreValue: 72,
+        prediction: feedbackPredictionRecord.prediction,
+        scoringContext: { followers: 1_200 },
+        analyzerVersion: "deterministic-v1",
+        analyzedAt: NOW_ISO,
+      },
+    });
+    expect(services.feedbackLoopService.recordPrediction).toHaveBeenCalledTimes(1);
+    expect(() => recordFeedbackPredictionResponseSchema.parse(result)).not.toThrow();
+  });
+
+  it("linkFeedbackPrediction parses its request and returns a valid response", async () => {
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+    const result = await mockPage.handlers.get(B.linkFeedbackPrediction)!({
+      predictionId: "feedback-1",
+      platformPostId: "1800000000000000001",
+      method: "manual_platform_post_id",
+    });
+    expect(services.feedbackLoopService.linkPrediction).toHaveBeenCalledTimes(1);
+    expect(() => linkFeedbackPredictionResponseSchema.parse(result)).not.toThrow();
+  });
+
+  it("getFeedbackLoopSummary accepts an omitted arg and returns a valid response", async () => {
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+    const result = await mockPage.handlers.get(B.getFeedbackLoopSummary)!(undefined);
+    expect(services.feedbackLoopService.getSummary).toHaveBeenCalledWith({
+      windowDays: 90,
+      limit: 50,
+    });
+    expect(() => getFeedbackLoopSummaryResponseSchema.parse(result)).not.toThrow();
   });
 });
 

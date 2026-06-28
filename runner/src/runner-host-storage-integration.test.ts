@@ -9,7 +9,7 @@
  * rename, subsequent write). This suite is disjoint: it verifies the falsifiable
  * ARCHITECTURAL INVARIANTS at the runner host boundary —
  *   - the migrated artifact is a REAL on-disk SQLite db (re-opened via the engine's
- *     exported openEngineDatabase: PRAGMA user_version === 1 + the migration-1
+ *     exported openEngineDatabase: PRAGMA user_version === 2 + the migration-1
  *     table set; a JSON-under-the-hood facade has no such file to re-open), and
  *   - idempotency is STRUCTURAL (row counts in every table unchanged across two
  *     RunnerApp constructions over the same engineSettingsDir).
@@ -210,7 +210,7 @@ describe("runner host construction: the migrated artifact is a real on-disk SQLi
     const db = openEngineDatabase(dbPath);
     try {
       const userVersion = Number(db.pragma("user_version", { simple: true }));
-      expect(userVersion).toBe(1);
+      expect(userVersion).toBe(2);
 
       const tableRows = db
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")

@@ -13,6 +13,7 @@ import { cleanup, render } from "vitest-browser-react";
 import {
   makeAppSettings,
   makeCaptureSummary,
+  makeFeedbackLoopSummary,
   makeOverlayReadiness,
   subsystem,
 } from "../testing/fixtures";
@@ -33,8 +34,11 @@ function mountPanel(
       settings={makeAppSettings()}
       readiness={makeOverlayReadiness()}
       capture={makeCaptureSummary()}
+      feedback={makeFeedbackLoopSummary()}
       onUpdateSettings={vi.fn()}
       onUploadArchive={vi.fn()}
+      onRefreshFeedback={vi.fn()}
+      onLinkFeedback={vi.fn()}
       {...overrides}
     />,
     { container: harness.mount },

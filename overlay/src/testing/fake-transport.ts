@@ -1,7 +1,7 @@
 // @x-builder/overlay — FakeEngineTransport (test-only)
 //
 // A configurable, type-safe stand-in for the REAL shared `EngineTransport`.
-// It implements all 17 methods; each resolves to a minimal valid
+// It implements all 20 methods; each resolves to a minimal valid
 // default (`{}` cast to the method's return type) unless an override is
 // supplied via the constructor. Used as the injected transport in overlay
 // tests via `OverlayTransportProvider`.
@@ -49,7 +49,7 @@ function bind<K extends keyof EngineTransport>(
 
 /**
  * Test-only `EngineTransport`. `const t: EngineTransport = new
- * FakeEngineTransport()` type-checks, and the instance exposes exactly the 17
+ * FakeEngineTransport()` type-checks, and the instance exposes exactly the 20
  * method names in `ENGINE_TRANSPORT_BINDINGS`.
  */
 export class FakeEngineTransport implements EngineTransport {
@@ -70,6 +70,9 @@ export class FakeEngineTransport implements EngineTransport {
   getCaptureSummary: EngineTransport["getCaptureSummary"];
   getGenerateCategories: EngineTransport["getGenerateCategories"];
   applyJudgeSuggestions: EngineTransport["applyJudgeSuggestions"];
+  recordFeedbackPrediction: EngineTransport["recordFeedbackPrediction"];
+  linkFeedbackPrediction: EngineTransport["linkFeedbackPrediction"];
+  getFeedbackLoopSummary: EngineTransport["getFeedbackLoopSummary"];
 
   constructor(overrides: FakeTransportOverrides = {}) {
     this.getOverlayReadiness = bind(overrides, "getOverlayReadiness");
@@ -89,5 +92,8 @@ export class FakeEngineTransport implements EngineTransport {
     this.getCaptureSummary = bind(overrides, "getCaptureSummary");
     this.getGenerateCategories = bind(overrides, "getGenerateCategories");
     this.applyJudgeSuggestions = bind(overrides, "applyJudgeSuggestions");
+    this.recordFeedbackPrediction = bind(overrides, "recordFeedbackPrediction");
+    this.linkFeedbackPrediction = bind(overrides, "linkFeedbackPrediction");
+    this.getFeedbackLoopSummary = bind(overrides, "getFeedbackLoopSummary");
   }
 }

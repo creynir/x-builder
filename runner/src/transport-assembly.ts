@@ -1,7 +1,7 @@
 /**
  * Transport-assembly seam (XOB-033).
  *
- * The runner exposes 17 raw `__xbuilder_<method>` functions on the page (via
+ * The runner exposes 20 raw `__xbuilder_<method>` functions on the page (via
  * {@link ExposeFunctionTransport.bindAll} → `page.exposeFunction`), which surface
  * as `window.__xbuilder_<method>`. The overlay, however, reads a single assembled
  * `window.__xbTransport` object ({@link OverlayTransportProvider}). This module is

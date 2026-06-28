@@ -9,13 +9,13 @@
  *
  * WHAT THIS SUITE DRIVES (the build XOB hands the Green agent):
  *   1. A real `BoundEngineServices` adapter bundle — a constructed object that
- *      wires every engine service the 17 bindings map to, consumed by
+ *      wires every engine service the 20 bindings map to, consumed by
  *      `ExposeFunctionTransport.bindAll`. Exposed as a factory from the runner
  *      package (imported below as `createBoundEngineServices`). It does NOT
  *      exist yet, so the import fails to resolve — the intended Red state
  *      (missing implementation, not a broken test).
  *   2. `RunnerApp` default wiring: with NO `bindTransport`/`attachObserver`
- *      injected, `start()` must register exactly the 17 `__xbuilder_*` bindings
+ *      injected, `start()` must register exactly the 20 `__xbuilder_*` bindings
  *      on the page and register a single response listener on the context.
  *   3. Arg-shape adapters: `judgeDraft` maps `req → judge(req.text,
  *      req.accountProfile)` and unwraps `JudgeDraftOutcome → JudgeDraftResponse`;
@@ -47,11 +47,15 @@ import {
   deriveApproved,
   generateIdeaRequestSchema,
   generateIdeaResponseSchema,
+  getFeedbackLoopSummaryResponseSchema,
   judgeDraftResponseSchema,
+  linkFeedbackPredictionResponseSchema,
+  recordFeedbackPredictionResponseSchema,
   overlayReadinessSchema,
   type AnalyzePostsRequest,
   type CaptureIngestRequest,
   type JudgeVerdict,
+  type RecordFeedbackPredictionRequest,
 } from "@x-builder/shared";
 import {
   JsonFileAppSettingsRepository,
@@ -271,6 +275,34 @@ function analyzeRequest(text: string): AnalyzePostsRequest {
   } as AnalyzePostsRequest;
 }
 
+function feedbackRecordRequest(text = "Feedback transport draft with no captured match."): RecordFeedbackPredictionRequest {
+  return {
+    clientEventId: `feedback-${text.length}`,
+    action: "manual_record_posted_draft",
+    text,
+    snapshot: {
+      detectedFormat: "genuine_question",
+      scoreValue: 72,
+      prediction: {
+        status: "available",
+        signals: [{ signal_key: "quality_voice", label: "Static score 72", multiplier: 0.8 }],
+        predictedMidImpressions: 230,
+        stallRange: { low: 120, high: 276 },
+        escapeRange: { low: 570, high: 2280 },
+        escapeProbability: 0.1,
+        expectedReplies: 3,
+        baseImpressions: 190,
+        baseSource: "follower_estimate",
+        qualityBasis: "static",
+        reachModelVersion: "reach-v1",
+      },
+      scoringContext: { followers: 1000 },
+      analyzerVersion: "deterministic-v1",
+      analyzedAt: ISO,
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Build the real bundle over tmpdir repositories + the fake LLM. The exact
 // option surface is the Green agent's to define; this is the behavior the
@@ -321,11 +353,11 @@ function createMockPage() {
 }
 
 // ===========================================================================
-// Invariant #1 — bindings are 1:1 with EngineTransport (exactly the 17 names).
+// Invariant #1 — bindings are 1:1 with EngineTransport (exactly the 20 names).
 // ===========================================================================
 
 describe("real engine bundle — binding registration (invariant #1)", () => {
-  it("binds exactly the 17 __xbuilder_* names enumerated from EngineTransport", async () => {
+  it("binds exactly the 20 __xbuilder_* names enumerated from EngineTransport", async () => {
     const { services } = buildBundle();
     const mockPage = createMockPage();
 
@@ -334,9 +366,9 @@ describe("real engine bundle — binding registration (invariant #1)", () => {
     const expected = Object.values(ENGINE_TRANSPORT_BINDINGS).slice().sort();
     const registered = [...mockPage.handlers.keys()].sort();
 
-    expect(expected).toHaveLength(17);
+    expect(expected).toHaveLength(20);
     expect(registered).toEqual(expected);
-    expect(registered).toHaveLength(17);
+    expect(registered).toHaveLength(20);
   });
 });
 
@@ -546,7 +578,88 @@ describe("real engine bundle — generateIdeas refine attaches verdict + approve
 });
 
 // ===========================================================================
-// RunnerApp DEFAULT wiring (NEW BUILD): bindTransport binds the 17, attachObserver
+// Feedback loop transport: real bound services behind record/link/summary.
+// ===========================================================================
+
+describe("real engine bundle — feedback loop transport", () => {
+  it("records a prediction through transport and returns pending_unlinked with no captured post", async () => {
+    const { services } = buildBundle();
+    const mockPage = createMockPage();
+    await ExposeFunctionTransport.bindAll(mockPage.page as never, services);
+
+    const recordHandler = mockPage.handlers.get(ENGINE_TRANSPORT_BINDINGS.recordFeedbackPrediction)!;
+    const summaryHandler = mockPage.handlers.get(ENGINE_TRANSPORT_BINDINGS.getFeedbackLoopSummary)!;
+
+    const recorded = recordFeedbackPredictionResponseSchema.parse(
+      await recordHandler(feedbackRecordRequest()),
+    );
+    const summary = getFeedbackLoopSummaryResponseSchema.parse(
+      await summaryHandler({ windowDays: 90, limit: 10 }),
+    );
+
+    expect(recorded.record.action).toBe("manual_record_posted_draft");
+    expect(summary.recent[0]).toMatchObject({
+      status: "pending_unlinked",
+      prediction: { id: recorded.record.id },
+    });
+  });
+
+  it("links a prediction through transport and reads actuals from the post library", async () => {
+    await postLibraryRepository.upsertPosts([
+      voicePost({
+        id: "manual-feedback-target",
+        platformPostId: "1800000000000000099",
+        text: "A captured post with live metrics.",
+        createdAt: ISO,
+        metricSnapshots: [
+          {
+            source: "x_live_capture",
+            capturedAt: ISO,
+            impressions: 520,
+            likes: 20,
+            reposts: 2,
+            replies: 4,
+          },
+        ],
+      }),
+    ]);
+
+    const { services } = buildBundle();
+    const mockPage = createMockPage();
+    await ExposeFunctionTransport.bindAll(mockPage.page as never, services);
+
+    const recordHandler = mockPage.handlers.get(ENGINE_TRANSPORT_BINDINGS.recordFeedbackPrediction)!;
+    const linkHandler = mockPage.handlers.get(ENGINE_TRANSPORT_BINDINGS.linkFeedbackPrediction)!;
+    const summaryHandler = mockPage.handlers.get(ENGINE_TRANSPORT_BINDINGS.getFeedbackLoopSummary)!;
+
+    const recorded = recordFeedbackPredictionResponseSchema.parse(
+      await recordHandler(feedbackRecordRequest("A draft linked by platform id.")),
+    );
+    const linked = linkFeedbackPredictionResponseSchema.parse(
+      await linkHandler({
+        predictionId: recorded.record.id,
+        platformPostId: "1800000000000000099",
+        method: "manual_platform_post_id",
+      }),
+    );
+    const summary = getFeedbackLoopSummaryResponseSchema.parse(
+      await summaryHandler({ windowDays: 90, limit: 10 }),
+    );
+
+    expect(linked.link).toMatchObject({
+      predictionId: recorded.record.id,
+      method: "manual_platform_post_id",
+    });
+    expect(summary.recent[0]).toMatchObject({
+      status: "linked",
+      link: { method: "manual_platform_post_id", platformPostId: "1800000000000000099" },
+      actual: { impressions: 520 },
+    });
+  });
+});
+
+// ===========================================================================
+// RunnerApp DEFAULT wiring (NEW BUILD): bindTransport binds the 20, attachObserver
 // registers a single response listener.
 // ===========================================================================
 
@@ -584,7 +697,7 @@ describe("RunnerApp default wiring — transport + observer", () => {
     return path;
   }
 
-  it("registers all 17 __xbuilder_* bindings on the page with NO bindTransport override", async () => {
+  it("registers all 20 __xbuilder_* bindings on the page with NO bindTransport override", async () => {
     const fake = createFakeContext();
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -602,7 +715,7 @@ describe("RunnerApp default wiring — transport + observer", () => {
 
     const expected = Object.values(ENGINE_TRANSPORT_BINDINGS).slice().sort();
     expect([...fake.exposed.keys()].sort()).toEqual(expected);
-    expect(fake.exposed.size).toBe(17);
+    expect(fake.exposed.size).toBe(20);
   });
 
   it("attaches a single response listener on the context with NO attachObserver override (capture observed, not injected — invariant #6)", async () => {

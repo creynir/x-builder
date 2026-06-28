@@ -590,7 +590,7 @@ describe("user flow: round-trip through the repository interface", () => {
 // ARCHITECTURAL INVARIANT — SQLite is the real on-disk artifact.
 //
 // Falsifiable: a JSON-under-the-hood facade (or an in-memory-only impl) would
-// lack a real x-builder.db file whose PRAGMA user_version is 1 and whose
+// lack a real x-builder.db file whose PRAGMA user_version is 2 and whose
 // sqlite_master holds the seven migration-1 tables — so this test would fail it.
 // ===========================================================================
 
@@ -615,7 +615,7 @@ describe("invariant: the migrated artifact is a real SQLite database on disk", (
     const raw = new Database(join(dir, DB_FILE), { readonly: true });
     try {
       const userVersion = Number(raw.pragma("user_version", { simple: true }));
-      expect(userVersion).toBe(1);
+      expect(userVersion).toBe(2);
 
       const tableRows = raw
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -641,17 +641,17 @@ describe("invariant: the migrated artifact is a real SQLite database on disk", (
 // ===========================================================================
 // ARCHITECTURAL INVARIANT — Interface + transport unchanged by LPF.
 //
-// Falsifiable: LPF added no transport methods (still 17) and no repository
+// Falsifiable: LPF added no transport methods (now 20) and no repository
 // methods (still the 6). A drift in either count fails these — the assertions
 // are counts, not existence.
 // ===========================================================================
 
 describe("invariant: the transport and repository surfaces are unchanged by LPF", () => {
-  it("ENGINE_TRANSPORT_BINDINGS exposes exactly 17 methods", () => {
+  it("ENGINE_TRANSPORT_BINDINGS exposes exactly 20 methods", () => {
     const keys = Object.keys(ENGINE_TRANSPORT_BINDINGS).filter(
       (key) => typeof ENGINE_TRANSPORT_BINDINGS[key] === "string",
     );
-    expect(keys).toHaveLength(17);
+    expect(keys).toHaveLength(20);
   });
 
   it("the SqlitePostLibraryRepository implements exactly the 6 PostLibraryRepository methods", async () => {

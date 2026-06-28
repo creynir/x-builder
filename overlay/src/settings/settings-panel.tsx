@@ -14,13 +14,19 @@
 // not an AppSettings field. Loading / error envelopes degrade per section to a
 // Skeleton / inline danger Alert.
 
-import type { AppSettings, CaptureSummary, OverlayReadiness } from "@x-builder/shared";
+import type {
+  AppSettings,
+  CaptureSummary,
+  GetFeedbackLoopSummaryResponse,
+  OverlayReadiness,
+} from "@x-builder/shared";
 import type { CSSProperties, ReactElement, ReactNode, RefObject } from "react";
 
 import { Alert } from "../ui/v2/alert";
 import { KeyValueList, type KeyValueItem } from "../ui/v2/key-value-list";
 import { Skeleton } from "../ui/v2/skeleton";
 import { ArchiveUploadSection, type ArchiveUploadState } from "./archive-upload-section";
+import { FeedbackLoopSettingsSection } from "./feedback-loop-section";
 import { JudgeProviderSection } from "./judge-provider-section";
 import { ReadinessIndicator } from "./readiness-indicator";
 
@@ -32,8 +38,11 @@ export interface SettingsPanelProps {
   settings: Loadable<AppSettings>;
   readiness: Loadable<OverlayReadiness>;
   capture: Loadable<CaptureSummary>;
+  feedback: Loadable<GetFeedbackLoopSummaryResponse>;
   onUpdateSettings(next: AppSettings): void;
   onUploadArchive(file: File): void;
+  onRefreshFeedback(): void;
+  onLinkFeedback(predictionId: string, platformPostId: string): Promise<void>;
   /** Affordance-supplied interactive controls (e.g. the active-context toggle). */
   children?: ReactNode;
   /** Upload feedback state, owned by the affordance. */
@@ -117,8 +126,11 @@ export function SettingsPanel({
   settings,
   readiness,
   capture,
+  feedback,
   onUpdateSettings,
   onUploadArchive,
+  onRefreshFeedback,
+  onLinkFeedback,
   children,
   uploadState = "idle",
   selectorMissCount = 0,
@@ -171,6 +183,14 @@ export function SettingsPanel({
             />
           </div>
         )}
+      </Section>
+
+      <Section title="Feedback loop">
+        <FeedbackLoopSettingsSection
+          summary={feedback}
+          onRefresh={onRefreshFeedback}
+          onLink={onLinkFeedback}
+        />
       </Section>
 
       <Section title="X archive">

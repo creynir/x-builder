@@ -41,10 +41,19 @@ arch-recon
 - [`codex-adapter`](./codex-adapter/) — the CLI provider layer (codex / claude / cursor)
 - [`generation-and-judge-surface`](./generation-and-judge-surface/) — generate, apply-all, annotations, account profile
 - [`my-x-archive-import`](./my-x-archive-import/) — `tweets.js` import (the optional fast-start corpus source)
+- [`local-persistence-foundation`](./local-persistence-foundation/) — local SQLite corpus store + one-time JSON migration
+- [`my-feedback-loop`](./my-feedback-loop/) — local predicted-vs-actual feedback over captured post performance
 
-**Planned:**
+**Next build queue:**
 
-- [`external-feedback-loop`](./external-feedback-loop/) · [`my-feedback-loop`](./my-feedback-loop/) — close the predict → measure → learn loop
+1. [`smarter-generation-context`](./smarter-generation-context/) - send the LLM only the requested format's playbook slice plus a tight voice sample instead of the whole knowledge base.
+2. **LLM chain budget / rate guard** — cap multi-call generate/apply chains and add basic protection around LLM-spawning bindings.
+3. **Refactor hotspots** — split `engine/src/server/server.ts` and `overlay/src/compose/compose-cockpit.tsx` after behavior is pinned.
+
+**Planned feature areas:**
+
+- [`external-feedback-loop`](./external-feedback-loop/) — external or hosted feedback-signal expansion beyond the local My Feedback Loop
 - [`external-x-import-signals`](./external-x-import-signals/) — external reach signals
+- `voice-rag-generation` — future vector index / voice retrieval on top of the SQLite store
 
-> Folders removed in the overlay pivot (the SPA writer studio era): `be-ui-shell`, `voice-profile`, `writer-logic`, `my-x-data-import`, `my-x-api-sync`, `post-library-manual-import`, `publish-export`. Voice is now corpus-derived (no standalone voice-profile builder); capture replaces API sync.
+> Folders removed in the overlay pivot (the SPA writer studio era): `be-ui-shell`, `voice-profile`, `writer-logic`, `my-x-data-import`, `my-x-api-sync`, `post-library-manual-import`, `publish-export`. Voice is now corpus-derived (no standalone voice-profile builder); capture replaces API sync. Ticket files under those older feature trees are historical and should not be used as current product truth without checking the feature README and code.

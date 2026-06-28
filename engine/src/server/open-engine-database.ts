@@ -88,19 +88,68 @@ CREATE TABLE active_context (
 );
 `;
 
+const migration2Ddl = `
+CREATE TABLE feedback_prediction (
+  id TEXT PRIMARY KEY,
+  client_event_id TEXT UNIQUE,
+  action TEXT NOT NULL,
+  platform TEXT NOT NULL DEFAULT 'x' CHECK (platform = 'x'),
+  content_hash TEXT NOT NULL,
+  text TEXT NOT NULL,
+  detected_format_snapshot TEXT NOT NULL,
+  source_format TEXT,
+  score_value REAL NOT NULL,
+  predicted_mid_impressions INTEGER NOT NULL,
+  stall_low INTEGER NOT NULL,
+  stall_high INTEGER NOT NULL,
+  escape_low INTEGER NOT NULL,
+  escape_high INTEGER NOT NULL,
+  escape_probability REAL NOT NULL,
+  expected_replies REAL NOT NULL,
+  base_impressions INTEGER NOT NULL,
+  base_source TEXT NOT NULL,
+  quality_basis TEXT NOT NULL,
+  reach_model_version TEXT NOT NULL,
+  prediction_signals_json TEXT NOT NULL,
+  scoring_context_json TEXT NOT NULL,
+  analyzer_version TEXT NOT NULL,
+  analyzed_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE feedback_prediction_link (
+  prediction_id TEXT PRIMARY KEY REFERENCES feedback_prediction(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL DEFAULT 'x' CHECK (platform = 'x'),
+  platform_post_id TEXT NOT NULL,
+  method TEXT NOT NULL,
+  linked_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_feedback_prediction_hash ON feedback_prediction(content_hash);
+CREATE INDEX idx_feedback_prediction_created ON feedback_prediction(created_at);
+CREATE INDEX idx_feedback_prediction_format ON feedback_prediction(detected_format_snapshot, created_at);
+CREATE INDEX idx_feedback_link_post ON feedback_prediction_link(platform_post_id);
+`;
+
 export type Migration = {
   version: number;
   up(db: DatabaseHandle): void;
 };
 
-// Ordered ascending by version. Later features (voice-rag-generation) append
-// migrations 2 and 3 here without editing the existing entries; the runner only
-// applies migrations whose version exceeds the current PRAGMA user_version.
+// Ordered ascending by version. Later features append migrations without editing
+// existing entries; the runner only applies migrations whose version exceeds the
+// current PRAGMA user_version.
 export const migrations: Migration[] = [
   {
     version: 1,
     up(db) {
       db.exec(migration1Ddl);
+    },
+  },
+  {
+    version: 2,
+    up(db) {
+      db.exec(migration2Ddl);
     },
   },
 ];

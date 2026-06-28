@@ -17,6 +17,7 @@
 
 import {
   deriveApproved,
+  type FeedbackPredictionAction,
   type GenerateCategory,
   type GeneratedIdeaCandidate,
   type JudgeVerdict,
@@ -51,6 +52,9 @@ import {
 } from "./compose-machine";
 import { StaticEngineColumn, type AnalyzeState } from "./static-engine-column";
 import { JudgeStrip, type JudgeState } from "../judge/judge-strip";
+import { Alert } from "../ui/v2/alert";
+import { Badge } from "../ui/v2/badge";
+import { Button } from "../ui/v2/button";
 import type { ExplainerSource } from "../explainer/types";
 import type { ScoredPostItem } from "./types";
 import { useComposeSnapshot, type SnapshotRect } from "./use-compose-snapshot";
@@ -161,6 +165,70 @@ type JudgeUiState =
   | { status: "judged"; verdict: JudgeVerdict; judgedText: string }
   | { status: "failed"; error: string };
 
+type FeedbackRecordState =
+  | { status: "idle" }
+  | { status: "recording" }
+  | { status: "recorded"; linked: boolean }
+  | { status: "failed"; message: string };
+
+function feedbackStateCopy(state: FeedbackRecordState): string | null {
+  switch (state.status) {
+    case "idle":
+      return null;
+    case "recording":
+      return "Recording";
+    case "recorded":
+      return state.linked ? "Recorded" : "Needs link";
+    case "failed":
+      return state.message;
+  }
+}
+
+function FeedbackRecordControl({
+  state,
+  canRecord,
+  onRecordPosted,
+}: {
+  state: FeedbackRecordState;
+  canRecord: boolean;
+  onRecordPosted(): void;
+}): ReactElement {
+  const copy = feedbackStateCopy(state);
+  const recordedVariant = state.status === "recorded" && state.linked ? "success" : "warning";
+
+  return (
+    <div
+      data-feedback-record-control
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--space-2)",
+        flexWrap: "wrap",
+        marginTop: "var(--space-2)",
+      }}
+      aria-live="polite"
+    >
+      <Button
+        variant="secondary"
+        size="sm"
+        flat
+        disabled={!canRecord || state.status === "recording"}
+        loading={state.status === "recording"}
+        onClick={onRecordPosted}
+      >
+        Record posted draft
+      </Button>
+      {state.status === "recorded" ? (
+        <Badge variant={recordedVariant}>{copy}</Badge>
+      ) : state.status === "failed" ? (
+        <Alert variant="warning">{copy}</Alert>
+      ) : copy !== null ? (
+        <Badge variant="info">{copy}</Badge>
+      ) : null}
+    </div>
+  );
+}
+
 const ROOT_STYLE: CSSProperties = {
   position: "fixed",
   inset: 0,
@@ -220,6 +288,8 @@ function ActiveCockpit({
   // (a button), persists across edits, and is aborted-by-token like the rest.
   const [judgeUi, setJudgeUi] = useState<JudgeUiState>({ status: "idle" });
   const judgeTokenRef = useRef(0);
+  const [feedbackRecordState, setFeedbackRecordState] = useState<FeedbackRecordState>({ status: "idle" });
+  const feedbackEventSeq = useRef(0);
 
   // The monotonic request token: bumped on a composer edit; a stale resolution
   // (token !== current) is dropped, so an edit aborts the in-flight judge/apply.
@@ -320,6 +390,69 @@ function ActiveCockpit({
     [transport],
   );
 
+  const analyzeExactText = useCallback(
+    async (text: string): Promise<ScoredPostItem | undefined> => {
+      const response = await transport.analyzePosts({
+        items: [{ id: "feedback-draft", text }],
+        scoringContext: followers !== undefined ? { followers } : {},
+        presentation: { postCoachMode: "preview" },
+      });
+      const first = response.items[0];
+      return first !== undefined && first.status === "scored" ? first : undefined;
+    },
+    [transport, followers],
+  );
+
+  const recordFeedback = useCallback(
+    (
+      action: FeedbackPredictionAction,
+      text: string,
+      scored: ScoredPostItem | undefined,
+      token?: number,
+    ): void => {
+      const trimmed = text.trim();
+      if (trimmed === "") return;
+      setFeedbackRecordState({ status: "recording" });
+      void (async () => {
+        try {
+          const result = scored ?? (await analyzeExactText(trimmed));
+          if (token !== undefined && tokenRef.current !== token) return;
+          if (result === undefined || result.prediction.status !== "available") {
+            setFeedbackRecordState({ status: "failed", message: "Reach prediction unavailable" });
+            return;
+          }
+
+          const response = await transport.recordFeedbackPrediction({
+            clientEventId: `compose-${action}-${++feedbackEventSeq.current}`,
+            action,
+            text: trimmed,
+            snapshot: {
+              detectedFormat: result.detectedFormat,
+              sourceFormat: result.sourceFormat,
+              scoreValue: result.score.value,
+              prediction: result.prediction,
+              scoringContext: followers !== undefined ? { followers } : {},
+              analyzerVersion: result.analyzerVersion,
+              analyzedAt: result.analyzedAt,
+            },
+          });
+          if (token !== undefined && tokenRef.current !== token) return;
+          setFeedbackRecordState({
+            status: "recorded",
+            linked: response.link !== undefined,
+          });
+        } catch (error) {
+          if (token !== undefined && tokenRef.current !== token) return;
+          setFeedbackRecordState({
+            status: "failed",
+            message: error instanceof Error ? error.message : "Feedback record failed",
+          });
+        }
+      })();
+    },
+    [analyzeExactText, transport, followers],
+  );
+
   // ---- The debounced analyze → judge runner --------------------------------
   // Keyed on the ComposeContext composer text. A ~350 ms debounce re-collapses a
   // change burst and kicks `analyzePosts`; on success it auto-kicks the
@@ -396,6 +529,7 @@ function ActiveCockpit({
       tokenRef.current += 1;
       judgeTokenRef.current += 1;
       dispatch({ type: "typing" });
+      setFeedbackRecordState({ status: "idle" });
     };
     composerEl.addEventListener("input", onInput);
     return () => composerEl.removeEventListener("input", onInput);
@@ -458,6 +592,7 @@ function ActiveCockpit({
           if (analyzeResult !== undefined) {
             dispatch({ type: "analyze_succeeded", analyzeResult, followers });
           }
+          recordFeedback("generated_draft_written", written, analyzeResult, token);
 
           if (best.verdict !== undefined) {
             // Pre-judged candidate: adopt its verdict (generated posts are judged
@@ -474,7 +609,7 @@ function ActiveCockpit({
         }
       })();
     },
-    [transport, writeComposer, runJudge, followers],
+    [transport, writeComposer, runJudge, followers, recordFeedback],
   );
 
   // ---- Apply-all (improve) -------------------------------------------------
@@ -497,6 +632,7 @@ function ActiveCockpit({
           verdict: result.verdict,
           improvedOverOriginal: result.improvedOverOriginal,
         });
+        recordFeedback("apply_all_result_written", result.text, undefined, token);
       } catch (error) {
         if (tokenRef.current !== token) return;
         dispatch({
@@ -505,7 +641,7 @@ function ActiveCockpit({
         });
       }
     })();
-  }, [composerEl, transport, writeComposer]);
+  }, [composerEl, transport, writeComposer, recordFeedback]);
 
   // ---- Retry handlers ------------------------------------------------------
   const onRetryStatic = useCallback((): void => {
@@ -547,6 +683,12 @@ function ActiveCockpit({
   // ---- Derived child props --------------------------------------------------
   const analyzeState = deriveAnalyzeState(state.phase);
   const pendingCategory = state.phase.phase === "generating" ? state.phase.categoryId : undefined;
+
+  const onRecordPostedDraft = useCallback((): void => {
+    const text = composerEl.innerText ?? composerEl.textContent ?? "";
+    const currentScored = analyzeState.status === "ready" ? analyzeState.result : undefined;
+    recordFeedback("manual_record_posted_draft", text, currentScored);
+  }, [composerEl, analyzeState, recordFeedback]);
 
   const latestVerdict: JudgeVerdict | null =
     judgeUi.status === "judged" ? judgeUi.verdict : null;
@@ -632,6 +774,11 @@ function ActiveCockpit({
                   approved={ctx.approved}
                   onApplyAll={onApplyAll}
                   explainer={explainer}
+                />
+                <FeedbackRecordControl
+                  state={feedbackRecordState}
+                  canRecord={composerText.trim().length > 0}
+                  onRecordPosted={onRecordPostedDraft}
                 />
               </div>
 

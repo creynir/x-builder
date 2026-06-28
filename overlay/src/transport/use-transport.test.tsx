@@ -8,7 +8,7 @@ import { FakeEngineTransport } from "../testing/fake-transport";
 import { OverlayTransportProvider } from "./provider";
 import { useTransport } from "./use-transport";
 
-/** The 17 LOCKED method names, taken from the real shared binding registry. */
+/** The 20 LOCKED method names, taken from the real shared binding registry. */
 const METHOD_NAMES = Object.keys(ENGINE_TRANSPORT_BINDINGS);
 
 /** A representative call argument per method (signatures come from the real type). */
@@ -30,6 +30,9 @@ const CALL_ARGS: Record<string, unknown[]> = {
   getCaptureSummary: [],
   getGenerateCategories: [],
   applyJudgeSuggestions: [{ text: "draft" }],
+  recordFeedbackPrediction: [{}],
+  linkFeedbackPrediction: [{}],
+  getFeedbackLoopSummary: [],
 };
 
 afterEach(() => {
@@ -37,7 +40,7 @@ afterEach(() => {
 });
 
 describe("FakeEngineTransport — shape", () => {
-  it("implements exactly the 17 real EngineTransport methods", () => {
+  it("implements exactly the 20 real EngineTransport methods", () => {
     const fake = new FakeEngineTransport();
     const ownMethods = METHOD_NAMES.filter(
       (name) =>
@@ -45,9 +48,9 @@ describe("FakeEngineTransport — shape", () => {
         "function",
     );
 
-    expect(METHOD_NAMES).toHaveLength(17);
+    expect(METHOD_NAMES).toHaveLength(20);
     expect(new Set(ownMethods)).toEqual(new Set(METHOD_NAMES));
-    expect(ownMethods).toHaveLength(17);
+    expect(ownMethods).toHaveLength(20);
   });
 
   it("is assignable to the real EngineTransport type (TS-enforced)", () => {
@@ -75,7 +78,7 @@ describe("FakeEngineTransport — shape", () => {
 });
 
 describe("useTransport inside OverlayTransportProvider", () => {
-  it("returns the injected FakeEngineTransport and resolves all 17 method calls", async () => {
+  it("returns the injected FakeEngineTransport and resolves all 20 method calls", async () => {
     const fake = new FakeEngineTransport();
     const results: unknown[] = [];
     let failure: unknown = null;
@@ -111,7 +114,7 @@ describe("useTransport inside OverlayTransportProvider", () => {
 
     await vi.waitFor(() => {
       expect(failure).toBeNull();
-      expect(results).toHaveLength(17);
+      expect(results).toHaveLength(20);
     });
   });
 });

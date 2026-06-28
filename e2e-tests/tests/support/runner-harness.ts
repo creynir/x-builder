@@ -280,6 +280,13 @@ function readyReadinessService() {
 }
 
 /** A running harness instance. */
+export interface SeedCapturedPostInput {
+  platformPostId: string;
+  text: string;
+  impressions?: number;
+  id?: string;
+}
+
 export interface RunnerHarness {
   app: RunnerApp;
   page: Page;
@@ -290,6 +297,8 @@ export interface RunnerHarness {
   mountOverlay(): Promise<void>;
   /** Invoke a page-exposed `__xbuilder_<method>` engine binding directly. */
   callBinding(method: string, arg?: unknown): Promise<unknown>;
+  /** Seed a captured own post into the temp post library used by bound services. */
+  seedCapturedPost(input: SeedCapturedPostInput): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -321,6 +330,7 @@ export async function startRunner(options: StartRunnerOptions = {}): Promise<Run
 
   let context!: BrowserContext;
   let log!: MockXLog;
+  let seedCapturedPostImpl: ((input: SeedCapturedPostInput) => Promise<void>) | undefined;
 
   const app = new RunnerApp({
     engineSettingsDir,
@@ -340,9 +350,37 @@ export async function startRunner(options: StartRunnerOptions = {}): Promise<Run
     // shared observer.
     bindTransport: async (page, services) => {
       const { ExposeFunctionTransport } = await import("@x-builder/runner");
+      const postLibraryRepository = services.postLibraryRepository!;
+      seedCapturedPostImpl = async (input: SeedCapturedPostInput): Promise<void> => {
+        await postLibraryRepository.upsertPosts([
+          {
+            id: input.id ?? input.platformPostId,
+            platform: "x",
+            platformPostId: input.platformPostId,
+            text: input.text,
+            createdAt: ISO,
+            kind: "original",
+            language: "en",
+            replyReferences: {},
+            entityFlags: { hasUrls: false, hasMedia: false, hasHashtags: false, hasMentions: false },
+            weakMetrics: {},
+            metricSnapshots: [
+              {
+                source: "x_live_capture",
+                capturedAt: ISO,
+                impressions: input.impressions ?? 1_000,
+                likes: 10,
+                reposts: 2,
+                replies: 3,
+              },
+            ],
+            sourceRefs: [],
+          },
+        ]);
+      };
       const bundle = createBoundEngineServices({
         settingsRepository: services.settingsRepository!,
-        postLibraryRepository: services.postLibraryRepository!,
+        postLibraryRepository,
         liveCapture: services.liveCapture as never,
         llm: llm.gateway as never,
         judgeLlm: llm.gateway as never,
@@ -379,6 +417,12 @@ export async function startRunner(options: StartRunnerOptions = {}): Promise<Run
     llm,
     mountOverlay: () => mountOverlay(page),
     callBinding: (method: string, arg?: unknown) => callBinding(page, method, arg),
+    seedCapturedPost: async (input: SeedCapturedPostInput): Promise<void> => {
+      if (seedCapturedPostImpl === undefined) {
+        throw new Error("Runner harness post-library seeding was not initialized.");
+      }
+      await seedCapturedPostImpl(input);
+    },
     stop: async () => {
       await app.stop();
       rmSync(tempDir, { recursive: true, force: true });

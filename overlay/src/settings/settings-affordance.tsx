@@ -18,7 +18,7 @@ import type {
   ActiveArchiveContext,
   AppSettings,
   CaptureSummary,
-  JudgeProviderId,
+  GetFeedbackLoopSummaryResponse,
   OverlayReadiness,
 } from "@x-builder/shared";
 import {
@@ -60,6 +60,7 @@ export function SettingsAffordance(): ReactElement {
   const [settings, setSettings] = useState<Loadable<AppSettings>>("loading");
   const [readiness, setReadiness] = useState<Loadable<OverlayReadiness>>("loading");
   const [capture, setCapture] = useState<Loadable<CaptureSummary>>("loading");
+  const [feedback, setFeedback] = useState<Loadable<GetFeedbackLoopSummaryResponse>>("loading");
   const [activeContext, setActiveContext] = useState<ActiveArchiveContext | null>(null);
   // Optimistic override of the toggle's checked state while a transport call is
   // in flight; `null` means "defer to the resolved activeContext".
@@ -71,6 +72,15 @@ export function SettingsAffordance(): ReactElement {
   // Last-write-wins generation guards for rapid toggles.
   const contextGen = useRef(0);
   const settingsGen = useRef(0);
+
+  const refreshFeedback = useCallback(async (): Promise<void> => {
+    setFeedback("loading");
+    try {
+      setFeedback(await transport.getFeedbackLoopSummary({}));
+    } catch (error: unknown) {
+      setFeedback({ error });
+    }
+  }, [transport]);
 
   /** Fetch every L1 source; envelope-unwrap settings. Tolerates rejection. */
   const refresh = useCallback((): void => {
@@ -90,7 +100,8 @@ export function SettingsAffordance(): ReactElement {
       .getActiveContext()
       .then((value) => setActiveContext(value))
       .catch(() => setActiveContext(null));
-  }, [transport]);
+    void refreshFeedback();
+  }, [refreshFeedback, transport]);
 
   // Fetch on mount and on every open transition.
   useEffect(() => {
@@ -108,7 +119,7 @@ export function SettingsAffordance(): ReactElement {
     if (!dialog) return;
     const first = dialog.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
     first?.focus();
-  }, [open, settings, readiness, capture, activeContext]);
+  }, [open, settings, readiness, capture, feedback, activeContext]);
 
   const close = useCallback((): void => {
     setOpen(false);
@@ -206,6 +217,18 @@ export function SettingsAffordance(): ReactElement {
     [settings, transport],
   );
 
+  const onLinkFeedback = useCallback(
+    async (predictionId: string, platformPostId: string): Promise<void> => {
+      await transport.linkFeedbackPrediction({
+        predictionId,
+        platformPostId,
+        method: "manual_platform_post_id",
+      });
+      await refreshFeedback();
+    },
+    [refreshFeedback, transport],
+  );
+
   /** Archive: validate → import; rejection surfaces a danger Alert, no import. */
   const onUploadArchive = useCallback(
     (file: File): void => {
@@ -259,8 +282,11 @@ export function SettingsAffordance(): ReactElement {
         settings={settings}
         readiness={readiness}
         capture={capture}
+        feedback={feedback}
         onUpdateSettings={onUpdateSettings}
         onUploadArchive={onUploadArchive}
+        onRefreshFeedback={() => { void refreshFeedback(); }}
+        onLinkFeedback={onLinkFeedback}
         uploadState={uploadState}
         dialogRef={dialogRef}
       >

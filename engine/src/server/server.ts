@@ -29,8 +29,14 @@ import {
   generateCategorySchema,
   generateIdeaRequestSchema,
   generateIdeaResponseSchema,
+  getFeedbackLoopSummaryRequestSchema,
+  getFeedbackLoopSummaryResponseSchema,
   judgeDraftRequestSchema,
   judgeDraftResponseSchema,
+  linkFeedbackPredictionRequestSchema,
+  linkFeedbackPredictionResponseSchema,
+  recordFeedbackPredictionRequestSchema,
+  recordFeedbackPredictionResponseSchema,
   suggestPostRequestSchema,
   suggestPostResponseSchema,
   subsystemStatusSchema,
@@ -80,6 +86,9 @@ import {
 import { openEngineDatabase } from "./open-engine-database.js";
 import { SqlitePostLibraryRepository } from "./sqlite-post-library-repository.js";
 import { importPostLibraryJsonToSqlite } from "./import-post-library-json.js";
+import { FeedbackLoopService } from "../feedback/feedback-loop-service.js";
+import { SqliteFeedbackLoopRepository } from "../feedback/sqlite-feedback-loop-repository.js";
+import type { FeedbackLoopRepository } from "../feedback/feedback-loop-repository.js";
 import { resolveWorkspaceRoot } from "./workspace-root.js";
 
 export type AnalyzePosts = (request: AnalyzePostsRequest) => Promise<AnalyzePostsResponse> | AnalyzePostsResponse;
@@ -115,6 +124,7 @@ export interface BuildServerOptions {
   readinessTimeoutMs?: number;
   settingsRepository?: AppSettingsRepository;
   postLibraryRepository?: PostLibraryRepository;
+  feedbackLoopService?: FeedbackLoopService;
   // Storage root whose `storage/x-builder.db` backs the SQLite corpus and against
   // whose `storage/post-library.json` the one-time JSON->SQLite importer runs. When
   // omitted (and no postLibraryRepository is injected) buildServer stays on an empty
@@ -215,6 +225,33 @@ const libraryStorageFailedError = (): ApiError =>
     code: "library_storage_failed",
     message: "The local post library could not be read. Try again.",
     scope: "library",
+    retryable: true,
+    status: 500,
+  });
+
+const feedbackRecordFailedError = (): ApiError =>
+  normalize({
+    code: "feedback_record_failed",
+    message: "The feedback prediction could not be recorded. Try again.",
+    scope: "feedback",
+    retryable: true,
+    status: 500,
+  });
+
+const feedbackLinkFailedError = (): ApiError =>
+  normalize({
+    code: "feedback_link_failed",
+    message: "The feedback prediction could not be linked. Try again.",
+    scope: "feedback",
+    retryable: true,
+    status: 500,
+  });
+
+const feedbackSummaryFailedError = (): ApiError =>
+  normalize({
+    code: "feedback_summary_failed",
+    message: "The feedback summary could not be loaded. Try again.",
+    scope: "feedback",
     retryable: true,
     status: 500,
   });
@@ -621,18 +658,24 @@ export const createDefaultJudgeDraftService = (
   );
 };
 
-// Resolve the corpus repository in a fixed precedence, keeping buildServer synchronous:
-//   1. An injected postLibraryRepository wins (the existing test/host injection seam).
-//   2. Else a storageRoot opens <storageRoot>/storage/x-builder.db, runs the one-time
-//      JSON->SQLite importer there, and serves from SQLite (production + the host-swap
-//      tests, which pass a tmpdir).
-//   3. Else (a BARE buildServer() call) an empty in-memory SQLite corpus — NO importer,
-//      ZERO home-directory I/O — so the bare-call test suites stay fully isolated.
-const resolvePostLibraryRepository = (
+type EngineStorageRepositories = {
+  postLibraryRepository: PostLibraryRepository;
+  feedbackLoopRepository: FeedbackLoopRepository;
+};
+
+// Resolve storage repositories in fixed precedence while preserving the production
+// invariant: storageRoot uses one SQLite handle for the post library and feedback
+// repositories. Injected postLibraryRepository remains an isolated test seam; when
+// used without an injected FeedbackLoopService, feedback rows live in an in-memory
+// SQLite database and actuals still come from the injected post repository.
+const resolveEngineStorageRepositories = (
   options: BuildServerOptions,
-): PostLibraryRepository => {
+): EngineStorageRepositories => {
   if (options.postLibraryRepository) {
-    return options.postLibraryRepository;
+    return {
+      postLibraryRepository: options.postLibraryRepository,
+      feedbackLoopRepository: new SqliteFeedbackLoopRepository(openEngineDatabase(":memory:")),
+    };
   }
 
   if (options.storageRoot !== undefined) {
@@ -641,10 +684,18 @@ const resolvePostLibraryRepository = (
     const db = openEngineDatabase(join(storageDir, "x-builder.db"));
     importPostLibraryJsonToSqlite(storageDir, db);
 
-    return new SqlitePostLibraryRepository(db);
+    return {
+      postLibraryRepository: new SqlitePostLibraryRepository(db),
+      feedbackLoopRepository: new SqliteFeedbackLoopRepository(db),
+    };
   }
 
-  return new SqlitePostLibraryRepository(openEngineDatabase(":memory:"));
+  const db = openEngineDatabase(":memory:");
+
+  return {
+    postLibraryRepository: new SqlitePostLibraryRepository(db),
+    feedbackLoopRepository: new SqliteFeedbackLoopRepository(db),
+  };
 };
 
 export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
@@ -656,7 +707,14 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const analyzePosts = options.analyzePosts ?? defaultAnalyzePosts;
   const settingsRepository =
     options.settingsRepository ?? new JsonFileAppSettingsRepository({ root: defaultSettingsRoot });
-  const postLibraryRepository = resolvePostLibraryRepository(options);
+  const engineStorage = resolveEngineStorageRepositories(options);
+  const postLibraryRepository = engineStorage.postLibraryRepository;
+  const feedbackLoopService =
+    options.feedbackLoopService ??
+    new FeedbackLoopService({
+      feedbackRepository: engineStorage.feedbackLoopRepository,
+      postLibraryRepository,
+    });
   const archiveImportService = new ArchiveImportService({ repository: postLibraryRepository });
   const archiveDerivedContextService = new ArchiveDerivedContextService({
     repository: postLibraryRepository,
@@ -1035,6 +1093,54 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       }
 
       throw error;
+    }
+  });
+
+  app.post("/feedback/predictions", async (request, reply) => {
+    const input = recordFeedbackPredictionRequestSchema.parse(request.body);
+
+    try {
+      const result = await feedbackLoopService.recordPrediction(input);
+
+      return reply.send(parseResponseContract(recordFeedbackPredictionResponseSchema, result));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw error;
+      }
+
+      throw new NormalizedApiError(feedbackRecordFailedError());
+    }
+  });
+
+  app.post("/feedback/predictions/link", async (request, reply) => {
+    const input = linkFeedbackPredictionRequestSchema.parse(request.body);
+
+    try {
+      const result = await feedbackLoopService.linkPrediction(input);
+
+      return reply.send(parseResponseContract(linkFeedbackPredictionResponseSchema, result));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw error;
+      }
+
+      throw new NormalizedApiError(feedbackLinkFailedError());
+    }
+  });
+
+  app.post("/feedback/summary", async (request, reply) => {
+    const input = getFeedbackLoopSummaryRequestSchema.parse(request.body ?? {});
+
+    try {
+      const result = await feedbackLoopService.getSummary(input);
+
+      return reply.send(parseResponseContract(getFeedbackLoopSummaryResponseSchema, result));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw error;
+      }
+
+      throw new NormalizedApiError(feedbackSummaryFailedError());
     }
   });
 

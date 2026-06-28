@@ -8,7 +8,7 @@
  *   - deriveApproved boundary (overall 70 → true, 69 → false)
  *   - generateIdeaRequestSchema refine (idea-only, format-only, neither → rejected)
  *   - analyzePostsResponseSchema legacy parse (omitted cooldown is not injected)
- *   - ENGINE_TRANSPORT_BINDINGS shape (exactly 17 entries, locked names)
+ *   - ENGINE_TRANSPORT_BINDINGS shape (exactly 20 entries, locked names)
  *
  * Every import that references a NOT-YET-IMPLEMENTED symbol will produce a
  * ModuleNotFoundError / unresolved-export.  That is the correct Red state.
@@ -425,7 +425,7 @@ describe("analyzePostsResponseSchema legacy item without cooldown", () => {
 // ENGINE_TRANSPORT_BINDINGS
 // ---------------------------------------------------------------------------
 
-// Locked 17 method names (from the ticket spec — spellings must not drift)
+// Locked 20 method names (from the ticket spec — spellings must not drift)
 const LOCKED_METHOD_NAMES = [
   "getOverlayReadiness",
   "getStatus",
@@ -444,13 +444,16 @@ const LOCKED_METHOD_NAMES = [
   "getCaptureSummary",
   "getGenerateCategories",
   "applyJudgeSuggestions",
+  "recordFeedbackPrediction",
+  "linkFeedbackPrediction",
+  "getFeedbackLoopSummary",
 ] as const;
 
 describe("ENGINE_TRANSPORT_BINDINGS shape and completeness", () => {
-  it("contains exactly 17 entries", () => {
+  it("contains exactly 20 entries", () => {
     const keys = Object.keys(ENGINE_TRANSPORT_BINDINGS);
 
-    expect(keys).toHaveLength(17);
+    expect(keys).toHaveLength(20);
   });
 
   it("has every value equal to __xbuilder_<methodName>", () => {
@@ -459,7 +462,7 @@ describe("ENGINE_TRANSPORT_BINDINGS shape and completeness", () => {
     }
   });
 
-  it("contains exactly the locked set of 17 method names and no others", () => {
+  it("contains exactly the locked set of 20 method names and no others", () => {
     const keys = new Set(Object.keys(ENGINE_TRANSPORT_BINDINGS));
     const locked = new Set<string>(LOCKED_METHOD_NAMES);
 
@@ -500,5 +503,19 @@ describe("ENGINE_TRANSPORT_BINDINGS shape and completeness", () => {
 
   it("has the binding __xbuilder_generateIdeas (not generate or generateCandidates — locked spelling)", () => {
     expect(ENGINE_TRANSPORT_BINDINGS.generateIdeas).toBe("__xbuilder_generateIdeas");
+  });
+
+  it("has the feedback bindings with locked spellings", () => {
+    expect(ENGINE_TRANSPORT_BINDINGS.recordFeedbackPrediction).toBe(
+      "__xbuilder_recordFeedbackPrediction",
+    );
+    expect(ENGINE_TRANSPORT_BINDINGS.linkFeedbackPrediction).toBe(
+      "__xbuilder_linkFeedbackPrediction",
+    );
+    expect(ENGINE_TRANSPORT_BINDINGS.getFeedbackLoopSummary).toBe(
+      "__xbuilder_getFeedbackLoopSummary",
+    );
+    expect(ENGINE_TRANSPORT_BINDINGS.getFeedbackLoop).toBeUndefined();
+    expect(ENGINE_TRANSPORT_BINDINGS.recordPrediction).toBeUndefined();
   });
 });

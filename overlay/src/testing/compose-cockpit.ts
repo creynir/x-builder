@@ -244,6 +244,8 @@ export function makeGenerateCategories(): GenerateCategory[] {
       basis: "default",
       cooldownStatus: "clear",
       sampleCount: 0,
+      windowDays: 7,
+      recentCount: 0,
     },
     {
       id: "founder_story",
@@ -252,6 +254,8 @@ export function makeGenerateCategories(): GenerateCategory[] {
       basis: "default",
       cooldownStatus: "clear",
       sampleCount: 0,
+      windowDays: 7,
+      recentCount: 0,
     },
   ];
 }

@@ -10,6 +10,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "vitest-browser-react";
+import type { FeedbackOutcome, FeedbackPredictionRecord, GetFeedbackLoopSummaryResponse } from "@x-builder/shared";
 
 import { FakeEngineTransport } from "../testing/fake-transport";
 import {
@@ -17,6 +18,7 @@ import {
   makeAppSettings,
   makeCaptureSummary,
   makeEmptyContext,
+  makeFeedbackLoopSummary,
   makeOverlayReadiness,
 } from "../testing/fixtures";
 import { mountShadowHost, type ShadowHostHandle } from "../testing/shadow-host";
@@ -47,6 +49,7 @@ function readyTransport(overrides: Partial<FakeEngineTransport> = {}): FakeEngin
       } as never),
     getOverlayReadiness: () => Promise.resolve(makeOverlayReadiness() as never),
     getCaptureSummary: () => Promise.resolve(makeCaptureSummary() as never),
+    getFeedbackLoopSummary: () => Promise.resolve(makeFeedbackLoopSummary() as never),
     getActiveContext: () => Promise.resolve(makeActiveContext() as never),
     activateContext: () =>
       Promise.resolve({
@@ -62,6 +65,105 @@ function readyTransport(overrides: Partial<FakeEngineTransport> = {}): FakeEngin
       Promise.resolve({ settings: next, source: "persisted" } as never),
     ...overrides,
   });
+}
+
+const ISO_NOW = "2026-06-21T00:00:00.000Z";
+const POST_ID = "1800000000000000001";
+
+function feedbackPredictionRecord(
+  overrides: Partial<FeedbackPredictionRecord> = {},
+): FeedbackPredictionRecord {
+  return {
+    id: "prediction-1",
+    clientEventId: "event-1",
+    action: "manual_record_posted_draft",
+    platform: "x",
+    text: "Manual draft that needs a linked post.",
+    contentHash: `sha256:${"b".repeat(64)}`,
+    detectedFormat: "genuine_question",
+    scoreValue: 72,
+    prediction: {
+      status: "available",
+      signals: [{ signal_key: "quality_voice", label: "Static score 72", multiplier: 0.8 }],
+      predictedMidImpressions: 230,
+      stallRange: { low: 120, high: 276 },
+      escapeRange: { low: 570, high: 2280 },
+      escapeProbability: 0.1,
+      expectedReplies: 3,
+      baseImpressions: 190,
+      baseSource: "follower_estimate",
+      qualityBasis: "static",
+      reachModelVersion: "reach-v1",
+    },
+    scoringContext: { followers: 1000 },
+    analyzerVersion: "deterministic-v1",
+    analyzedAt: ISO_NOW,
+    createdAt: ISO_NOW,
+    ...overrides,
+  };
+}
+
+function feedbackSummary(outcome: FeedbackOutcome): GetFeedbackLoopSummaryResponse {
+  const linked = outcome.status === "linked" ? 1 : 0;
+  return makeFeedbackLoopSummary({
+    totals: {
+      predictions: 1,
+      linked,
+      pendingUnlinked: outcome.status === "pending_unlinked" ? 1 : 0,
+      ambiguous: outcome.status === "ambiguous" ? 1 : 0,
+      partialActuals: outcome.status === "partial_actuals" ? 1 : 0,
+      actuals: outcome.actual?.impressions !== undefined ? 1 : 0,
+    },
+    formatLearnings: [
+      {
+        format: "genuine_question",
+        predictionCount: 1,
+        linkedCount: linked,
+        actualCount: outcome.actual?.impressions !== undefined ? 1 : 0,
+        direction: "insufficient_data",
+        adjustment: "Keep collecting outcomes for this format.",
+      },
+    ],
+    recent: [outcome],
+  });
+}
+
+function ambiguousOutcome(): FeedbackOutcome {
+  return {
+    status: "ambiguous",
+    prediction: feedbackPredictionRecord(),
+    ambiguity: { candidatePlatformPostIds: [POST_ID, "1800000000000000002"] },
+  };
+}
+
+function manuallyLinkedOutcome(): FeedbackOutcome {
+  return {
+    status: "linked",
+    prediction: feedbackPredictionRecord(),
+    link: {
+      predictionId: "prediction-1",
+      platform: "x",
+      platformPostId: POST_ID,
+      method: "manual_platform_post_id",
+      linkedAt: ISO_NOW,
+    },
+    actual: {
+      platformPostId: POST_ID,
+      postCreatedAt: ISO_NOW,
+      observedAt: ISO_NOW,
+      source: "x_live_capture",
+      impressions: 260,
+      likes: 12,
+      replies: 3,
+    },
+    delta: {
+      predictedMidImpressions: 230,
+      actualImpressions: 260,
+      absoluteDelta: 30,
+      ratio: 1.13,
+      bucket: "within_stall",
+    },
+  };
 }
 
 /** Find the launcher button inside the shadow subtree. */
@@ -356,6 +458,84 @@ describe("JudgeProviderSection — read-current-then-send-FULL updateSettings", 
     expect(updateSpy).toHaveBeenCalledWith({
       ...current,
       judgeProvider: "claude-cli",
+    });
+  });
+});
+
+describe("SettingsAffordance — feedback loop summary and manual links", () => {
+  it("fetches the feedback summary and renders the empty state", async () => {
+    const getSummarySpy = vi.fn(() => Promise.resolve(makeFeedbackLoopSummary() as never));
+    const root = mountAffordance(readyTransport({ getFeedbackLoopSummary: getSummarySpy as never }));
+
+    launcher(root).click();
+
+    await vi.waitFor(() => {
+      expect(panel(root)?.textContent).toContain("No feedback yet");
+      expect(getSummarySpy).toHaveBeenCalled();
+    });
+  });
+
+  it("links an ambiguous prediction manually and refreshes to the linked summary", async () => {
+    let linked = false;
+    const getSummarySpy = vi.fn(() =>
+      Promise.resolve(feedbackSummary(linked ? manuallyLinkedOutcome() : ambiguousOutcome()) as never),
+    );
+    const linkSpy = vi.fn((request: unknown) => {
+      linked = true;
+      return Promise.resolve({
+        link: {
+          predictionId: "prediction-1",
+          platform: "x",
+          platformPostId: POST_ID,
+          method: "manual_platform_post_id",
+          linkedAt: ISO_NOW,
+        },
+      } as never);
+    });
+    const root = mountAffordance(
+      readyTransport({
+        getFeedbackLoopSummary: getSummarySpy as never,
+        linkFeedbackPrediction: linkSpy as never,
+      }),
+    );
+
+    launcher(root).click();
+
+    const dialog = await vi.waitFor(() => {
+      const current = panel(root);
+      expect(current?.textContent).toContain("Multiple possible posts found");
+      return current!;
+    });
+
+    const candidateButton = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent === POST_ID,
+    );
+    expect(candidateButton).not.toBeUndefined();
+    candidateButton!.click();
+
+    const linkButton = await vi.waitFor(() => {
+      const current = panel(root)!;
+      const input = current.querySelector<HTMLInputElement>(
+        'input[aria-label="Platform post id for prediction-1"]',
+      );
+      expect(input?.value).toBe(POST_ID);
+
+      const button = Array.from(current.querySelectorAll<HTMLButtonElement>("button")).find(
+        (candidate) => /^link$/i.test(candidate.textContent ?? ""),
+      );
+      expect(button).not.toBeUndefined();
+      expect(button!.disabled).toBe(false);
+      return button!;
+    });
+    linkButton.click();
+
+    await vi.waitFor(() => {
+      expect(linkSpy).toHaveBeenCalledWith({
+        predictionId: "prediction-1",
+        platformPostId: POST_ID,
+        method: "manual_platform_post_id",
+      });
+      expect(panel(root)?.textContent).toContain("Linked manually");
     });
   });
 });

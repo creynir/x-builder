@@ -7,6 +7,14 @@ import type {
   ArchiveTweetsValidateResponse,
 } from "./archive-import.js";
 import type { ApplyJudgeSuggestionsRequest, ApplyJudgeSuggestionsResponse } from "./apply-judge-suggestions.js";
+import type {
+  GetFeedbackLoopSummaryRequest,
+  GetFeedbackLoopSummaryResponse,
+  LinkFeedbackPredictionRequest,
+  LinkFeedbackPredictionResponse,
+  RecordFeedbackPredictionRequest,
+  RecordFeedbackPredictionResponse,
+} from "./feedback-loop.js";
 import type { CaptureSummary } from "./x-live-capture.js";
 import type { CooldownReport } from "./cooldown.js";
 import type { GenerateCategory } from "./generate-category.js";
@@ -46,6 +54,9 @@ export const __xbuilder_getCooldown = "__xbuilder_getCooldown" as const;
 export const __xbuilder_getCaptureSummary = "__xbuilder_getCaptureSummary" as const;
 export const __xbuilder_getGenerateCategories = "__xbuilder_getGenerateCategories" as const;
 export const __xbuilder_applyJudgeSuggestions = "__xbuilder_applyJudgeSuggestions" as const;
+export const __xbuilder_recordFeedbackPrediction = "__xbuilder_recordFeedbackPrediction" as const;
+export const __xbuilder_linkFeedbackPrediction = "__xbuilder_linkFeedbackPrediction" as const;
+export const __xbuilder_getFeedbackLoopSummary = "__xbuilder_getFeedbackLoopSummary" as const;
 
 // Concrete per-method binding-name literals, one per EngineTransport method, so
 // dotted access (`ENGINE_TRANSPORT_BINDINGS.getStatus`) is a known `string`.
@@ -77,10 +88,13 @@ export const ENGINE_TRANSPORT_BINDINGS: EngineTransportBindings &
   getCaptureSummary: __xbuilder_getCaptureSummary,
   getGenerateCategories: __xbuilder_getGenerateCategories,
   applyJudgeSuggestions: __xbuilder_applyJudgeSuggestions,
+  recordFeedbackPrediction: __xbuilder_recordFeedbackPrediction,
+  linkFeedbackPrediction: __xbuilder_linkFeedbackPrediction,
+  getFeedbackLoopSummary: __xbuilder_getFeedbackLoopSummary,
 });
 
 // ---------------------------------------------------------------------------
-// EngineTransport interface — 17 methods, structured-clone-safe JSON payloads
+// EngineTransport interface — 20 methods, structured-clone-safe JSON payloads
 // ---------------------------------------------------------------------------
 
 export interface EngineTransport {
@@ -101,4 +115,7 @@ export interface EngineTransport {
   getCaptureSummary(): Promise<CaptureSummary>;
   getGenerateCategories(): Promise<GenerateCategory[]>;
   applyJudgeSuggestions(request: ApplyJudgeSuggestionsRequest): Promise<ApplyJudgeSuggestionsResponse>;
+  recordFeedbackPrediction(request: RecordFeedbackPredictionRequest): Promise<RecordFeedbackPredictionResponse>;
+  linkFeedbackPrediction(request: LinkFeedbackPredictionRequest): Promise<LinkFeedbackPredictionResponse>;
+  getFeedbackLoopSummary(request?: GetFeedbackLoopSummaryRequest): Promise<GetFeedbackLoopSummaryResponse>;
 }

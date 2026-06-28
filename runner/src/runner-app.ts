@@ -14,7 +14,7 @@
  * through the same injectable seams. Every collaborator `start()` touches is
  * injectable through {@link RunnerAppOptions} so the lifecycle can be tested with
  * no real browser, engine services, or network. The `bindTransport` /
- * `attachObserver` defaults (XOB-030) bind the 17 `__xbuilder_*` engine bindings
+ * `attachObserver` defaults (XOB-030) bind the 20 `__xbuilder_*` engine bindings
  * through {@link ExposeFunctionTransport} and register the
  * {@link GraphQlCaptureObserver} response listener; an injected override still
  * wins, so every seam stays testable.
@@ -26,9 +26,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import {
+  FeedbackLoopService,
   JsonFileAppSettingsRepository,
   LiveCaptureService,
   NodeProcessRunner,
+  SqliteFeedbackLoopRepository,
   SqlitePostLibraryRepository,
   StructuredLlmService,
   importPostLibraryJsonToSqlite,
@@ -133,6 +135,7 @@ export interface EngineServices {
   liveCapture: LiveCaptureLike;
   settingsRepository?: JsonFileAppSettingsRepository;
   postLibraryRepository?: PostLibraryRepository;
+  feedbackLoopService?: FeedbackLoopService;
 }
 
 export interface RunnerAppOptions {
@@ -195,9 +198,13 @@ const defaultCreateServices = (opts: { engineSettingsDir: string }): EngineServi
   const db = openEngineDatabase(join(storageDir, "x-builder.db"));
   importPostLibraryJsonToSqlite(storageDir, db);
   const postLibraryRepository = new SqlitePostLibraryRepository(db);
+  const feedbackLoopService = new FeedbackLoopService({
+    feedbackRepository: new SqliteFeedbackLoopRepository(db),
+    postLibraryRepository,
+  });
   const liveCapture = new LiveCaptureService(postLibraryRepository);
 
-  return { liveCapture, settingsRepository, postLibraryRepository };
+  return { liveCapture, settingsRepository, postLibraryRepository, feedbackLoopService };
 };
 
 // One in-process StructuredLlmService backs the generate / apply / suggest LLM
@@ -290,7 +297,7 @@ export class RunnerApp {
     this.launchBrowser = options.launchBrowser ?? ((opts) => BrowserController.launch(opts));
     this.connectBrowser =
       options.connectBrowser ?? ((endpoint) => chromium.connectOverCDP(endpoint));
-    // The real (XOB-030) defaults: bind the 17 engine bindings through
+    // The real (XOB-030) defaults: bind the 20 engine bindings through
     // ExposeFunctionTransport, and observe X GraphQL responses for live capture.
     // An injected override still wins, keeping every seam testable.
     this.bindTransport = options.bindTransport ?? ((page, services) => this.defaultBindTransport(page, services));
@@ -315,7 +322,7 @@ export class RunnerApp {
   }
 
   // Default transport wiring: construct the full BoundEngineServices bundle from
-  // the in-process repositories + one StructuredLlmService, then register the 17
+  // the in-process repositories + one StructuredLlmService, then register the 20
   // __xbuilder_* bindings on the page. The bundle's getOverlayReadiness reads the
   // shared capture observer's live state.
   private async defaultBindTransport(page: PageLike, services: EngineServices): Promise<void> {
@@ -329,6 +336,7 @@ export class RunnerApp {
     const bundle = createBoundEngineServices({
       settingsRepository: services.settingsRepository,
       postLibraryRepository: services.postLibraryRepository,
+      feedbackLoopService: services.feedbackLoopService,
       liveCapture: services.liveCapture as LiveCaptureService,
       llm,
       // A StructuredLlmService's generic generateStructured satisfies the
@@ -495,7 +503,7 @@ export class RunnerApp {
       await page.evaluate(overlayBundle);
     }
 
-    // Same order as launch mode: bind the 17 bindings (exposeFunction works over
+    // Same order as launch mode: bind the 20 bindings (exposeFunction works over
     // connectOverCDP), attach the capture observer, then bootstrap the overlay.
     await this.bindTransport(page, services);
     await this.attachObserver(context, (batch) => services.liveCapture.ingest(batch));

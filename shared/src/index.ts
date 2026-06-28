@@ -75,6 +75,26 @@ export {
   applyJudgeSuggestionsResponseSchema,
 } from "./schemas/apply-judge-suggestions.js";
 export {
+  feedbackActualMetricsSchema,
+  feedbackAmbiguitySchema,
+  feedbackFormatLearningSchema,
+  feedbackLinkMethodSchema,
+  feedbackOutcomeSchema,
+  feedbackOutcomeStatusSchema,
+  feedbackPlatformSchema,
+  feedbackPredictionActionSchema,
+  feedbackPredictionDeltaSchema,
+  feedbackPredictionLinkSchema,
+  feedbackPredictionRecordSchema,
+  feedbackPredictionSnapshotSchema,
+  getFeedbackLoopSummaryRequestSchema,
+  getFeedbackLoopSummaryResponseSchema,
+  linkFeedbackPredictionRequestSchema,
+  linkFeedbackPredictionResponseSchema,
+  recordFeedbackPredictionRequestSchema,
+  recordFeedbackPredictionResponseSchema,
+} from "./schemas/feedback-loop.js";
+export {
   captureReadinessStateSchema,
   overlayReadinessSchema,
 } from "./schemas/overlay-readiness.js";
@@ -96,6 +116,9 @@ export {
   __xbuilder_getCaptureSummary,
   __xbuilder_getGenerateCategories,
   __xbuilder_applyJudgeSuggestions,
+  __xbuilder_recordFeedbackPrediction,
+  __xbuilder_linkFeedbackPrediction,
+  __xbuilder_getFeedbackLoopSummary,
   ENGINE_TRANSPORT_BINDINGS,
 } from "./schemas/engine-transport.js";
 export type {
@@ -170,6 +193,26 @@ export type {
   ApplyJudgeSuggestionsRequest,
   ApplyJudgeSuggestionsResponse,
 } from "./schemas/apply-judge-suggestions.js";
+export type {
+  FeedbackActualMetrics,
+  FeedbackAmbiguity,
+  FeedbackFormatLearning,
+  FeedbackLinkMethod,
+  FeedbackOutcome,
+  FeedbackOutcomeStatus,
+  FeedbackPlatform,
+  FeedbackPredictionAction,
+  FeedbackPredictionDelta,
+  FeedbackPredictionLink,
+  FeedbackPredictionRecord,
+  FeedbackPredictionSnapshot,
+  GetFeedbackLoopSummaryRequest,
+  GetFeedbackLoopSummaryResponse,
+  LinkFeedbackPredictionRequest,
+  LinkFeedbackPredictionResponse,
+  RecordFeedbackPredictionRequest,
+  RecordFeedbackPredictionResponse,
+} from "./schemas/feedback-loop.js";
 export type {
   CaptureReadinessState,
   OverlayReadiness,

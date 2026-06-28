@@ -64,7 +64,12 @@ import {
   type XComposerHandle,
 } from "../../testing/compose-cockpit";
 
-import type { JudgeDraftResponse, GenerateIdeaResponse } from "@x-builder/shared";
+import type {
+  GenerateIdeaResponse,
+  JudgeDraftResponse,
+  RecordFeedbackPredictionRequest,
+  RecordFeedbackPredictionResponse,
+} from "@x-builder/shared";
 
 // Not-yet-existing module — importing it is what drives the RED state.
 import { ComposeCockpit } from "../compose-cockpit";
@@ -127,6 +132,39 @@ async function settle(extraMs = 0): Promise<void> {
 function composerText(): string {
   const el = document.querySelector<HTMLElement>('div[data-testid="tweetTextarea_0"]');
   return el?.textContent ?? "";
+}
+
+function makeFeedbackRecordResponse(
+  request: RecordFeedbackPredictionRequest,
+): RecordFeedbackPredictionResponse {
+  const snapshot = request.snapshot;
+  return {
+    record: {
+      id: `prediction-${request.clientEventId ?? "manual"}`,
+      clientEventId: request.clientEventId,
+      action: request.action,
+      platform: request.platform ?? "x",
+      text: request.text.trim(),
+      contentHash: `sha256:${"a".repeat(64)}`,
+      detectedFormat: snapshot.detectedFormat,
+      sourceFormat: snapshot.sourceFormat,
+      scoreValue: snapshot.scoreValue,
+      prediction: snapshot.prediction,
+      scoringContext: snapshot.scoringContext,
+      analyzerVersion: snapshot.analyzerVersion,
+      analyzedAt: snapshot.analyzedAt,
+      createdAt: "2026-06-22T00:00:00.000Z",
+    },
+    duplicate: false,
+  };
+}
+
+async function settleUntil(predicate: () => boolean, label: string): Promise<void> {
+  for (let i = 0; i < 25; i += 1) {
+    if (predicate()) return;
+    await settle();
+  }
+  throw new Error(`condition never settled: ${label}`);
 }
 
 /** All cockpit internal-scroll pin containers, found anywhere (shadow or light). */
@@ -551,6 +589,146 @@ describe("ComposeCockpit — apply-all writes the improved text", () => {
     expect(composerText()).toBe("improved");
     // Provenance flips to generated → approved badge surfaces (apply verdict 88).
     expect(cockpitText()).toContain("✓ Judge approved");
+  });
+});
+
+// ===========================================================================
+// 10. Feedback loop recording — generated, improved, and manual posted drafts.
+// ===========================================================================
+
+describe("ComposeCockpit — feedback loop recording", () => {
+  it("records a generated draft after the chosen candidate is written", async () => {
+    fixture = insertXComposer();
+    const recordCalls: RecordFeedbackPredictionRequest[] = [];
+    const response = makeGenerateResponse([
+      { text: "generated learning hook", overall: 88 },
+      { text: "lower generated option", overall: 72 },
+      { text: "weak generated option", overall: 40 },
+    ]);
+    const fake = new FakeEngineTransport({
+      getGenerateCategories: async () => makeGenerateCategories(),
+      getCaptureSummary: async () => makeCapture(),
+      getOverlayReadiness: async () => {
+        const { makeOverlayReadiness } = await import("../../testing/fixtures");
+        return makeOverlayReadiness();
+      },
+      analyzePosts: async () => {
+        const { readyResult } = await import("../../testing/analyze-state");
+        return { items: [readyResult] };
+      },
+      generateIdeas: async () => response,
+      recordFeedbackPrediction: async (request) => {
+        recordCalls.push(request);
+        return makeFeedbackRecordResponse(request);
+      },
+    });
+
+    mountCockpit(fake);
+    await settle();
+    await clickWhenPresent(/hot take/i);
+    await settleUntil(() => recordCalls.length === 1, "generated feedback record");
+
+    expect(recordCalls[0]).toMatchObject({
+      action: "generated_draft_written",
+      text: "generated learning hook",
+    });
+    expect(recordCalls[0]!.snapshot.prediction.status).toBe("available");
+  });
+
+  it("does not record ordinary user typing without the explicit posted-draft action", async () => {
+    fixture = insertXComposer("first user draft");
+    const recordCalls: RecordFeedbackPredictionRequest[] = [];
+    const fake = new FakeEngineTransport({
+      getGenerateCategories: async () => makeGenerateCategories(),
+      getCaptureSummary: async () => makeCapture(),
+      getOverlayReadiness: async () => {
+        const { makeOverlayReadiness } = await import("../../testing/fixtures");
+        return makeOverlayReadiness();
+      },
+      analyzePosts: async () => {
+        const { readyResult } = await import("../../testing/analyze-state");
+        return { items: [readyResult] };
+      },
+      judgeDraft: async () => makeJudgeResponse(74),
+      recordFeedbackPrediction: async (request) => {
+        recordCalls.push(request);
+        return makeFeedbackRecordResponse(request);
+      },
+    });
+
+    mountCockpit(fake);
+    await settle();
+    typeInComposer(fixture.composer, "second user draft");
+    await settle();
+
+    expect(recordCalls).toHaveLength(0);
+  });
+
+  it("records the current composer text when the user marks a posted draft", async () => {
+    fixture = insertXComposer("posted manually after review");
+    const recordCalls: RecordFeedbackPredictionRequest[] = [];
+    const fake = new FakeEngineTransport({
+      getGenerateCategories: async () => makeGenerateCategories(),
+      getCaptureSummary: async () => makeCapture(),
+      getOverlayReadiness: async () => {
+        const { makeOverlayReadiness } = await import("../../testing/fixtures");
+        return makeOverlayReadiness();
+      },
+      analyzePosts: async () => {
+        const { readyResult } = await import("../../testing/analyze-state");
+        return { items: [readyResult] };
+      },
+      judgeDraft: async () => makeJudgeResponse(74),
+      recordFeedbackPrediction: async (request) => {
+        recordCalls.push(request);
+        return makeFeedbackRecordResponse(request);
+      },
+    });
+
+    mountCockpit(fake);
+    await settle();
+    await clickWhenPresent(/record posted draft/i);
+    await settleUntil(() => recordCalls.length === 1, "manual feedback record");
+
+    expect(recordCalls[0]).toMatchObject({
+      action: "manual_record_posted_draft",
+      text: "posted manually after review",
+    });
+  });
+
+  it("records the improved text after Apply-all writes it", async () => {
+    fixture = insertXComposer("original draft before apply");
+    const recordCalls: RecordFeedbackPredictionRequest[] = [];
+    const fake = new FakeEngineTransport({
+      getGenerateCategories: async () => makeGenerateCategories(),
+      getCaptureSummary: async () => makeCapture(),
+      getOverlayReadiness: async () => {
+        const { makeOverlayReadiness } = await import("../../testing/fixtures");
+        return makeOverlayReadiness();
+      },
+      analyzePosts: async () => {
+        const { readyResult } = await import("../../testing/analyze-state");
+        return { items: [readyResult] };
+      },
+      judgeDraft: async () => makeJudgeResponse(74),
+      applyJudgeSuggestions: async () =>
+        makeApplyResponse({ text: "improved text to publish", improvedOverOriginal: true }),
+      recordFeedbackPrediction: async (request) => {
+        recordCalls.push(request);
+        return makeFeedbackRecordResponse(request);
+      },
+    });
+
+    mountCockpit(fake);
+    await settle();
+    await clickWhenPresent(/run judge/i);
+    await clickWhenPresent(/apply all suggestions/i);
+    await settleUntil(() => recordCalls.length === 1, "apply-all feedback record");
+
+    expect(recordCalls[0]).toMatchObject({
+      action: "apply_all_result_written",
+      text: "improved text to publish",
+    });
   });
 });
 

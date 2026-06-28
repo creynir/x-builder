@@ -1,6 +1,6 @@
 /**
  * BoundEngineServices adapter bundle (XOB-030) — constructs every in-process
- * engine service the 17 `__xbuilder_*` transport bindings map to and adapts each
+ * engine service the 20 `__xbuilder_*` transport bindings map to and adapts each
  * to the structural {@link BoundEngineServices} surface `ExposeFunctionTransport`
  * routes through.
  *
@@ -29,16 +29,19 @@ import {
   ArchiveStudioContextResolver,
   ApplyJudgeSuggestionsService,
   DeterministicAnalysisService,
+  FeedbackLoopService,
   GenerateCategoryService,
   GenerateIdeasService,
   JsonFileAppSettingsRepository,
   JudgeDraftService,
+  SqliteFeedbackLoopRepository,
   LiveCaptureService,
   LiveContextResolver,
   RepetitionWindowService,
   SuggestPostService,
   createDefaultReadinessService,
   createGenerationGuidanceResolver,
+  openEngineDatabase,
   createSettingsJudgeProviderResolver,
   type JudgeLlmGateway,
   type PostLibraryRepository,
@@ -68,6 +71,7 @@ export interface CreateBoundEngineServicesOptions {
   settingsRepository: JsonFileAppSettingsRepository;
   postLibraryRepository: PostLibraryRepository;
   liveCapture: LiveCaptureService;
+  feedbackLoopService?: FeedbackLoopService;
   /** Structured-LLM gateway for generate / apply-suggestions / suggest. */
   llm: StructuredLlmGateway;
   /** Judge gateway for judgeDraft and the generate/apply judge passes. */
@@ -173,6 +177,12 @@ export function createBoundEngineServices(
     repository: postLibraryRepository,
   });
   const deterministicAnalysisService = new DeterministicAnalysisService();
+  const feedbackLoopService =
+    options.feedbackLoopService ??
+    new FeedbackLoopService({
+      feedbackRepository: new SqliteFeedbackLoopRepository(openEngineDatabase(":memory:")),
+      postLibraryRepository,
+    });
   // GenerateCategoryService takes (repo, windowService); a fresh window service
   // matches buildServer's per-service instance.
   const generateCategoryService = new GenerateCategoryService(
@@ -310,6 +320,12 @@ export function createBoundEngineServices(
 
     applyJudgeSuggestionsService: {
       apply: (request) => applyJudgeSuggestionsService.apply(request),
+    },
+
+    feedbackLoopService: {
+      recordPrediction: (request) => feedbackLoopService.recordPrediction(request),
+      linkPrediction: (request) => feedbackLoopService.linkPrediction(request),
+      getSummary: (request) => feedbackLoopService.getSummary(request),
     },
   };
 }
