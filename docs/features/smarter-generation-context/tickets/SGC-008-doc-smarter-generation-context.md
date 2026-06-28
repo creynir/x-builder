@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # SGC-008: [DOC] Document smarter generation context
@@ -62,3 +62,4 @@ Coverage level: docs review. Owning workspace: docs. Fixture strategy: no fixtur
 ## Pipeline Log
 
 - 2026-06-27: RGB audit tightened ticket contract before implementation.
+- 2026-06-28: White/docs lane completed `docs/how-to/generate-format-aware-posts.md`; page covers clicked format context, compact playbook slice, compact original-post voice sample, missing-context fail-open behavior, and the never-auto-post boundary.
