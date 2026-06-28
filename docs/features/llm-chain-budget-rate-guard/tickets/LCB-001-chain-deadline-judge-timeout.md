@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # LCB-001: [FND] Add chain deadline and judge timeout override
@@ -95,3 +95,4 @@ Isolation boundary: no real LLM provider, child process, filesystem, database, r
 
 - 2026-06-28: Ticket authored from approved arch recon.
 - 2026-06-28: RGB pipeline started; ticket moved to in-progress.
+- 2026-06-28: Red/Green completed; Blue, Yellow, and [FND] architecture checkpoint approved. Implemented in `d68f085`, `135d2c5`, and `0a03d53`.
