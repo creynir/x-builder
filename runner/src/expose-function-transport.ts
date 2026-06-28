@@ -254,18 +254,26 @@ async function withLlmBindingGuard<T>(
 }
 
 /**
- * Extracts the optional `windowDays` from `getCooldown`'s raw arg. The arg is
- * absent (`undefined`/`null`) for the default window or an object carrying an
- * optional numeric `windowDays`. A non-object arg, or a non-numeric `windowDays`,
- * is a contract violation and throws. The numeric value itself is range-validated
- * downstream by `repetitionWindowService.compute` / `cooldownReportSchema`.
+ * Extracts the optional `windowDays` from `getCooldown`'s raw arg. The shared
+ * EngineTransport contract is positional (`getCooldown(windowDays?: number)`),
+ * while older direct raw-binding callers may still pass `{ windowDays }`. Both
+ * shapes are accepted here and range-validated downstream by
+ * `repetitionWindowService.compute` / `cooldownReportSchema`.
  */
 function parseGetCooldownArg(rawArg: unknown): number | undefined {
   if (rawArg === undefined || rawArg === null) {
     return undefined;
   }
+  if (typeof rawArg === "number") {
+    if (Number.isNaN(rawArg)) {
+      throw new TypeError("getCooldown windowDays must be a number when provided.");
+    }
+    return rawArg;
+  }
   if (typeof rawArg !== "object") {
-    throw new TypeError(`getCooldown expects an object arg or none, received ${typeof rawArg}.`);
+    throw new TypeError(
+      `getCooldown expects a numeric windowDays, an object arg, or none; received ${typeof rawArg}.`,
+    );
   }
   const windowDays = (rawArg as { windowDays?: unknown }).windowDays;
   if (windowDays === undefined) {

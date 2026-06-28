@@ -568,15 +568,26 @@ describe("ExposeFunctionTransport — getCooldown optional arg", () => {
     expect(() => cooldownReportSchema.parse(result)).not.toThrow();
   });
 
-  it("forwards windowDays to RepetitionWindowService.compute when provided", async () => {
+  it("forwards positional windowDays to RepetitionWindowService.compute when provided", async () => {
     await ExposeFunctionTransport.bindAll(mockPage.page, services);
 
     const handler = mockPage.handlers.get(B.getCooldown)!;
-    const result = await handler({ windowDays: 14 });
+    const result = await handler(14);
 
     expect(services.repetitionWindowService.compute).toHaveBeenCalledWith(14);
     const parsed = cooldownReportSchema.parse(result);
     expect(parsed.windowDays).toBe(14);
+  });
+
+  it("keeps the legacy raw object windowDays shape working", async () => {
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+
+    const handler = mockPage.handlers.get(B.getCooldown)!;
+    const result = await handler({ windowDays: 21 });
+
+    expect(services.repetitionWindowService.compute).toHaveBeenCalledWith(21);
+    const parsed = cooldownReportSchema.parse(result);
+    expect(parsed.windowDays).toBe(21);
   });
 });
 

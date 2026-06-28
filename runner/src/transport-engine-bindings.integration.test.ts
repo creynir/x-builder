@@ -66,6 +66,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ExposeFunctionTransport } from "./expose-function-transport.js";
+import { assembleTransport } from "./transport-assembly.js";
 import { RunnerApp } from "./runner-app.js";
 // --- NEW BUILD: the real adapter bundle factory. Does not exist yet; this
 // --- unresolved import is what puts the whole Group-A suite in the Red state.
@@ -352,6 +353,38 @@ function createMockPage() {
   return { page: { exposeFunction }, handlers, exposeFunction };
 }
 
+type PageWindowLike = Record<string, unknown> & {
+  __xbTransport?: Record<string, (arg?: unknown) => Promise<unknown>>;
+};
+
+function createWindowFromHandlers(handlers: Map<string, (arg: unknown) => unknown>): PageWindowLike {
+  const win: PageWindowLike = {};
+  for (const [name, handler] of handlers) {
+    win[name] = handler;
+  }
+  return win;
+}
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function llmBusyErrorFor(method: string) {
+  return {
+    code: "llm_binding_busy",
+    scope: "llm_binding_guard",
+    retryable: true,
+    retryAfterMs: expect.any(Number),
+    method,
+  };
+}
+
 // ===========================================================================
 // Invariant #1 — bindings are 1:1 with EngineTransport (exactly the 20 names).
 // ===========================================================================
@@ -375,6 +408,74 @@ describe("real engine bundle — binding registration (invariant #1)", () => {
 // ===========================================================================
 // getStatus / getOverlayReadiness composition (NEW BUILD).
 // ===========================================================================
+
+describe("real engine bundle — shared LLM binding guard across raw and assembled transport", () => {
+  it("blocks assembled LLM calls while a raw __xbuilder_* LLM call is in flight", async () => {
+    const { services, generateStructured } = buildBundle();
+    const heldJudge = deferred();
+    generateStructured.mockImplementationOnce(async (request: any) => {
+      const userContent = request.turns.find((turn: any) => turn.role === "user")?.content ?? "";
+      await heldJudge.promise;
+      return {
+        status: "success" as const,
+        provider: "codex-cli",
+        requestId: "req-held-judge",
+        output: request.structuredOutput.parser(verdictModelOutput(userContent)),
+        durationMs: 1,
+        completedAt: ISO,
+      };
+    });
+
+    const mockPage = createMockPage();
+    await ExposeFunctionTransport.bindAll(mockPage.page as never, services);
+
+    const win = createWindowFromHandlers(mockPage.handlers);
+    assembleTransport(win);
+
+    const rawJudgeDraft = win[ENGINE_TRANSPORT_BINDINGS.judgeDraft];
+    if (typeof rawJudgeDraft !== "function") {
+      throw new Error("judgeDraft raw binding was not exposed.");
+    }
+    const transport = win.__xbTransport;
+    if (transport === undefined) {
+      throw new Error("assembled transport was not installed.");
+    }
+
+    const generateIdeas = transport.generateIdeas;
+    const applyJudgeSuggestions = transport.applyJudgeSuggestions;
+    const getStatus = transport.getStatus;
+    const getCooldown = transport.getCooldown;
+    if (
+      generateIdeas === undefined ||
+      applyJudgeSuggestions === undefined ||
+      getStatus === undefined ||
+      getCooldown === undefined
+    ) {
+      throw new Error("assembled transport is missing required methods.");
+    }
+
+    const inFlight = Promise.resolve(rawJudgeDraft({ text: "a guarded raw draft" }));
+    await vi.waitFor(() => expect(generateStructured).toHaveBeenCalledTimes(1));
+
+    try {
+      await expect(generateIdeas({ format: "hot_take" })).rejects.toMatchObject(
+        llmBusyErrorFor("generateIdeas"),
+      );
+      await expect(applyJudgeSuggestions({ text: "A draft to improve." })).rejects.toMatchObject(
+        llmBusyErrorFor("applyJudgeSuggestions"),
+      );
+
+      const status = await getStatus(undefined);
+      expect(() => appStatusSchema.parse(status)).not.toThrow();
+      const cooldown = cooldownReportSchema.parse(await getCooldown(7));
+      expect(cooldown.windowDays).toBe(7);
+      expect(generateStructured).toHaveBeenCalledTimes(1);
+    } finally {
+      heldJudge.resolve();
+      await inFlight;
+    }
+  });
+});
 
 describe("real engine bundle — status + overlay readiness composition", () => {
   it("getStatus composes a schema-valid AppStatus from the engine /status logic", async () => {
@@ -479,7 +580,7 @@ describe("real engine bundle — analyzePosts cooldown re-attach", () => {
     await ExposeFunctionTransport.bindAll(mockPage.page as never, services);
 
     const handler = mockPage.handlers.get(ENGINE_TRANSPORT_BINDINGS.getCooldown)!;
-    const report = cooldownReportSchema.parse(await handler({ windowDays: 7 }));
+    const report = cooldownReportSchema.parse(await handler(7));
 
     expect(report.windowDays).toBe(7);
     expect(report.corpusSource).not.toBe("empty");

@@ -31,6 +31,7 @@ type LlmCall = { purpose: string; instructions: string; userContent: string };
 const llmCalls = vi.hoisted((): LlmCall[] => []);
 const failedJudgeTexts = vi.hoisted(() => new Set<string>());
 const requestTimeoutJudgeTexts = vi.hoisted(() => new Set<string>());
+const chainBudgetJudgeTexts = vi.hoisted(() => new Set<string>());
 const generateStructuredFake = vi.hoisted(() =>
   vi.fn(async (request: StructuredLlmRequest<unknown>) => {
     const userContent = request.turns.find((turn) => turn.role === "user")?.content ?? "";
@@ -39,6 +40,19 @@ const generateStructuredFake = vi.hoisted(() =>
       instructions: request.instructions,
       userContent,
     });
+
+    if (request.purpose === "candidate_judge" && chainBudgetJudgeTexts.has(userContent)) {
+      return {
+        status: "failed" as const,
+        provider: "codex-cli",
+        requestId: "fake-request",
+        code: "chain_budget_exhausted" as const,
+        message: "judge chain budget exhausted",
+        retryable: true,
+        durationMs: 1,
+        completedAt: ISO,
+      };
+    }
 
     if (request.purpose === "candidate_judge" && requestTimeoutJudgeTexts.has(userContent)) {
       return {
@@ -233,6 +247,7 @@ beforeEach(() => {
   generateStructuredFake.mockClear();
   failedJudgeTexts.clear();
   requestTimeoutJudgeTexts.clear();
+  chainBudgetJudgeTexts.clear();
 });
 
 afterEach(() => {
@@ -348,6 +363,30 @@ describe("POST /ideas/generate", () => {
     const settingsRepository = new JsonFileAppSettingsRepository({ root: join(tempRoot, "settings") });
     const postLibraryRepository = new SqlitePostLibraryRepository(openEngineDatabase(":memory:"));
     requestTimeoutJudgeTexts.add("Format: hot_take. :: second angle");
+    const app = buildServer({ settingsRepository, postLibraryRepository });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/ideas/generate",
+        payload: { format: "hot_take" },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const error = apiErrorSchema.parse(parseJson(response.body));
+      expect(error.code).toBe("generation_failed");
+      expect(error.status).toBe(500);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("returns 500 with generation_failed when a default-path judge exhausts the chain budget", async () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "x-builder-http-generate-judge-budget-"));
+    tempRoots.push(tempRoot);
+    const settingsRepository = new JsonFileAppSettingsRepository({ root: join(tempRoot, "settings") });
+    const postLibraryRepository = new SqlitePostLibraryRepository(openEngineDatabase(":memory:"));
+    chainBudgetJudgeTexts.add("Format: hot_take. :: second angle");
     const app = buildServer({ settingsRepository, postLibraryRepository });
 
     try {
