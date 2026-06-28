@@ -232,6 +232,34 @@ describe("ApplyJudgeSuggestionsService", () => {
     expect(result.approved).toBe(deriveApproved(originalVerdict));
   });
 
+  it("fails when the chain budget is exhausted before the original judge", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-20T12:00:00.000Z"));
+
+    const originalVerdict = verdictWithOverall(60);
+    const rewriteVerdict = verdictWithOverall(75);
+    const { judge, judgeSpy } = makeJudgeFake([
+      judgedOutcome(originalVerdict),
+      judgedOutcome(rewriteVerdict),
+    ]);
+    const { llm, generateStructured } = makeLlmFake(rewriteSuccessText("A sharper rewrite."));
+    const slowProfile = async (): Promise<string | undefined> => {
+      vi.setSystemTime(new Date("2026-06-20T12:00:31.000Z"));
+      return "profile after timeout";
+    };
+    const service = buildService(judge, llm, slowProfile, 30_000);
+
+    try {
+      await expect(service.apply(request("The original draft."))).rejects.toMatchObject({
+        code: "chain_budget_exhausted",
+      });
+      expect(judgeSpy).not.toHaveBeenCalled();
+      expect(generateStructured).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("passes remaining chain budget to the original judge", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-20T12:00:00.000Z"));
