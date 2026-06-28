@@ -870,7 +870,7 @@ describe("RunnerApp default wiring — transport + observer", () => {
     expect(fake.exposed.size).toBe(24);
   });
 
-  it("attaches a single response listener on the context with NO attachObserver override (capture observed, not injected — invariant #6)", async () => {
+  it("attaches external and own response listeners on the context with NO attachObserver override", async () => {
     const fake = createFakeContext();
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -884,10 +884,11 @@ describe("RunnerApp default wiring — transport + observer", () => {
     await app.start();
     logSpy.mockRestore();
 
-    // The observer registers exactly one `response` listener and issues no
-    // outbound request: the fake context exposes no request-issuing method, so
-    // wiring that called one would throw. Zero non-response events expected.
-    expect(fake.responseListeners).toHaveLength(1);
+    // The default wiring registers the external observer and the own-capture
+    // observer. Both are observe-only response listeners and issue no outbound
+    // request: the fake context exposes no request-issuing method, so wiring that
+    // called one would throw. Zero non-response events expected.
+    expect(fake.responseListeners).toHaveLength(2);
     const onCalls = (fake.context.on as ReturnType<typeof vi.fn>).mock.calls;
     expect(onCalls.every((c) => c[0] === "response")).toBe(true);
   });

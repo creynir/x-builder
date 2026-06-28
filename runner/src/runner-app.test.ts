@@ -368,7 +368,7 @@ describe("RunnerApp — observer onBatch wiring", () => {
 
     await app.start();
 
-    expect(attachObserver).toHaveBeenCalledWith(fake.context, expect.any(Function));
+    expect(attachObserver).toHaveBeenCalledWith(fake.context, expect.any(Function), services);
   });
 });
 
@@ -567,7 +567,7 @@ describe("RunnerApp.start — reconnect mode (connectOverCDP)", () => {
 
     expect(bindTransport).toHaveBeenCalledWith(xPage, services);
     expect(bootstrapOverlay).toHaveBeenCalledWith(xPage);
-    expect(attachObserver).toHaveBeenCalledWith(fakeCdp.context, expect.any(Function));
+    expect(attachObserver).toHaveBeenCalledWith(fakeCdp.context, expect.any(Function), services);
 
     // bindTransport precedes bootstrapOverlay.
     expect(recorder.calls.indexOf("bindTransport")).toBeLessThan(

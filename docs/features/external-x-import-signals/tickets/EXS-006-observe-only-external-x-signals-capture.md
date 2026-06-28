@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # EXS-006: Add observe-only ExternalXSignalsCaptureObserver and runner wiring
@@ -67,3 +67,4 @@ Coverage level: runner observer/normalizer unit tests and focused runner integra
 ## Pipeline Log
 
 - 2026-06-28: Ticket authored from approved arch recon. Validator concern added: dual observer tests must prove external observations cannot leak into own-post capture.
+- 2026-06-28: Implemented observe-only `ExternalXSignalsCaptureObserver`, runner default wiring, source-gated profile/timeline identity handling, pending tweets flush after profile identity, and own-capture skip coordination. Verification: `./node_modules/.bin/vitest run src/external-x-signals-capture-observer.test.ts src/graphql-capture-observer.test.ts src/transport-engine-bindings.integration.test.ts src/runner-app.test.ts src/runner-app-sqlite-host-swap.test.ts`; `./node_modules/.bin/tsc -p tsconfig.json --noEmit`; RGB gates from `2482f60`.
