@@ -11,7 +11,7 @@
  *     static bindAll(page: PageLike, services: BoundEngineServices): Promise<void>
  *   }
  *
- * `bindAll` registers all 20 `__xbuilder_<method>` bindings on the page via
+ * `bindAll` registers all 24 `__xbuilder_<method>` bindings on the page via
  * `page.exposeFunction`. Each handler: parse the raw arg with the method's
  * request schema, call the bound service/handler, parse the result with the
  * method's response schema, return it. Zod errors propagate — never swallowed.
@@ -50,12 +50,16 @@ import {
   cooldownReportSchema,
   generateCategorySchema,
   generateIdeaResponseSchema,
+  getExternalXSignalsOverviewResponseSchema,
   getFeedbackLoopSummaryResponseSchema,
   judgeDraftRequestSchema,
   judgeDraftResponseSchema,
   linkFeedbackPredictionResponseSchema,
   overlayReadinessSchema,
   recordFeedbackPredictionResponseSchema,
+  addExternalXSignalSourceResponseSchema,
+  refreshExternalXSignalSourceResponseSchema,
+  removeExternalXSignalSourceResponseSchema,
   suggestPostResponseSchema,
 } from "@x-builder/shared";
 
@@ -325,6 +329,55 @@ const getFeedbackLoopSummaryResponse = {
   recent: [{ status: "pending_unlinked" as const, prediction: feedbackPredictionRecord }],
 };
 
+const externalXSignalSource = {
+  id: "external-source-1",
+  platform: "x" as const,
+  screenName: "external_builder",
+  status: "active" as const,
+  evidenceCount: 0,
+  patternCount: 0,
+  createdAt: NOW_ISO,
+  updatedAt: NOW_ISO,
+};
+
+const getExternalXSignalsOverviewResponse = {
+  generatedAt: NOW_ISO,
+  sources: [externalXSignalSource],
+  totals: {
+    sources: 1,
+    activeSources: 1,
+    evidence: 0,
+    patterns: 0,
+    refreshRuns: 0,
+  },
+  patterns: [],
+  recentEvidence: [],
+  refreshRuns: [],
+};
+
+const addExternalXSignalSourceResponse = {
+  source: externalXSignalSource,
+  duplicate: false,
+};
+
+const removeExternalXSignalSourceResponse = {
+  source: { ...externalXSignalSource, status: "removed" as const },
+  removed: true,
+};
+
+const refreshExternalXSignalSourceResponse = {
+  source: externalXSignalSource,
+  run: {
+    id: "external-run-1",
+    sourceId: "external-source-1",
+    status: "no_observation" as const,
+    startedAt: NOW_ISO,
+    completedAt: NOW_ISO,
+    evidenceCount: 0,
+    warningCount: 0,
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Mock Page that records [name, handler] pairs so handlers can be invoked
 // ---------------------------------------------------------------------------
@@ -432,6 +485,12 @@ function createMockServices() {
     linkPrediction: vi.fn(async () => linkFeedbackPredictionResponse),
     getSummary: vi.fn(async () => getFeedbackLoopSummaryResponse),
   };
+  const externalXSignalsService = {
+    getOverview: vi.fn(async () => getExternalXSignalsOverviewResponse),
+    addSource: vi.fn(async () => addExternalXSignalSourceResponse),
+    removeSource: vi.fn(async () => removeExternalXSignalSourceResponse),
+    refreshSource: vi.fn(async () => refreshExternalXSignalSourceResponse),
+  };
 
   const services = {
     getStatus,
@@ -450,6 +509,7 @@ function createMockServices() {
     generateCategoryService,
     applyJudgeSuggestionsService,
     feedbackLoopService,
+    externalXSignalsService,
   };
 
   return services as unknown as BoundEngineServices & typeof services;
@@ -488,6 +548,10 @@ const B = {
   recordFeedbackPrediction: binding("recordFeedbackPrediction"),
   linkFeedbackPrediction: binding("linkFeedbackPrediction"),
   getFeedbackLoopSummary: binding("getFeedbackLoopSummary"),
+  getExternalXSignalsOverview: binding("getExternalXSignalsOverview"),
+  addExternalXSignalSource: binding("addExternalXSignalSource"),
+  removeExternalXSignalSource: binding("removeExternalXSignalSource"),
+  refreshExternalXSignalSource: binding("refreshExternalXSignalSource"),
 } as const;
 
 let mockPage: ReturnType<typeof createMockPage>;
@@ -503,20 +567,20 @@ afterEach(() => {
 });
 
 describe("ExposeFunctionTransport.bindAll — registration", () => {
-  it("registers exactly the 20 binding names from ENGINE_TRANSPORT_BINDINGS", async () => {
+  it("registers exactly the 24 binding names from ENGINE_TRANSPORT_BINDINGS", async () => {
     await ExposeFunctionTransport.bindAll(mockPage.page, services);
 
     const expected = Object.values(B).slice().sort();
     const registered = [...mockPage.handlers.keys()].sort();
 
     expect(registered).toEqual(expected);
-    expect(registered).toHaveLength(20);
+    expect(registered).toHaveLength(24);
   });
 
   it("calls page.exposeFunction once per binding with a function handler", async () => {
     await ExposeFunctionTransport.bindAll(mockPage.page, services);
 
-    expect(mockPage.exposeFunction).toHaveBeenCalledTimes(20);
+    expect(mockPage.exposeFunction).toHaveBeenCalledTimes(24);
     for (const name of Object.values(B)) {
       expect(mockPage.handlers.get(name)).toBeTypeOf("function");
     }
@@ -756,6 +820,58 @@ describe("ExposeFunctionTransport — remaining bindings round-trip their respon
       limit: 50,
     });
     expect(() => getFeedbackLoopSummaryResponseSchema.parse(result)).not.toThrow();
+  });
+
+  it("getExternalXSignalsOverview accepts an omitted arg and returns a valid response", async () => {
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+    const result = await mockPage.handlers.get(B.getExternalXSignalsOverview)!(undefined);
+    expect(services.externalXSignalsService.getOverview).toHaveBeenCalledWith({
+      includeRemoved: false,
+      sourceLimit: 25,
+      patternLimit: 20,
+      recentEvidenceLimit: 20,
+      refreshRunLimit: 20,
+    });
+    expect(() => getExternalXSignalsOverviewResponseSchema.parse(result)).not.toThrow();
+  });
+
+  it("addExternalXSignalSource parses its request and returns a valid response", async () => {
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+    const result = await mockPage.handlers.get(B.addExternalXSignalSource)!({
+      screenName: "@External_Builder",
+    });
+    expect(services.externalXSignalsService.addSource).toHaveBeenCalledWith({
+      screenName: "external_builder",
+    });
+    expect(() => addExternalXSignalSourceResponseSchema.parse(result)).not.toThrow();
+  });
+
+  it("removeExternalXSignalSource parses its request and returns a valid response", async () => {
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+    const result = await mockPage.handlers.get(B.removeExternalXSignalSource)!({
+      sourceId: "external-source-1",
+    });
+    expect(services.externalXSignalsService.removeSource).toHaveBeenCalledWith({
+      sourceId: "external-source-1",
+    });
+    expect(() => removeExternalXSignalSourceResponseSchema.parse(result)).not.toThrow();
+  });
+
+  it("refreshExternalXSignalSource rejects invalid input before calling the service", async () => {
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+    await expect(mockPage.handlers.get(B.refreshExternalXSignalSource)!({ sourceId: "" })).rejects.toThrow();
+    expect(services.externalXSignalsService.refreshSource).not.toHaveBeenCalled();
+  });
+
+  it("refreshExternalXSignalSource parses its request and returns a valid response", async () => {
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+    const result = await mockPage.handlers.get(B.refreshExternalXSignalSource)!({
+      sourceId: "external-source-1",
+    });
+    expect(services.externalXSignalsService.refreshSource).toHaveBeenCalledWith({
+      sourceId: "external-source-1",
+    });
+    expect(() => refreshExternalXSignalSourceResponseSchema.parse(result)).not.toThrow();
   });
 });
 

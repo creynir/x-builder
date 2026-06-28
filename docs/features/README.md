@@ -48,10 +48,12 @@ arch-recon
 **Next build queue:**
 
 1. [`smarter-generation-context`](./smarter-generation-context/) - send the LLM only the requested format's playbook slice plus a tight voice sample instead of the whole knowledge base.
-2. **Refactor hotspots** — split `engine/src/server/server.ts` and `overlay/src/compose/compose-cockpit.tsx` after behavior is pinned.
+2. [`generation-category-panel`](./generation-category-panel/) - show all post generation categories in a bounded left-side panel with internal scrolling when the list overflows.
+3. **Refactor hotspots** — split `engine/src/server/server.ts` and `overlay/src/compose/compose-cockpit.tsx` after behavior is pinned.
 
 **Planned feature areas:**
 
+- [`agent-operator-skill`](./agent-operator-skill/) - agent-run setup and operating skill so users do not manually bootstrap, launch, inspect, and explain the local system
 - [`external-feedback-loop`](./external-feedback-loop/) — external or hosted feedback-signal expansion beyond the local My Feedback Loop
 - [`external-x-import-signals`](./external-x-import-signals/) — external reach signals
 - `voice-rag-generation` — future vector index / voice retrieval on top of the SQLite store

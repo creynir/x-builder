@@ -1,5 +1,5 @@
 /**
- * ExposeFunctionTransport (XOB-016) — registers all 20 `__xbuilder_<method>`
+ * ExposeFunctionTransport (XOB-016) — registers all 24 `__xbuilder_<method>`
  * bindings on a Playwright page and routes each call, in-process, to the matching
  * engine service.
  *
@@ -42,6 +42,8 @@ import {
   generateCategorySchema,
   generateIdeaRequestSchema,
   generateIdeaResponseSchema,
+  getExternalXSignalsOverviewRequestSchema,
+  getExternalXSignalsOverviewResponseSchema,
   getFeedbackLoopSummaryRequestSchema,
   getFeedbackLoopSummaryResponseSchema,
   judgeDraftRequestSchema,
@@ -51,6 +53,12 @@ import {
   overlayReadinessSchema,
   recordFeedbackPredictionRequestSchema,
   recordFeedbackPredictionResponseSchema,
+  refreshExternalXSignalSourceRequestSchema,
+  refreshExternalXSignalSourceResponseSchema,
+  removeExternalXSignalSourceRequestSchema,
+  removeExternalXSignalSourceResponseSchema,
+  addExternalXSignalSourceRequestSchema,
+  addExternalXSignalSourceResponseSchema,
   suggestPostRequestSchema,
   suggestPostResponseSchema,
 } from "@x-builder/shared";
@@ -73,6 +81,8 @@ import type {
   GenerateCategory,
   GenerateIdeaRequest,
   GenerateIdeaResponse,
+  GetExternalXSignalsOverviewRequest,
+  GetExternalXSignalsOverviewResponse,
   GetFeedbackLoopSummaryRequest,
   GetFeedbackLoopSummaryResponse,
   JudgeDraftRequest,
@@ -82,6 +92,12 @@ import type {
   OverlayReadiness,
   RecordFeedbackPredictionRequest,
   RecordFeedbackPredictionResponse,
+  RefreshExternalXSignalSourceRequest,
+  RefreshExternalXSignalSourceResponse,
+  RemoveExternalXSignalSourceRequest,
+  RemoveExternalXSignalSourceResponse,
+  AddExternalXSignalSourceRequest,
+  AddExternalXSignalSourceResponse,
   SuggestPostRequest,
   SuggestPostResponse,
 } from "@x-builder/shared";
@@ -151,6 +167,12 @@ export interface BoundEngineServices {
     recordPrediction(request: RecordFeedbackPredictionRequest): Promise<RecordFeedbackPredictionResponse>;
     linkPrediction(request: LinkFeedbackPredictionRequest): Promise<LinkFeedbackPredictionResponse>;
     getSummary(request?: GetFeedbackLoopSummaryRequest): Promise<GetFeedbackLoopSummaryResponse>;
+  };
+  externalXSignalsService: {
+    getOverview(request?: GetExternalXSignalsOverviewRequest): Promise<GetExternalXSignalsOverviewResponse>;
+    addSource(request: AddExternalXSignalSourceRequest): Promise<AddExternalXSignalSourceResponse>;
+    removeSource(request: RemoveExternalXSignalSourceRequest): Promise<RemoveExternalXSignalSourceResponse>;
+    refreshSource(request: RefreshExternalXSignalSourceRequest): Promise<RefreshExternalXSignalSourceResponse>;
   };
 }
 
@@ -403,11 +425,39 @@ function buildHandlers(
         await services.feedbackLoopService.getSummary(request),
       );
     },
+
+    getExternalXSignalsOverview: async (rawArg) => {
+      const request = getExternalXSignalsOverviewRequestSchema.parse(rawArg ?? {});
+      return getExternalXSignalsOverviewResponseSchema.parse(
+        await services.externalXSignalsService.getOverview(request),
+      );
+    },
+
+    addExternalXSignalSource: async (rawArg) => {
+      const request = addExternalXSignalSourceRequestSchema.parse(rawArg);
+      return addExternalXSignalSourceResponseSchema.parse(
+        await services.externalXSignalsService.addSource(request),
+      );
+    },
+
+    removeExternalXSignalSource: async (rawArg) => {
+      const request = removeExternalXSignalSourceRequestSchema.parse(rawArg);
+      return removeExternalXSignalSourceResponseSchema.parse(
+        await services.externalXSignalsService.removeSource(request),
+      );
+    },
+
+    refreshExternalXSignalSource: async (rawArg) => {
+      const request = refreshExternalXSignalSourceRequestSchema.parse(rawArg);
+      return refreshExternalXSignalSourceResponseSchema.parse(
+        await services.externalXSignalsService.refreshSource(request),
+      );
+    },
   };
 }
 
 /**
- * Registers all 20 `__xbuilder_<method>` engine bindings on a page, each routing
+ * Registers all 24 `__xbuilder_<method>` engine bindings on a page, each routing
  * to the matching engine service with request/response Zod validation.
  */
 export class ExposeFunctionTransport {

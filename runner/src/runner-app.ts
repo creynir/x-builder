@@ -14,7 +14,7 @@
  * through the same injectable seams. Every collaborator `start()` touches is
  * injectable through {@link RunnerAppOptions} so the lifecycle can be tested with
  * no real browser, engine services, or network. The `bindTransport` /
- * `attachObserver` defaults (XOB-030) bind the 20 `__xbuilder_*` engine bindings
+ * `attachObserver` defaults (XOB-030) bind the 24 `__xbuilder_*` engine bindings
  * through {@link ExposeFunctionTransport} and register the
  * {@link GraphQlCaptureObserver} response listener; an injected override still
  * wins, so every seam stays testable.
@@ -27,10 +27,12 @@ import { join } from "node:path";
 
 import {
   FeedbackLoopService,
+  ExternalXSignalsService,
   JsonFileAppSettingsRepository,
   LiveCaptureService,
   NodeProcessRunner,
   SqliteFeedbackLoopRepository,
+  SqliteExternalXSignalsRepository,
   SqlitePostLibraryRepository,
   StructuredLlmService,
   importPostLibraryJsonToSqlite,
@@ -49,6 +51,7 @@ import {
 } from "./bound-engine-services.js";
 import { ExposeFunctionTransport } from "./expose-function-transport.js";
 import { GraphQlCaptureObserver } from "./graphql-capture-observer.js";
+import { ExternalXSignalsCaptureObserver } from "./external-x-signals-capture-observer.js";
 import { type ObserverLike } from "./overlay-readiness.js";
 import { assembleTransport } from "./transport-assembly.js";
 
@@ -136,6 +139,7 @@ export interface EngineServices {
   settingsRepository?: JsonFileAppSettingsRepository;
   postLibraryRepository?: PostLibraryRepository;
   feedbackLoopService?: FeedbackLoopService;
+  externalXSignalsService?: ExternalXSignalsService;
 }
 
 export interface RunnerAppOptions {
@@ -161,6 +165,7 @@ export interface RunnerAppOptions {
   attachObserver?: (
     context: BrowserContextLike,
     onBatch: (batch: unknown) => unknown,
+    services: EngineServices,
   ) => void | Promise<void>;
   bootstrapOverlay?: (page: PageLike) => void | Promise<void>;
 }
@@ -202,9 +207,18 @@ const defaultCreateServices = (opts: { engineSettingsDir: string }): EngineServi
     feedbackRepository: new SqliteFeedbackLoopRepository(db),
     postLibraryRepository,
   });
+  const externalXSignalsService = new ExternalXSignalsService({
+    repository: new SqliteExternalXSignalsRepository(db),
+  });
   const liveCapture = new LiveCaptureService(postLibraryRepository);
 
-  return { liveCapture, settingsRepository, postLibraryRepository, feedbackLoopService };
+  return {
+    liveCapture,
+    settingsRepository,
+    postLibraryRepository,
+    feedbackLoopService,
+    externalXSignalsService,
+  };
 };
 
 // One in-process StructuredLlmService backs the generate / apply / suggest LLM
@@ -267,6 +281,7 @@ export class RunnerApp {
   private readonly attachObserver: (
     context: BrowserContextLike,
     onBatch: (batch: unknown) => unknown,
+    services: EngineServices,
   ) => void | Promise<void>;
   private readonly bootstrapOverlay: (page: PageLike) => void | Promise<void>;
 
@@ -297,12 +312,13 @@ export class RunnerApp {
     this.launchBrowser = options.launchBrowser ?? ((opts) => BrowserController.launch(opts));
     this.connectBrowser =
       options.connectBrowser ?? ((endpoint) => chromium.connectOverCDP(endpoint));
-    // The real (XOB-030) defaults: bind the 20 engine bindings through
+    // The real (XOB-030) defaults: bind the 24 engine bindings through
     // ExposeFunctionTransport, and observe X GraphQL responses for live capture.
     // An injected override still wins, keeping every seam testable.
     this.bindTransport = options.bindTransport ?? ((page, services) => this.defaultBindTransport(page, services));
     this.attachObserver =
-      options.attachObserver ?? ((context, onBatch) => this.defaultAttachObserver(context, onBatch));
+      options.attachObserver ??
+      ((context, onBatch, services) => this.defaultAttachObserver(context, onBatch, services));
     // The real (XOB-033) default: assemble window.__xbTransport from the exposed
     // bindings and invoke the overlay bootstrap, both as page init scripts so they
     // (re-)run on every navigation. An injected override still wins.
@@ -337,6 +353,7 @@ export class RunnerApp {
       settingsRepository: services.settingsRepository,
       postLibraryRepository: services.postLibraryRepository,
       feedbackLoopService: services.feedbackLoopService,
+      externalXSignalsService: services.externalXSignalsService,
       liveCapture: services.liveCapture as LiveCaptureService,
       llm,
       // A StructuredLlmService's generic generateStructured satisfies the
@@ -355,12 +372,29 @@ export class RunnerApp {
   private defaultAttachObserver(
     context: BrowserContextLike,
     onBatch: (batch: unknown) => unknown,
+    services: EngineServices,
   ): void {
+    const externalObserver = services.externalXSignalsService
+      ? new ExternalXSignalsCaptureObserver(services.externalXSignalsService).attachTo(
+          context as never,
+        )
+      : undefined;
+
     // Forward the batch (and its ingest promise) so the observer's own
-    // never-throw handler awaits and tolerates any ingestion failure.
-    this.getOrCreateCaptureObserver().attachTo(context as never, async (batch) => {
-      await onBatch(batch);
-    });
+    // never-throw handler awaits and tolerates any ingestion failure. When a
+    // response belongs to a registered external signal source, skip the own-post
+    // path so external evidence cannot enter the local author corpus.
+    this.getOrCreateCaptureObserver().attachTo(
+      context as never,
+      async (batch) => {
+        await onBatch(batch);
+      },
+      {
+        shouldSkip: externalObserver
+          ? (observation) => externalObserver.isRegisteredExternalObservation(observation)
+          : undefined,
+      },
+    );
   }
 
   // Default overlay-mount wiring (XOB-033). Runs AFTER navigation so the page is
@@ -433,7 +467,7 @@ export class RunnerApp {
     this.page = this.context.pages()[0] ?? (await this.context.newPage());
 
     await this.bindTransport(this.page, services);
-    await this.attachObserver(this.context, (batch) => services.liveCapture.ingest(batch));
+    await this.attachObserver(this.context, (batch) => services.liveCapture.ingest(batch), services);
 
     await this.page.goto("https://x.com");
 
@@ -503,10 +537,10 @@ export class RunnerApp {
       await page.evaluate(overlayBundle);
     }
 
-    // Same order as launch mode: bind the 20 bindings (exposeFunction works over
+    // Same order as launch mode: bind the 24 bindings (exposeFunction works over
     // connectOverCDP), attach the capture observer, then bootstrap the overlay.
     await this.bindTransport(page, services);
-    await this.attachObserver(context, (batch) => services.liveCapture.ingest(batch));
+    await this.attachObserver(context, (batch) => services.liveCapture.ingest(batch), services);
     await this.bootstrapOverlay(page);
 
     console.log(`[x-builder] Reconnected to Chrome at ${endpoint} — overlay injected.`);

@@ -8,7 +8,7 @@
  *   - deriveApproved boundary (overall 70 → true, 69 → false)
  *   - generateIdeaRequestSchema refine (idea-only, format-only, neither → rejected)
  *   - analyzePostsResponseSchema legacy parse (omitted cooldown is not injected)
- *   - ENGINE_TRANSPORT_BINDINGS shape (exactly 20 entries, locked names)
+ *   - ENGINE_TRANSPORT_BINDINGS shape (exactly 24 entries, locked names)
  *
  * Every import that references a NOT-YET-IMPLEMENTED symbol will produce a
  * ModuleNotFoundError / unresolved-export.  That is the correct Red state.
@@ -425,7 +425,7 @@ describe("analyzePostsResponseSchema legacy item without cooldown", () => {
 // ENGINE_TRANSPORT_BINDINGS
 // ---------------------------------------------------------------------------
 
-// Locked 20 method names (from the ticket spec — spellings must not drift)
+// Locked 24 method names (from the ticket spec — spellings must not drift)
 const LOCKED_METHOD_NAMES = [
   "getOverlayReadiness",
   "getStatus",
@@ -447,13 +447,17 @@ const LOCKED_METHOD_NAMES = [
   "recordFeedbackPrediction",
   "linkFeedbackPrediction",
   "getFeedbackLoopSummary",
+  "getExternalXSignalsOverview",
+  "addExternalXSignalSource",
+  "removeExternalXSignalSource",
+  "refreshExternalXSignalSource",
 ] as const;
 
 describe("ENGINE_TRANSPORT_BINDINGS shape and completeness", () => {
-  it("contains exactly 20 entries", () => {
+  it("contains exactly 24 entries", () => {
     const keys = Object.keys(ENGINE_TRANSPORT_BINDINGS);
 
-    expect(keys).toHaveLength(20);
+    expect(keys).toHaveLength(24);
   });
 
   it("has every value equal to __xbuilder_<methodName>", () => {
@@ -462,7 +466,7 @@ describe("ENGINE_TRANSPORT_BINDINGS shape and completeness", () => {
     }
   });
 
-  it("contains exactly the locked set of 20 method names and no others", () => {
+  it("contains exactly the locked set of 24 method names and no others", () => {
     const keys = new Set(Object.keys(ENGINE_TRANSPORT_BINDINGS));
     const locked = new Set<string>(LOCKED_METHOD_NAMES);
 
@@ -517,5 +521,24 @@ describe("ENGINE_TRANSPORT_BINDINGS shape and completeness", () => {
     );
     expect(ENGINE_TRANSPORT_BINDINGS.getFeedbackLoop).toBeUndefined();
     expect(ENGINE_TRANSPORT_BINDINGS.recordPrediction).toBeUndefined();
+  });
+
+  it("has the external X signal bindings with locked spellings and no stale aliases", () => {
+    expect(ENGINE_TRANSPORT_BINDINGS.getExternalXSignalsOverview).toBe(
+      "__xbuilder_getExternalXSignalsOverview",
+    );
+    expect(ENGINE_TRANSPORT_BINDINGS.addExternalXSignalSource).toBe(
+      "__xbuilder_addExternalXSignalSource",
+    );
+    expect(ENGINE_TRANSPORT_BINDINGS.removeExternalXSignalSource).toBe(
+      "__xbuilder_removeExternalXSignalSource",
+    );
+    expect(ENGINE_TRANSPORT_BINDINGS.refreshExternalXSignalSource).toBe(
+      "__xbuilder_refreshExternalXSignalSource",
+    );
+    expect(ENGINE_TRANSPORT_BINDINGS.registerExternalAccount).toBeUndefined();
+    expect(ENGINE_TRANSPORT_BINDINGS.importExternalSignals).toBeUndefined();
+    expect(ENGINE_TRANSPORT_BINDINGS.getExternalSignalsSummary).toBeUndefined();
+    expect(ENGINE_TRANSPORT_BINDINGS.getExternalSignalPatterns).toBeUndefined();
   });
 });

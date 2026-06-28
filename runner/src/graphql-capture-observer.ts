@@ -34,6 +34,18 @@ export type ContextLike = {
 /** Callback the observer hands each normalized batch to. */
 export type OnBatch = (batch: CaptureIngestRequest) => Promise<void> | void;
 
+export type GraphQlCaptureObservation = {
+  opName: string;
+  body: unknown;
+  capturedAt: string;
+  posts: CaptureIngestRequest["posts"];
+  profile?: CaptureIngestRequest["profile"];
+};
+
+export type GraphQlCaptureObserverOptions = {
+  shouldSkip?: (observation: GraphQlCaptureObservation) => Promise<boolean> | boolean;
+};
+
 /**
  * Operation names whose responses carry capturable data. Matched as a
  * case-sensitive substring of the response URL — query ids rotate and are
@@ -52,8 +64,12 @@ export class GraphQlCaptureObserver {
    * caller (RunnerApp) can pass it to `getOverlayReadiness`. The handler is
    * async and never throws to the page.
    */
-  static attach(context: ContextLike, onBatch: OnBatch): GraphQlCaptureObserver {
-    return new GraphQlCaptureObserver().attachTo(context, onBatch);
+  static attach(
+    context: ContextLike,
+    onBatch: OnBatch,
+    options: GraphQlCaptureObserverOptions = {},
+  ): GraphQlCaptureObserver {
+    return new GraphQlCaptureObserver().attachTo(context, onBatch, options);
   }
 
   /**
@@ -62,12 +78,20 @@ export class GraphQlCaptureObserver {
    * hold its live `state`/`lastCaptureAt` reference — then attach it once the
    * context exists. Returns `this` for fluent use by {@link attach}.
    */
-  attachTo(context: ContextLike, onBatch: OnBatch): this {
-    context.on("response", (response) => this.handle(response, onBatch));
+  attachTo(
+    context: ContextLike,
+    onBatch: OnBatch,
+    options: GraphQlCaptureObserverOptions = {},
+  ): this {
+    context.on("response", (response) => this.handle(response, onBatch, options));
     return this;
   }
 
-  private async handle(response: ResponseLike, onBatch: OnBatch): Promise<void> {
+  private async handle(
+    response: ResponseLike,
+    onBatch: OnBatch,
+    options: GraphQlCaptureObserverOptions,
+  ): Promise<void> {
     try {
       const opName = OPERATION_NAMES.find((name) => response.url().includes(name));
       if (opName === undefined) {
@@ -93,6 +117,18 @@ export class GraphQlCaptureObserver {
         opName === PROFILE_OPERATION
           ? XGraphQlNormalizer.normalizeUserProfile(body, capturedAt)
           : undefined;
+
+      if (
+        await options.shouldSkip?.({
+          opName,
+          body,
+          capturedAt,
+          posts,
+          ...(profile ? { profile } : {}),
+        })
+      ) {
+        return;
+      }
 
       // State machine — computed BEFORE onBatch (AC#4): a downstream ingestion
       // failure must not retroactively change the health derived from parsing.

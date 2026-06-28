@@ -1,7 +1,7 @@
 /**
  * Failing tests for the page-context transport-assembly seam.
  *
- * The runner exposes 20 raw `__xbuilder_<method>` functions on the page (via
+ * The runner exposes 24 raw `__xbuilder_<method>` functions on the page (via
  * `ExposeFunctionTransport.bindAll` → `page.exposeFunction`), which surface in the
  * page context as `window.__xbuilder_<method>`. The overlay, however, reads a
  * single assembled `window.__xbTransport` object (`overlay/src/transport/provider.tsx`).
@@ -34,7 +34,7 @@ import { ENGINE_TRANSPORT_BINDINGS } from "@x-builder/shared";
 import { assembleTransport } from "./transport-assembly";
 
 // ---------------------------------------------------------------------------
-// Fake window carrying the 20 exposed `__xbuilder_<method>` functions.
+// Fake window carrying the 24 exposed `__xbuilder_<method>` functions.
 //
 // Mirrors the production boundary: `page.exposeFunction(name, fn)` installs a
 // global `window[name]` callable. Each binding is a vi.fn echoing a tagged
@@ -134,7 +134,7 @@ describe("transport assembly — installs window.__xbTransport with the full Eng
     const actual = Object.keys(assembledTransport()).sort();
 
     expect(actual).toEqual(expected);
-    expect(actual).toHaveLength(20);
+    expect(actual).toHaveLength(24);
   });
 
   it("makes every assembled transport method callable", () => {

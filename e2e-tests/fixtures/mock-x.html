@@ -116,19 +116,27 @@
       // The query ids are arbitrary (X rotates them); the observer matches by the
       // operation-name SUBSTRING in the URL path, so the operation name must be
       // present in the path.
-      (function loadCannedGraphQl() {
+      window.__mockXLoadCannedGraphQl = function loadCannedGraphQl(screenName) {
+        var suffix = screenName
+          ? "&screenName=" + encodeURIComponent(screenName)
+          : "";
         var endpoints = [
-          "/i/api/graphql/QID-profile/UserByScreenName?variables=%7B%7D",
-          "/i/api/graphql/QID-tweets/UserTweets?variables=%7B%7D",
+          "/i/api/graphql/QID-profile/UserByScreenName?variables=%7B%7D" + suffix,
+          "/i/api/graphql/QID-tweets/UserTweets?variables=%7B%7D" + suffix,
         ];
-        for (var i = 0; i < endpoints.length; i += 1) {
-          // GET, like the page's own observe-only profile/timeline fetches.
-          fetch(endpoints[i], { method: "GET" }).catch(function () {
-            // A fixture-server hiccup must not break the page; the observer simply
-            // sees no batch. Tests assert on the captured corpus, not this fetch.
-          });
-        }
-      })();
+        return Promise.all(
+          endpoints.map(function (endpoint) {
+            // GET, like the page's own observe-only profile/timeline fetches.
+            return fetch(endpoint, { method: "GET" }).catch(function () {
+              // A fixture-server hiccup must not break the page; the observer simply
+              // sees no batch. Tests assert on the captured corpus, not this fetch.
+            });
+          }),
+        ).then(function () {
+          return undefined;
+        });
+      };
+      window.__mockXLoadCannedGraphQl();
     </script>
   </body>
 </html>

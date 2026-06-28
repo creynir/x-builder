@@ -1,6 +1,6 @@
 /**
  * BoundEngineServices adapter bundle (XOB-030) — constructs every in-process
- * engine service the 20 `__xbuilder_*` transport bindings map to and adapts each
+ * engine service the 24 `__xbuilder_*` transport bindings map to and adapts each
  * to the structural {@link BoundEngineServices} surface `ExposeFunctionTransport`
  * routes through.
  *
@@ -30,11 +30,13 @@ import {
   ApplyJudgeSuggestionsService,
   DeterministicAnalysisService,
   FeedbackLoopService,
+  ExternalXSignalsService,
   GenerateCategoryService,
   GenerateIdeasService,
   JsonFileAppSettingsRepository,
   JudgeDraftService,
   SqliteFeedbackLoopRepository,
+  SqliteExternalXSignalsRepository,
   LiveCaptureService,
   LiveContextResolver,
   RepetitionWindowService,
@@ -72,6 +74,7 @@ export interface CreateBoundEngineServicesOptions {
   postLibraryRepository: PostLibraryRepository;
   liveCapture: LiveCaptureService;
   feedbackLoopService?: FeedbackLoopService;
+  externalXSignalsService?: ExternalXSignalsService;
   /** Structured-LLM gateway for generate / apply-suggestions / suggest. */
   llm: StructuredLlmGateway;
   /** Judge gateway for judgeDraft and the generate/apply judge passes. */
@@ -182,6 +185,11 @@ export function createBoundEngineServices(
     new FeedbackLoopService({
       feedbackRepository: new SqliteFeedbackLoopRepository(openEngineDatabase(":memory:")),
       postLibraryRepository,
+    });
+  const externalXSignalsService =
+    options.externalXSignalsService ??
+    new ExternalXSignalsService({
+      repository: new SqliteExternalXSignalsRepository(openEngineDatabase(":memory:")),
     });
   // GenerateCategoryService takes (repo, windowService); a fresh window service
   // matches buildServer's per-service instance.
@@ -326,6 +334,13 @@ export function createBoundEngineServices(
       recordPrediction: (request) => feedbackLoopService.recordPrediction(request),
       linkPrediction: (request) => feedbackLoopService.linkPrediction(request),
       getSummary: (request) => feedbackLoopService.getSummary(request),
+    },
+
+    externalXSignalsService: {
+      getOverview: (request) => externalXSignalsService.getOverview(request),
+      addSource: (request) => externalXSignalsService.addSource(request),
+      removeSource: (request) => externalXSignalsService.removeSource(request),
+      refreshSource: (request) => externalXSignalsService.refreshSource(request),
     },
   };
 }

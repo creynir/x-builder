@@ -1,7 +1,7 @@
 // @x-builder/overlay — FakeEngineTransport (test-only)
 //
 // A configurable, type-safe stand-in for the REAL shared `EngineTransport`.
-// It implements all 20 methods; each resolves to a minimal valid
+// It implements all 24 methods; each resolves to a minimal valid
 // default (`{}` cast to the method's return type) unless an override is
 // supplied via the constructor. Used as the injected transport in overlay
 // tests via `OverlayTransportProvider`.
@@ -49,7 +49,7 @@ function bind<K extends keyof EngineTransport>(
 
 /**
  * Test-only `EngineTransport`. `const t: EngineTransport = new
- * FakeEngineTransport()` type-checks, and the instance exposes exactly the 20
+ * FakeEngineTransport()` type-checks, and the instance exposes exactly the 24
  * method names in `ENGINE_TRANSPORT_BINDINGS`.
  */
 export class FakeEngineTransport implements EngineTransport {
@@ -73,6 +73,10 @@ export class FakeEngineTransport implements EngineTransport {
   recordFeedbackPrediction: EngineTransport["recordFeedbackPrediction"];
   linkFeedbackPrediction: EngineTransport["linkFeedbackPrediction"];
   getFeedbackLoopSummary: EngineTransport["getFeedbackLoopSummary"];
+  getExternalXSignalsOverview: EngineTransport["getExternalXSignalsOverview"];
+  addExternalXSignalSource: EngineTransport["addExternalXSignalSource"];
+  removeExternalXSignalSource: EngineTransport["removeExternalXSignalSource"];
+  refreshExternalXSignalSource: EngineTransport["refreshExternalXSignalSource"];
 
   constructor(overrides: FakeTransportOverrides = {}) {
     this.getOverlayReadiness = bind(overrides, "getOverlayReadiness");
@@ -95,5 +99,9 @@ export class FakeEngineTransport implements EngineTransport {
     this.recordFeedbackPrediction = bind(overrides, "recordFeedbackPrediction");
     this.linkFeedbackPrediction = bind(overrides, "linkFeedbackPrediction");
     this.getFeedbackLoopSummary = bind(overrides, "getFeedbackLoopSummary");
+    this.getExternalXSignalsOverview = bind(overrides, "getExternalXSignalsOverview");
+    this.addExternalXSignalSource = bind(overrides, "addExternalXSignalSource");
+    this.removeExternalXSignalSource = bind(overrides, "removeExternalXSignalSource");
+    this.refreshExternalXSignalSource = bind(overrides, "refreshExternalXSignalSource");
   }
 }

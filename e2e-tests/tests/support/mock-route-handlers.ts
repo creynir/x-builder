@@ -31,6 +31,20 @@ function readFixture(name: string): string {
   return readFileSync(join(fixturesDir, name), "utf-8");
 }
 
+function fixtureBody(name: string, screenName: string | null): string {
+  if (screenName === null || screenName.trim().length === 0) {
+    return readFixture(name);
+  }
+
+  const body = JSON.parse(readFixture(name)) as {
+    data?: { user?: { result?: { core?: { screen_name?: string }; legacy?: { screen_name?: string } } } };
+  };
+  const result = body.data?.user?.result;
+  if (result?.core !== undefined) result.core.screen_name = screenName;
+  if (result?.legacy !== undefined) result.legacy.screen_name = screenName;
+  return JSON.stringify(body);
+}
+
 /** One recorded inbound request the context issued while a test ran. */
 export interface RecordedRequest {
   method: string;
@@ -100,10 +114,11 @@ export async function installMockX(context: BrowserContext): Promise<MockXLog> {
     // --- The canned GraphQL endpoints (observe-only data the page fetches) ----
     if (pathname.includes("/graphql")) {
       if (pathname.includes("UserByScreenName")) {
+        const screenName = new URL(record.url).searchParams.get("screenName");
         await route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: readFixture("user-by-screen-name-response.json"),
+          body: fixtureBody("user-by-screen-name-response.json", screenName),
         });
         return;
       }

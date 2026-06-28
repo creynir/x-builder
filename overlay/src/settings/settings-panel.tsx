@@ -17,6 +17,7 @@
 import type {
   AppSettings,
   CaptureSummary,
+  GetExternalXSignalsOverviewResponse,
   GetFeedbackLoopSummaryResponse,
   OverlayReadiness,
 } from "@x-builder/shared";
@@ -26,6 +27,10 @@ import { Alert } from "../ui/v2/alert";
 import { KeyValueList, type KeyValueItem } from "../ui/v2/key-value-list";
 import { Skeleton } from "../ui/v2/skeleton";
 import { ArchiveUploadSection, type ArchiveUploadState } from "./archive-upload-section";
+import {
+  ExternalXSignalsSettingsSection,
+  type ExternalXSignalsActionState,
+} from "./external-x-signals-section";
 import { FeedbackLoopSettingsSection } from "./feedback-loop-section";
 import { JudgeProviderSection } from "./judge-provider-section";
 import { ReadinessIndicator } from "./readiness-indicator";
@@ -39,10 +44,16 @@ export interface SettingsPanelProps {
   readiness: Loadable<OverlayReadiness>;
   capture: Loadable<CaptureSummary>;
   feedback: Loadable<GetFeedbackLoopSummaryResponse>;
+  externalXSignals: Loadable<GetExternalXSignalsOverviewResponse>;
+  externalXSignalsAction: ExternalXSignalsActionState;
   onUpdateSettings(next: AppSettings): void;
   onUploadArchive(file: File): void;
   onRefreshFeedback(): void;
   onLinkFeedback(predictionId: string, platformPostId: string): Promise<void>;
+  onAddExternalXSignalSource(screenName: string): Promise<void>;
+  onRefreshExternalXSignalSource(sourceId: string): Promise<void>;
+  onRemoveExternalXSignalSource(sourceId: string): Promise<void>;
+  onRefreshExternalXSignals(): void;
   /** Affordance-supplied interactive controls (e.g. the active-context toggle). */
   children?: ReactNode;
   /** Upload feedback state, owned by the affordance. */
@@ -127,10 +138,16 @@ export function SettingsPanel({
   readiness,
   capture,
   feedback,
+  externalXSignals,
+  externalXSignalsAction,
   onUpdateSettings,
   onUploadArchive,
   onRefreshFeedback,
   onLinkFeedback,
+  onAddExternalXSignalSource,
+  onRefreshExternalXSignalSource,
+  onRemoveExternalXSignalSource,
+  onRefreshExternalXSignals,
   children,
   uploadState = "idle",
   selectorMissCount = 0,
@@ -190,6 +207,17 @@ export function SettingsPanel({
           summary={feedback}
           onRefresh={onRefreshFeedback}
           onLink={onLinkFeedback}
+        />
+      </Section>
+
+      <Section title="External X signals">
+        <ExternalXSignalsSettingsSection
+          overview={externalXSignals}
+          actionState={externalXSignalsAction}
+          onAdd={onAddExternalXSignalSource}
+          onRefreshSource={onRefreshExternalXSignalSource}
+          onRemoveSource={onRemoveExternalXSignalSource}
+          onRefreshOverview={onRefreshExternalXSignals}
         />
       </Section>
 

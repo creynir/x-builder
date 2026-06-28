@@ -15,6 +15,16 @@ import type {
   RecordFeedbackPredictionRequest,
   RecordFeedbackPredictionResponse,
 } from "./feedback-loop.js";
+import type {
+  AddExternalXSignalSourceRequest,
+  AddExternalXSignalSourceResponse,
+  GetExternalXSignalsOverviewRequest,
+  GetExternalXSignalsOverviewResponse,
+  RefreshExternalXSignalSourceRequest,
+  RefreshExternalXSignalSourceResponse,
+  RemoveExternalXSignalSourceRequest,
+  RemoveExternalXSignalSourceResponse,
+} from "./external-x-signals.js";
 import type { CaptureSummary } from "./x-live-capture.js";
 import type { CooldownReport } from "./cooldown.js";
 import type { GenerateCategory } from "./generate-category.js";
@@ -57,6 +67,10 @@ export const __xbuilder_applyJudgeSuggestions = "__xbuilder_applyJudgeSuggestion
 export const __xbuilder_recordFeedbackPrediction = "__xbuilder_recordFeedbackPrediction" as const;
 export const __xbuilder_linkFeedbackPrediction = "__xbuilder_linkFeedbackPrediction" as const;
 export const __xbuilder_getFeedbackLoopSummary = "__xbuilder_getFeedbackLoopSummary" as const;
+export const __xbuilder_getExternalXSignalsOverview = "__xbuilder_getExternalXSignalsOverview" as const;
+export const __xbuilder_addExternalXSignalSource = "__xbuilder_addExternalXSignalSource" as const;
+export const __xbuilder_removeExternalXSignalSource = "__xbuilder_removeExternalXSignalSource" as const;
+export const __xbuilder_refreshExternalXSignalSource = "__xbuilder_refreshExternalXSignalSource" as const;
 
 // Concrete per-method binding-name literals, one per EngineTransport method, so
 // dotted access (`ENGINE_TRANSPORT_BINDINGS.getStatus`) is a known `string`.
@@ -91,10 +105,14 @@ export const ENGINE_TRANSPORT_BINDINGS: EngineTransportBindings &
   recordFeedbackPrediction: __xbuilder_recordFeedbackPrediction,
   linkFeedbackPrediction: __xbuilder_linkFeedbackPrediction,
   getFeedbackLoopSummary: __xbuilder_getFeedbackLoopSummary,
+  getExternalXSignalsOverview: __xbuilder_getExternalXSignalsOverview,
+  addExternalXSignalSource: __xbuilder_addExternalXSignalSource,
+  removeExternalXSignalSource: __xbuilder_removeExternalXSignalSource,
+  refreshExternalXSignalSource: __xbuilder_refreshExternalXSignalSource,
 });
 
 // ---------------------------------------------------------------------------
-// EngineTransport interface — 20 methods, structured-clone-safe JSON payloads
+// EngineTransport interface — 24 methods, structured-clone-safe JSON payloads
 // ---------------------------------------------------------------------------
 
 export interface EngineTransport {
@@ -118,4 +136,8 @@ export interface EngineTransport {
   recordFeedbackPrediction(request: RecordFeedbackPredictionRequest): Promise<RecordFeedbackPredictionResponse>;
   linkFeedbackPrediction(request: LinkFeedbackPredictionRequest): Promise<LinkFeedbackPredictionResponse>;
   getFeedbackLoopSummary(request?: GetFeedbackLoopSummaryRequest): Promise<GetFeedbackLoopSummaryResponse>;
+  getExternalXSignalsOverview(request?: GetExternalXSignalsOverviewRequest): Promise<GetExternalXSignalsOverviewResponse>;
+  addExternalXSignalSource(request: AddExternalXSignalSourceRequest): Promise<AddExternalXSignalSourceResponse>;
+  removeExternalXSignalSource(request: RemoveExternalXSignalSourceRequest): Promise<RemoveExternalXSignalSourceResponse>;
+  refreshExternalXSignalSource(request: RefreshExternalXSignalSourceRequest): Promise<RefreshExternalXSignalSourceResponse>;
 }

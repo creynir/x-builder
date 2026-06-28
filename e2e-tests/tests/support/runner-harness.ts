@@ -1,9 +1,9 @@
 // The runner-driven overlay E2E harness.
 //
 // Boots a REAL RunnerApp against a route-mocked persistent context: the real
-// overlay bundle is injected via addInitScript, the real 17 __xbuilder_* engine
+// overlay bundle is injected via addInitScript, the real 24 __xbuilder_* engine
 // bindings are bound through the real BoundEngineServices adapter over tmpdir
-// repositories, and the real GraphQlCaptureObserver observes the page's own
+// repositories, and the real GraphQlCaptureObserver and ExternalXSignalsCaptureObserver observe the page's own
 // GraphQL responses. The ONLY mocked boundaries are x.com's network (route layer,
 // mock-route-handlers.ts) and the LLM provider (the deterministic fake below).
 //
@@ -28,9 +28,10 @@ import { chromium, type BrowserContext, type Page } from "@playwright/test";
 // Deep imports into the built runner package. @x-builder/runner is hoisted to the
 // top-level node_modules (resolvable from e2e-tests); its dist files are reachable
 // by path. createBoundEngineServices is the in-process engine-bundle adapter;
-// GraphQlCaptureObserver is the observe-only capture listener.
+// GraphQlCaptureObserver and ExternalXSignalsCaptureObserver are observe-only capture listeners.
 import { RunnerApp } from "@x-builder/runner";
 import { createBoundEngineServices } from "@x-builder/runner/dist/bound-engine-services.js";
+import { ExternalXSignalsCaptureObserver } from "@x-builder/runner/dist/external-x-signals-capture-observer.js";
 import { GraphQlCaptureObserver } from "@x-builder/runner/dist/graphql-capture-observer.js";
 
 import { installMockX, type MockXLog } from "./mock-route-handlers";
@@ -381,6 +382,7 @@ export async function startRunner(options: StartRunnerOptions = {}): Promise<Run
       const bundle = createBoundEngineServices({
         settingsRepository: services.settingsRepository!,
         postLibraryRepository,
+        externalXSignalsService: services.externalXSignalsService,
         liveCapture: services.liveCapture as never,
         llm: llm.gateway as never,
         judgeLlm: llm.gateway as never,
@@ -389,12 +391,25 @@ export async function startRunner(options: StartRunnerOptions = {}): Promise<Run
       } as never);
       await ExposeFunctionTransport.bindAll(page as never, bundle);
     },
-    // Register the SAME observer on the context (observe-only; never issues a
-    // request). It forwards each normalized batch into live-capture ingest.
-    attachObserver: (ctx, onBatch) => {
-      observer.attachTo(ctx as never, async (batch) => {
-        await onBatch(batch);
-      });
+    // Register observe-only listeners on the context. External registered
+    // sources are written to the external ledger and skipped by own-post capture.
+    attachObserver: (ctx, onBatch, services) => {
+      const externalObserver = services.externalXSignalsService
+        ? new ExternalXSignalsCaptureObserver(services.externalXSignalsService).attachTo(
+            ctx as never,
+          )
+        : undefined;
+      observer.attachTo(
+        ctx as never,
+        async (batch) => {
+          await onBatch(batch);
+        },
+        {
+          shouldSkip: externalObserver
+            ? (observation) => externalObserver.isRegisteredExternalObservation(observation)
+            : undefined,
+        },
+      );
     },
   });
 

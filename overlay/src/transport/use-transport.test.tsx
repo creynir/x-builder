@@ -8,7 +8,7 @@ import { FakeEngineTransport } from "../testing/fake-transport";
 import { OverlayTransportProvider } from "./provider";
 import { useTransport } from "./use-transport";
 
-/** The 20 LOCKED method names, taken from the real shared binding registry. */
+/** The 24 LOCKED method names, taken from the real shared binding registry. */
 const METHOD_NAMES = Object.keys(ENGINE_TRANSPORT_BINDINGS);
 
 /** A representative call argument per method (signatures come from the real type). */
@@ -33,6 +33,10 @@ const CALL_ARGS: Record<string, unknown[]> = {
   recordFeedbackPrediction: [{}],
   linkFeedbackPrediction: [{}],
   getFeedbackLoopSummary: [],
+  getExternalXSignalsOverview: [],
+  addExternalXSignalSource: [{ screenName: "external_builder" }],
+  removeExternalXSignalSource: [{ sourceId: "external-source-1" }],
+  refreshExternalXSignalSource: [{ sourceId: "external-source-1" }],
 };
 
 afterEach(() => {
@@ -40,7 +44,7 @@ afterEach(() => {
 });
 
 describe("FakeEngineTransport — shape", () => {
-  it("implements exactly the 20 real EngineTransport methods", () => {
+  it("implements exactly the 24 real EngineTransport methods", () => {
     const fake = new FakeEngineTransport();
     const ownMethods = METHOD_NAMES.filter(
       (name) =>
@@ -48,9 +52,9 @@ describe("FakeEngineTransport — shape", () => {
         "function",
     );
 
-    expect(METHOD_NAMES).toHaveLength(20);
+    expect(METHOD_NAMES).toHaveLength(24);
     expect(new Set(ownMethods)).toEqual(new Set(METHOD_NAMES));
-    expect(ownMethods).toHaveLength(20);
+    expect(ownMethods).toHaveLength(24);
   });
 
   it("is assignable to the real EngineTransport type (TS-enforced)", () => {
@@ -75,10 +79,31 @@ describe("FakeEngineTransport — shape", () => {
       expect(value).not.toBeUndefined();
     }
   });
+  it("keeps external X signal overrides callable when detached from the fake", async () => {
+    const addExternalXSignalSource = vi.fn(async () => ({
+      source: {
+        id: "external-source-1",
+        platform: "x",
+        screenName: "external_builder",
+        status: "active",
+        evidenceCount: 0,
+        patternCount: 0,
+        createdAt: "2026-06-28T12:00:00.000Z",
+        updatedAt: "2026-06-28T12:00:00.000Z",
+      },
+      duplicate: false,
+    }));
+    const fake = new FakeEngineTransport({ addExternalXSignalSource } as Partial<EngineTransport>);
+    const detached = fake.addExternalXSignalSource;
+
+    await detached({ screenName: "external_builder" });
+
+    expect(addExternalXSignalSource).toHaveBeenCalledWith({ screenName: "external_builder" });
+  });
 });
 
 describe("useTransport inside OverlayTransportProvider", () => {
-  it("returns the injected FakeEngineTransport and resolves all 20 method calls", async () => {
+  it("returns the injected FakeEngineTransport and resolves all 24 method calls", async () => {
     const fake = new FakeEngineTransport();
     const results: unknown[] = [];
     let failure: unknown = null;
@@ -114,7 +139,7 @@ describe("useTransport inside OverlayTransportProvider", () => {
 
     await vi.waitFor(() => {
       expect(failure).toBeNull();
-      expect(results).toHaveLength(20);
+      expect(results).toHaveLength(24);
     });
   });
 });

@@ -18,6 +18,7 @@ import type {
   ActiveArchiveContext,
   AppSettings,
   CaptureSummary,
+  GetExternalXSignalsOverviewResponse,
   GetFeedbackLoopSummaryResponse,
   OverlayReadiness,
 } from "@x-builder/shared";
@@ -32,6 +33,7 @@ import {
 import { useTransport } from "../transport/use-transport";
 import { ActiveContextToggle } from "./active-context-toggle";
 import type { ArchiveUploadState } from "./archive-upload-section";
+import type { ExternalXSignalsActionState } from "./external-x-signals-section";
 import { SettingsLauncherButton } from "./settings-launcher-button";
 import { SettingsPanel } from "./settings-panel";
 
@@ -61,6 +63,10 @@ export function SettingsAffordance(): ReactElement {
   const [readiness, setReadiness] = useState<Loadable<OverlayReadiness>>("loading");
   const [capture, setCapture] = useState<Loadable<CaptureSummary>>("loading");
   const [feedback, setFeedback] = useState<Loadable<GetFeedbackLoopSummaryResponse>>("loading");
+  const [externalXSignals, setExternalXSignals] =
+    useState<Loadable<GetExternalXSignalsOverviewResponse>>("loading");
+  const [externalXSignalsAction, setExternalXSignalsAction] =
+    useState<ExternalXSignalsActionState>("idle");
   const [activeContext, setActiveContext] = useState<ActiveArchiveContext | null>(null);
   // Optimistic override of the toggle's checked state while a transport call is
   // in flight; `null` means "defer to the resolved activeContext".
@@ -79,6 +85,15 @@ export function SettingsAffordance(): ReactElement {
       setFeedback(await transport.getFeedbackLoopSummary({}));
     } catch (error: unknown) {
       setFeedback({ error });
+    }
+  }, [transport]);
+
+  const refreshExternalXSignals = useCallback(async (): Promise<void> => {
+    setExternalXSignals("loading");
+    try {
+      setExternalXSignals(await transport.getExternalXSignalsOverview({}));
+    } catch (error: unknown) {
+      setExternalXSignals({ error });
     }
   }, [transport]);
 
@@ -101,7 +116,8 @@ export function SettingsAffordance(): ReactElement {
       .then((value) => setActiveContext(value))
       .catch(() => setActiveContext(null));
     void refreshFeedback();
-  }, [refreshFeedback, transport]);
+    void refreshExternalXSignals();
+  }, [refreshExternalXSignals, refreshFeedback, transport]);
 
   // Fetch on mount and on every open transition.
   useEffect(() => {
@@ -119,7 +135,7 @@ export function SettingsAffordance(): ReactElement {
     if (!dialog) return;
     const first = dialog.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
     first?.focus();
-  }, [open, settings, readiness, capture, feedback, activeContext]);
+  }, [open, settings, readiness, capture, feedback, externalXSignals, activeContext]);
 
   const close = useCallback((): void => {
     setOpen(false);
@@ -229,6 +245,63 @@ export function SettingsAffordance(): ReactElement {
     [refreshFeedback, transport],
   );
 
+  const onAddExternalXSignalSource = useCallback(
+    async (screenName: string): Promise<void> => {
+      setExternalXSignalsAction({ status: "adding", screenName });
+      try {
+        await transport.addExternalXSignalSource({ screenName });
+        await refreshExternalXSignals();
+        setExternalXSignalsAction("idle");
+      } catch (error: unknown) {
+        setExternalXSignalsAction({
+          status: "failed",
+          operation: "add",
+          message: messageOf(error, "Could not add external source."),
+        });
+        throw error;
+      }
+    },
+    [refreshExternalXSignals, transport],
+  );
+
+  const onRefreshExternalXSignalSource = useCallback(
+    async (sourceId: string): Promise<void> => {
+      setExternalXSignalsAction({ status: "refreshing", sourceId });
+      try {
+        await transport.refreshExternalXSignalSource({ sourceId });
+        await refreshExternalXSignals();
+        setExternalXSignalsAction("idle");
+      } catch (error: unknown) {
+        setExternalXSignalsAction({
+          status: "failed",
+          operation: "refresh",
+          sourceId,
+          message: messageOf(error, "Could not refresh external source."),
+        });
+      }
+    },
+    [refreshExternalXSignals, transport],
+  );
+
+  const onRemoveExternalXSignalSource = useCallback(
+    async (sourceId: string): Promise<void> => {
+      setExternalXSignalsAction({ status: "removing", sourceId });
+      try {
+        await transport.removeExternalXSignalSource({ sourceId });
+        await refreshExternalXSignals();
+        setExternalXSignalsAction("idle");
+      } catch (error: unknown) {
+        setExternalXSignalsAction({
+          status: "failed",
+          operation: "remove",
+          sourceId,
+          message: messageOf(error, "Could not remove external source."),
+        });
+      }
+    },
+    [refreshExternalXSignals, transport],
+  );
+
   /** Archive: validate → import; rejection surfaces a danger Alert, no import. */
   const onUploadArchive = useCallback(
     (file: File): void => {
@@ -283,10 +356,16 @@ export function SettingsAffordance(): ReactElement {
         readiness={readiness}
         capture={capture}
         feedback={feedback}
+        externalXSignals={externalXSignals}
+        externalXSignalsAction={externalXSignalsAction}
         onUpdateSettings={onUpdateSettings}
         onUploadArchive={onUploadArchive}
         onRefreshFeedback={() => { void refreshFeedback(); }}
         onLinkFeedback={onLinkFeedback}
+        onAddExternalXSignalSource={onAddExternalXSignalSource}
+        onRefreshExternalXSignalSource={onRefreshExternalXSignalSource}
+        onRemoveExternalXSignalSource={onRemoveExternalXSignalSource}
+        onRefreshExternalXSignals={() => { void refreshExternalXSignals(); }}
         uploadState={uploadState}
         dialogRef={dialogRef}
       >
@@ -300,8 +379,8 @@ export function SettingsAffordance(): ReactElement {
 }
 
 /** Best-effort error message extraction for inline Alert copy. */
-function messageOf(error: unknown): string {
+function messageOf(error: unknown, fallback = "Upload failed."): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
-  return "Upload failed.";
+  return fallback;
 }

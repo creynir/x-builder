@@ -43,7 +43,7 @@ export interface OverlayTransportProviderProps {
  * (`{}` cast to the method's return type) so children never throw when the
  * engine is not connected. The `{} as EngineTransport` cast is the single
  * unavoidable boundary: keys are assigned dynamically from the real binding
- * registry, which keeps the no-op in lockstep with the 20-method contract.
+ * registry, which keeps the no-op in lockstep with the 24-method contract.
  */
 function createNoopTransport(): EngineTransport {
   const transport = {} as Record<string, (...args: unknown[]) => Promise<unknown>>;
