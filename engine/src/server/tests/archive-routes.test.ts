@@ -242,6 +242,11 @@ describe("archive routes", () => {
           },
         });
 
+        const defaultActiveResponse = await app.inject({
+          method: "GET",
+          url: "/archive/context/active",
+        });
+
         const insightsResponse = await app.inject({
           method: "GET",
           url: "/archive/insights/latest",
@@ -260,6 +265,9 @@ describe("archive routes", () => {
         });
 
         const insights = archiveInsightsLatestResponseSchema.parse(parseJsonPayload(insightsResponse.body));
+        const defaultActive = archiveContextActivationResponseSchema.shape.activeContext.parse(
+          parseJsonPayload(defaultActiveResponse.body),
+        );
         const activated = archiveContextActivationResponseSchema.parse(parseJsonPayload(activateResponse.body));
         const active = archiveContextActivationResponseSchema.shape.activeContext.parse(
           parseJsonPayload(activeResponse.body),
@@ -270,6 +278,8 @@ describe("archive routes", () => {
 
         expect(insightsResponse.statusCode).toBe(200);
         expect(insights.status).toBe("ready");
+        expect(defaultActiveResponse.statusCode).toBe(200);
+        expect(defaultActive.status).toBe("active");
         expect(activated.activeContext.status).toBe("active");
         expect(active.status).toBe("active");
         expect(deactivated.activeContext).toEqual({ status: "empty" });

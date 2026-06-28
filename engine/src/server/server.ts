@@ -938,6 +938,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
 
     try {
       result = await archiveImportService.importTweets(input);
+      await archiveDerivedContextService.activateLatest();
     } catch (error) {
       if (error instanceof ArchiveValidationError) {
         throw new NormalizedApiError(archiveValidationFailedError());

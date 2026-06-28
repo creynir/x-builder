@@ -313,7 +313,9 @@ function buildHandlers(
 
     importArchive: async (rawArg) => {
       const request = archiveTweetsImportRequestSchema.parse(rawArg);
-      return archiveTweetsImportResponseSchema.parse(await services.archiveImportService.import(request));
+      const response = await services.archiveImportService.import(request);
+      await services.archiveDerivedContextService.activateContext();
+      return archiveTweetsImportResponseSchema.parse(response);
     },
 
     getActiveContext: async () =>

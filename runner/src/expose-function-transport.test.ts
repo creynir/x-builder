@@ -674,6 +674,7 @@ describe("ExposeFunctionTransport — remaining bindings round-trip their respon
     };
     const result = await mockPage.handlers.get(B.importArchive)!(request);
     expect(services.archiveImportService.import).toHaveBeenCalledTimes(1);
+    expect(services.archiveDerivedContextService.activateContext).toHaveBeenCalledTimes(1);
     expect(() => archiveTweetsImportResponseSchema.parse(result)).not.toThrow();
   });
 
