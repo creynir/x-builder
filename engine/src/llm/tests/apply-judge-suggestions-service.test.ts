@@ -7,8 +7,13 @@ import {
 } from "@x-builder/shared";
 
 import { ApplyJudgeSuggestionsService } from "../apply-judge-suggestions-service";
-import { type JudgeDraft, type JudgeDraftOutcome } from "../judge-draft-service";
 import {
+  type JudgeDraft,
+  type JudgeDraftOptions,
+  type JudgeDraftOutcome,
+} from "../judge-draft-service";
+import {
+  structuredLlmOptionLimits,
   type StructuredLlmProviderResult,
   type StructuredLlmRequest,
 } from "../structured-llm-service";
@@ -71,25 +76,31 @@ const judgedOutcome = (verdict: JudgeVerdict): JudgeDraftOutcome => ({
   },
 });
 
-const judgeFailureOutcome = (): JudgeDraftOutcome => ({
+const judgeFailureOutcome = (code = "provider_unavailable"): JudgeDraftOutcome => ({
   status: "failed",
   retryable: true,
-  code: "provider_unavailable",
-  message: "judge provider unavailable",
+  code,
+  message: code === "chain_budget_exhausted"
+    ? "apply chain budget exhausted"
+    : "judge provider unavailable",
 });
 
 // A per-call judge fake: it returns the outcome for the current call index
 // (call 0 is the initial judge of the original, call 1 is the re-judge of the
 // rewrite), so step 1 and step 3 can carry different scores. Every (text,
 // profile) pair the service passes is recorded for inspection.
-type JudgeCall = { text: string; accountProfile: string | undefined };
+type JudgeCall = {
+  text: string;
+  accountProfile: string | undefined;
+  options: JudgeDraftOptions | undefined;
+};
 
 const makeJudgeFake = (outcomes: JudgeDraftOutcome[]) => {
   const calls: JudgeCall[] = [];
 
-  const judgeFn: JudgeDraft["judge"] = async (text, accountProfile) => {
+  const judgeFn: JudgeDraft["judge"] = async (text, accountProfile, options) => {
     const index = calls.length;
-    calls.push({ text, accountProfile });
+    calls.push({ text, accountProfile, options });
 
     const outcome = outcomes[index];
     if (outcome === undefined) {
@@ -157,7 +168,8 @@ const buildService = (
   judge: JudgeDraft,
   llm: ConstructorParameters<typeof ApplyJudgeSuggestionsService>[1],
   profile: () => Promise<string | undefined> = resolveProfile,
-) => new ApplyJudgeSuggestionsService(judge, llm, resolveProvider, profile);
+  chainTimeoutMs?: number,
+) => new ApplyJudgeSuggestionsService(judge, llm, resolveProvider, profile, chainTimeoutMs);
 
 const request = (text: string): ApplyJudgeSuggestionsRequest => ({ text });
 
@@ -218,6 +230,94 @@ describe("ApplyJudgeSuggestionsService", () => {
     // weaker rewrite that the guard discarded.
     expect(result.approved).toBe(true);
     expect(result.approved).toBe(deriveApproved(originalVerdict));
+  });
+
+  it("passes remaining chain budget to the original judge", async () => {
+    const originalVerdict = verdictWithOverall(60);
+    const rewriteVerdict = verdictWithOverall(75);
+    const { judge, calls } = makeJudgeFake([
+      judgedOutcome(originalVerdict),
+      judgedOutcome(rewriteVerdict),
+    ]);
+    const { llm } = makeLlmFake(rewriteSuccessText("A sharper rewrite."));
+    const service = buildService(judge, llm, resolveProfile, 45_000);
+
+    await service.apply(request("The original draft."));
+
+    expect(calls[0]?.options?.timeoutMs).toBe(45_000);
+  });
+
+  it("passes remaining chain budget to the rewrite step", async () => {
+    const originalVerdict = verdictWithOverall(60);
+    const rewriteVerdict = verdictWithOverall(75);
+    const { judge } = makeJudgeFake([
+      judgedOutcome(originalVerdict),
+      judgedOutcome(rewriteVerdict),
+    ]);
+    const { llm, generateStructured } = makeLlmFake(rewriteSuccessText("A sharper rewrite."));
+    const service = buildService(judge, llm, resolveProfile, 999_000);
+
+    await service.apply(request("The original draft."));
+
+    const rewriteRequest = generateStructured.mock.calls[0]![0];
+    expect(rewriteRequest.options?.timeoutMs).toBe(structuredLlmOptionLimits.timeoutMs);
+  });
+
+  it("passes elapsed remaining chain budget to the re-judge step", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-20T12:00:00.000Z"));
+
+    const originalVerdict = verdictWithOverall(60);
+    const rewriteVerdict = verdictWithOverall(75);
+    const { judge, calls } = makeJudgeFake([
+      judgedOutcome(originalVerdict),
+      judgedOutcome(rewriteVerdict),
+    ]);
+    const generateStructured = vi.fn(async (_request: StructuredLlmRequest<unknown>) => {
+      vi.setSystemTime(new Date("2026-06-20T12:00:30.000Z"));
+      return rewriteSuccessText("A sharper rewrite.") as StructuredLlmProviderResult<unknown>;
+    });
+    const llm = { generateStructured } as unknown as ConstructorParameters<
+      typeof ApplyJudgeSuggestionsService
+    >[1];
+    const service = buildService(judge, llm, resolveProfile, 90_000);
+
+    try {
+      await service.apply(request("The original draft."));
+
+      expect(calls[1]?.options?.timeoutMs).toBe(60_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails when the chain budget is exhausted before re-judge", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-20T12:00:00.000Z"));
+
+    const originalVerdict = verdictWithOverall(60);
+    const rewriteVerdict = verdictWithOverall(75);
+    const { judge, calls } = makeJudgeFake([
+      judgedOutcome(originalVerdict),
+      judgedOutcome(rewriteVerdict),
+    ]);
+    const generateStructured = vi.fn(async (_request: StructuredLlmRequest<unknown>) => {
+      vi.setSystemTime(new Date("2026-06-20T12:00:31.000Z"));
+      return rewriteSuccessText("A sharper rewrite.") as StructuredLlmProviderResult<unknown>;
+    });
+    const llm = { generateStructured } as unknown as ConstructorParameters<
+      typeof ApplyJudgeSuggestionsService
+    >[1];
+    const service = buildService(judge, llm, resolveProfile, 30_000);
+
+    try {
+      await expect(service.apply(request("The original draft."))).rejects.toMatchObject({
+        code: "chain_budget_exhausted",
+      });
+      expect(calls).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects when the initial judge fails", async () => {
