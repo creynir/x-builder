@@ -16,9 +16,10 @@
  * called; an output-schema failure rejects as a contract bug. Nothing is
  * swallowed.
  *
- * The transport is stateless and depends only on `@x-builder/shared` request /
- * response types — it imports no engine classes. The real-service adapter bundle
- * and the `RunnerApp.bindTransport` wiring live in XOB-030 / XOB-015.
+ * The transport depends only on `@x-builder/shared` request / response types — it
+ * imports no engine classes. Its LLM guard state is process-local per page binding
+ * set. The real-service adapter bundle and the `RunnerApp.bindTransport` wiring
+ * live in XOB-030 / XOB-015.
  */
 
 import {
@@ -156,6 +157,102 @@ export interface BoundEngineServices {
 /** Handler signature each binding registers. */
 type ExposedHandler = (rawArg: unknown) => Promise<unknown>;
 
+export type LlmBindingMethod =
+  | "judgeDraft"
+  | "generateIdeas"
+  | "suggestPost"
+  | "applyJudgeSuggestions";
+
+type LlmBindingGuardErrorCode = "llm_binding_busy" | "llm_binding_rate_limited";
+
+export interface LlmBindingGuardPolicy {
+  maxConcurrent: number;
+  windowMs: number;
+  maxStarts: number;
+}
+
+export const DEFAULT_LLM_BINDING_GUARD_POLICY: LlmBindingGuardPolicy = Object.freeze({
+  maxConcurrent: 1,
+  windowMs: 60_000,
+  maxStarts: 6,
+});
+
+export class LlmBindingGuardError extends Error {
+  readonly scope = "llm_binding_guard";
+  readonly retryable = true;
+
+  constructor(
+    readonly method: LlmBindingMethod,
+    readonly code: LlmBindingGuardErrorCode,
+    readonly retryAfterMs: number,
+  ) {
+    super(
+      code === "llm_binding_busy"
+        ? `LLM binding "${method}" is already running.`
+        : `LLM binding "${method}" is rate limited.`,
+    );
+    this.name = "LlmBindingGuardError";
+  }
+}
+
+export class LlmBindingRateGuard {
+  private inFlight = 0;
+  private starts: number[] = [];
+
+  constructor(
+    private readonly policy: LlmBindingGuardPolicy = DEFAULT_LLM_BINDING_GUARD_POLICY,
+    private readonly now: () => number = () => Date.now(),
+  ) {}
+
+  acquire(method: LlmBindingMethod): () => void {
+    const now = this.now();
+    this.starts = this.starts.filter((startedAt) => now - startedAt < this.policy.windowMs);
+
+    if (this.inFlight >= this.policy.maxConcurrent) {
+      throw new LlmBindingGuardError(method, "llm_binding_busy", this.retryAfterMs(now));
+    }
+
+    if (this.starts.length >= this.policy.maxStarts) {
+      const oldestStart = this.starts[0] ?? now;
+      const retryAfterMs = Math.max(1, this.policy.windowMs - (now - oldestStart));
+      throw new LlmBindingGuardError(method, "llm_binding_rate_limited", retryAfterMs);
+    }
+
+    this.starts.push(now);
+    this.inFlight += 1;
+
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      this.inFlight = Math.max(0, this.inFlight - 1);
+    };
+  }
+
+  private retryAfterMs(now: number): number {
+    const oldestStart = this.starts[0];
+    if (oldestStart === undefined) {
+      return 0;
+    }
+    return Math.max(0, this.policy.windowMs - (now - oldestStart));
+  }
+}
+
+async function withLlmBindingGuard<T>(
+  guard: LlmBindingRateGuard,
+  method: LlmBindingMethod,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const release = guard.acquire(method);
+  try {
+    return await operation();
+  } finally {
+    release();
+  }
+}
+
 /**
  * Extracts the optional `windowDays` from `getCooldown`'s raw arg. The arg is
  * absent (`undefined`/`null`) for the default window or an object carrying an
@@ -184,7 +281,10 @@ function parseGetCooldownArg(rawArg: unknown): number | undefined {
  * Build the method-name → handler map. Each entry closes over `services` and
  * performs request parse → service call → response parse.
  */
-function buildHandlers(services: BoundEngineServices): Readonly<Record<string, ExposedHandler>> {
+function buildHandlers(
+  services: BoundEngineServices,
+  llmGuard: LlmBindingRateGuard,
+): Readonly<Record<string, ExposedHandler>> {
   return {
     getOverlayReadiness: async () => overlayReadinessSchema.parse(await services.getOverlayReadiness()),
 
@@ -231,17 +331,26 @@ function buildHandlers(services: BoundEngineServices): Readonly<Record<string, E
 
     judgeDraft: async (rawArg) => {
       const request = judgeDraftRequestSchema.parse(rawArg);
-      return judgeDraftResponseSchema.parse(await services.judgeDraftService.judge(request));
+      return withLlmBindingGuard(llmGuard, "judgeDraft", async () =>
+        judgeDraftResponseSchema.parse(await services.judgeDraftService.judge(request)),
+      );
     },
 
     generateIdeas: async (rawArg) => {
       const request = generateIdeaRequestSchema.parse(rawArg);
+      if (request.format !== undefined) {
+        return withLlmBindingGuard(llmGuard, "generateIdeas", async () =>
+          generateIdeaResponseSchema.parse(await services.generateIdeasService.generate(request)),
+        );
+      }
       return generateIdeaResponseSchema.parse(await services.generateIdeasService.generate(request));
     },
 
     suggestPost: async (rawArg) => {
       const request = suggestPostRequestSchema.parse(rawArg);
-      return suggestPostResponseSchema.parse(await services.suggestPostService.suggest(request));
+      return withLlmBindingGuard(llmGuard, "suggestPost", async () =>
+        suggestPostResponseSchema.parse(await services.suggestPostService.suggest(request)),
+      );
     },
 
     getCooldown: async (rawArg) => {
@@ -257,8 +366,10 @@ function buildHandlers(services: BoundEngineServices): Readonly<Record<string, E
 
     applyJudgeSuggestions: async (rawArg) => {
       const request = applyJudgeSuggestionsRequestSchema.parse(rawArg);
-      return applyJudgeSuggestionsResponseSchema.parse(
-        await services.applyJudgeSuggestionsService.apply(request),
+      return withLlmBindingGuard(llmGuard, "applyJudgeSuggestions", async () =>
+        applyJudgeSuggestionsResponseSchema.parse(
+          await services.applyJudgeSuggestionsService.apply(request),
+        ),
       );
     },
 
@@ -291,7 +402,8 @@ function buildHandlers(services: BoundEngineServices): Readonly<Record<string, E
  */
 export class ExposeFunctionTransport {
   static async bindAll(page: PageLike, services: BoundEngineServices): Promise<void> {
-    const handlers = buildHandlers(services);
+    const llmGuard = new LlmBindingRateGuard();
+    const handlers = buildHandlers(services, llmGuard);
 
     const handlerFor = (method: string): ExposedHandler => {
       const handler = handlers[method];
