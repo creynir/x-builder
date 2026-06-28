@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # EXS-010: [DOC] Document External X Import + Signals
@@ -69,3 +69,4 @@ Coverage level: docs review and any existing docs/link checks. Owning suite: doc
 ## Pipeline Log
 
 - 2026-06-28: Ticket authored from approved arch recon.
+- 2026-06-28: Updated the feature README and added `docs/how-to/use-external-x-signals.md` with settings entry point, source management, observe-only refresh semantics, waiting/no-observation behavior, evidence-backed patterns, duplicate/remove semantics, canonical route/transport names, migration 3 ledger tables, and own-corpus isolation.
