@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { appSettingsSchema, type AppSettings } from "@x-builder/shared";
 import * as ts from "typescript";
 
@@ -16,6 +16,10 @@ import type {
   GenerationGuidanceRequest,
   GenerationGuidanceResolver,
 } from "../generation-guidance.js";
+import type {
+  ExternalPatternGuidanceItem,
+  ExternalPatternGuidanceProvider,
+} from "../external-pattern-guidance.js";
 
 const BASE_DATE = "2026-06-01T00:00:00.000Z";
 const FOUNDER_STORY_GUARDRAIL =
@@ -317,6 +321,36 @@ const requestOf = (
   ...overrides,
 });
 
+const externalGuidanceItem = (
+  overrides: Partial<ExternalPatternGuidanceItem> = {},
+): ExternalPatternGuidanceItem => ({
+  id: overrides.id ?? "external-pattern-1",
+  patternType: overrides.patternType ?? "hook",
+  statement:
+    overrides.statement ??
+    "Open with a specific operator mistake before naming the broader lesson.",
+  confidence: overrides.confidence ?? 0.84,
+  supportCount: overrides.supportCount ?? 9,
+  generatedAt: overrides.generatedAt ?? "2026-06-29T08:00:00.000Z",
+  version: overrides.version ?? "external-x-signals:v1",
+  ...(overrides.format === undefined ? {} : { format: overrides.format }),
+});
+
+const externalPatternProviderOf = (
+  items: ExternalPatternGuidanceItem[],
+): ReturnType<typeof vi.fn<ExternalPatternGuidanceProvider>> =>
+  vi.fn(async (_request) => items);
+
+const guidanceInputWithExternalProvider = (
+  input: CreateGenerationGuidanceResolverInput,
+  externalPatternGuidanceProvider: ExternalPatternGuidanceProvider,
+): CreateGenerationGuidanceResolverInput & {
+  externalPatternGuidanceProvider: ExternalPatternGuidanceProvider;
+} => ({
+  ...input,
+  externalPatternGuidanceProvider,
+});
+
 const createResolver = async (
   input: CreateGenerationGuidanceResolverInput,
 ): Promise<GenerationGuidanceResolver> => {
@@ -353,6 +387,7 @@ describe("generation guidance resolver", () => {
     expectTypeOf<CreateGenerationGuidanceResolverInput>().toEqualTypeOf<{
       settingsRepository: Pick<AppSettingsRepository, "load">;
       postLibraryRepository: Pick<PostLibraryRepository, "loadStore">;
+      externalPatternGuidanceProvider?: ExternalPatternGuidanceProvider;
     }>();
 
     expectTypeOf<GenerationGuidanceResolver>().toEqualTypeOf<
@@ -422,6 +457,106 @@ UNRELATED_GROWTH_LOOP_SENTINEL
     expect(guidance).toContain("- known voice sample");
     expect(guidance).not.toContain("UNRELATED_CORE_FINDING_SENTINEL");
     expect(guidance).not.toContain("UNRELATED_GROWTH_LOOP_SENTINEL");
+  });
+
+  it("renders external performance patterns after playbook guidance and before own voice samples", async () => {
+    const knowledgeBasePath = await writeKnowledgeBase(`
+# Engine knowledge
+
+## Format taxonomy
+
+ORDERED_PLAYBOOK_SENTINEL
+`);
+    const externalProvider = externalPatternProviderOf([
+      externalGuidanceItem({
+        format: "hot_take",
+        statement: "ORDERED_EXTERNAL_PATTERN_SENTINEL",
+      }),
+    ]);
+
+    const guidance = expectDefinedGuidance(
+      await resolveGuidance(
+        guidanceInputWithExternalProvider(
+          {
+            settingsRepository: settingsRepositoryOf(knowledgeBasePath),
+            postLibraryRepository: postLibraryRepositoryOf([
+              canonicalPost({
+                id: "post-voice",
+                platformPostId: "platform-voice",
+                text: "ORDERED_OWN_VOICE_SENTINEL",
+              }),
+            ]),
+          },
+          externalProvider,
+        ),
+        requestOf({
+          format: "hot_take",
+          idea: "How to turn external reach patterns into draft constraints",
+          voiceProfileId: "voice-alpha",
+          useKnownPostIds: ["platform-voice"],
+        }),
+      ),
+    );
+
+    expect(externalProvider).toHaveBeenCalledTimes(1);
+    expect(externalProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        format: "hot_take",
+        idea: "How to turn external reach patterns into draft constraints",
+        voiceProfileId: "voice-alpha",
+        useKnownPostIds: ["platform-voice"],
+      }),
+    );
+
+    const playbookIndex = guidance.indexOf("# Requested format playbook");
+    const externalIndex = guidance.indexOf(
+      "# External performance patterns (derived constraints, not voice)",
+    );
+    const voiceIndex = guidance.indexOf("# Voice samples (match tone, do not copy)");
+
+    expect(guidance).toContain("ORDERED_PLAYBOOK_SENTINEL");
+    expect(guidance).toContain("ORDERED_EXTERNAL_PATTERN_SENTINEL");
+    expect(guidance).toContain("ORDERED_OWN_VOICE_SENTINEL");
+    expect(playbookIndex).toBeGreaterThanOrEqual(0);
+    expect(externalIndex).toBeGreaterThan(playbookIndex);
+    expect(voiceIndex).toBeGreaterThan(externalIndex);
+  });
+
+  it("omits only the external section when the external pattern provider fails", async () => {
+    const knowledgeBasePath = await writeKnowledgeBase(`
+# Engine knowledge
+
+## Format taxonomy
+
+PROVIDER_FAILURE_PLAYBOOK_SURVIVES
+`);
+    const externalProvider = vi.fn(async () => {
+      throw new Error("external guidance unavailable");
+    }) as ReturnType<typeof vi.fn<ExternalPatternGuidanceProvider>>;
+
+    const guidance = expectDefinedGuidance(
+      await resolveGuidance(
+        guidanceInputWithExternalProvider(
+          {
+            settingsRepository: settingsRepositoryOf(knowledgeBasePath),
+            postLibraryRepository: postLibraryRepositoryOf([
+              canonicalPost({
+                id: "post-voice",
+                text: "PROVIDER_FAILURE_VOICE_SURVIVES",
+              }),
+            ]),
+          },
+          externalProvider,
+        ),
+      ),
+    );
+
+    expect(externalProvider).toHaveBeenCalledTimes(1);
+    expect(guidance).toContain("# Requested format playbook");
+    expect(guidance).toContain("PROVIDER_FAILURE_PLAYBOOK_SURVIVES");
+    expect(guidance).toContain("# Voice samples (match tone, do not copy)");
+    expect(guidance).toContain("PROVIDER_FAILURE_VOICE_SURVIVES");
+    expect(guidance).not.toContain("# External performance patterns");
   });
 
   it("omits unrelated knowledge-base sections instead of falling back to the full file", async () => {

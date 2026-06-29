@@ -639,7 +639,13 @@ describe("GenerateIdeasService idea-only path", () => {
   it("never calls guidance, the structured LLM, or judge and returns the stub-shaped candidates without verdict or approved", async () => {
     const { generateStructured, llm } = makeLlmFake(generateSuccess());
     const judge = vi.fn(async () => judgedOutcome(verdictWithOverall(90)));
-    const resolver = makeGuidanceResolver("Should not be read for idea-only generation.");
+    const externalPatternProvider = vi.fn(
+      async (_request: Parameters<GenerationGuidanceResolver>[0]) => [],
+    );
+    const resolver = vi.fn(async (request: Parameters<GenerationGuidanceResolver>[0]) => {
+      await externalPatternProvider(request);
+      return "Should not be read for idea-only generation.";
+    });
 
     const service = createServiceWithGuidance(llm, { judge }, resolver);
     const response = (await service.generate({
@@ -648,6 +654,7 @@ describe("GenerateIdeasService idea-only path", () => {
 
     // The idea-only branch must not touch guidance, the generate step, or the judge step.
     expect(resolver).toHaveBeenCalledTimes(0);
+    expect(externalPatternProvider).toHaveBeenCalledTimes(0);
     expect(generateStructured).toHaveBeenCalledTimes(0);
     expect(judge).toHaveBeenCalledTimes(0);
 
