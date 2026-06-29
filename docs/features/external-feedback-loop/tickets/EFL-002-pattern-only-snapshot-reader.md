@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # EFL-002: [FND] Add pattern-only snapshot reader
@@ -81,3 +81,4 @@ Coverage level: engine repository tests. Owning suite: external signals reposito
 ## Pipeline Log
 
 - 2026-06-29: Ticket authored from approved arch recon.
+- 2026-06-29: RGB pipeline started.
