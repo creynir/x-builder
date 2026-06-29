@@ -58,6 +58,7 @@ import {
   type AnalyzePostsRequest,
   type CaptureIngestRequest,
   type JudgeVerdict,
+  type ReplyComposerContext,
   type RecordFeedbackPredictionRequest,
 } from "@x-builder/shared";
 import {
@@ -92,6 +93,19 @@ const SELECTED_STATUS_GATE_SENTINEL = "HOT_TAKE_SELECTED_STATUS_SENTINEL";
 const UNRELATED_KB_SENTINEL = "UNRELATED_FULL_KB_SENTINEL";
 const KNOWN_VOICE_SENTINEL = "KNOWN_POST_VOICE_SENTINEL";
 const FALLBACK_VOICE_SENTINEL = "FALLBACK_RECENT_VOICE_SENTINEL";
+
+const replyContext: ReplyComposerContext = {
+  source: "same_dialog_dom",
+  targetAuthorHandle: "alice",
+  targetDisplayName: "Alice Example",
+  targetText: "Ship the boring version first. The clever version rarely survives contact.",
+  targetStatusId: "1930000000000000001",
+  targetUrl: "https://x.com/alice/status/1930000000000000001",
+  leadingTargetHandle: {
+    handle: "alice",
+    state: "present",
+  },
+};
 
 // Map a draft string to a deterministic 0-100 score so two different drafts
 // yield two different verdicts (invariant #2). Longer text scores higher; the
@@ -528,6 +542,25 @@ describe("real engine bundle — judgeDraft arg-shape mapping (invariant #2)", (
     expect(calls.find((c) => c.purpose === "candidate_judge")!.userContent).toContain(
       "a perfectly fine draft",
     );
+  });
+
+  it("maps replyContext into the bound judge service options", async () => {
+    const { services, calls } = buildBundle();
+    const mockPage = createMockPage();
+    await ExposeFunctionTransport.bindAll(mockPage.page as never, services);
+
+    const handler = mockPage.handlers.get(ENGINE_TRANSPORT_BINDINGS.judgeDraft)!;
+    const result = await handler({ text: "good point", replyContext });
+
+    const parsed = judgeDraftResponseSchema.parse(result);
+    expect(parsed.status).toBe("judged");
+
+    const judgeCall = calls.find((c) => c.purpose === "candidate_judge");
+    expect(judgeCall?.userContent).toContain("good point");
+    expect(judgeCall?.instructions).toContain("@alice");
+    expect(judgeCall?.instructions).toContain(replyContext.targetText);
+    expect(judgeCall?.instructions.toLowerCase()).toContain("untrusted");
+    expect(judgeCall?.instructions.toLowerCase()).toContain("structural");
   });
 
   it("returns input-derived verdicts: two different drafts differ in scores.overall", async () => {

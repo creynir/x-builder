@@ -211,6 +211,59 @@ describe("reply-aware generation consumers", () => {
     }
   });
 
+  it("normalizes generated reply candidates to authored bodies before judging and returning", async () => {
+    const duplicateHandleResult: StructuredLlmProviderResult<GeneratedShape> = {
+      ...generateSuccess,
+      output: {
+        candidates: [
+          { id: "cand-0", text: "@alice agree with this" },
+          { id: "cand-1", text: "second body" },
+          { id: "cand-2", text: "third body" },
+        ],
+      },
+    };
+    const { llm } = makeLlmFake(duplicateHandleResult);
+    const { judge, calls } = makeJudgeByTextFake();
+    const service = new GenerateIdeasService(llm, { judge }, resolveProvider, resolveProfile);
+
+    const response = await service.generate({
+      format: "hot_take",
+      replyContext,
+    } satisfies GenerateIdeaRequest);
+
+    expect(calls.map((call) => call.text)).toEqual([
+      "agree with this",
+      "second body",
+      "third body",
+    ]);
+    expect(response.candidates.map((candidate) => candidate.text)).toEqual([
+      "agree with this",
+      "second body",
+      "third body",
+    ]);
+  });
+
+  it("rejects generated prefix-only reply candidates before judging", async () => {
+    const prefixOnlyResult: StructuredLlmProviderResult<GeneratedShape> = {
+      ...generateSuccess,
+      output: {
+        candidates: [
+          { id: "cand-0", text: "@alice" },
+          { id: "cand-1", text: "second body" },
+          { id: "cand-2", text: "third body" },
+        ],
+      },
+    };
+    const { llm } = makeLlmFake(prefixOnlyResult);
+    const judge = vi.fn(async () => judgedOutcome(verdictWithOverall(90)));
+    const service = new GenerateIdeasService(llm, { judge }, resolveProvider, resolveProfile);
+
+    await expect(
+      service.generate({ format: "hot_take", replyContext } satisfies GenerateIdeaRequest),
+    ).rejects.toMatchObject({ code: "structured_output_invalid" });
+    expect(judge).not.toHaveBeenCalled();
+  });
+
   it("keeps idea-only generation deterministic even when replyContext is supplied", async () => {
     const { generateStructured, llm } = makeLlmFake(generateSuccess);
     const judge = vi.fn(async () => judgedOutcome(verdictWithOverall(90)));

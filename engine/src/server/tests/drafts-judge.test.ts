@@ -8,6 +8,7 @@ import {
   judgeDraftResponseSchema,
   type AppSettings,
   type JudgeVerdict,
+  type ReplyComposerContext,
 } from "@x-builder/shared";
 
 import { JudgeDraftService } from "../../llm/judge-draft-service";
@@ -78,6 +79,19 @@ const judgedOutcome = {
   },
 };
 
+const replyContext: ReplyComposerContext = {
+  source: "same_dialog_dom",
+  targetAuthorHandle: "alice",
+  targetDisplayName: "Alice Example",
+  targetText: "Ship the boring version first. The clever version rarely survives contact.",
+  targetStatusId: "1930000000000000001",
+  targetUrl: "https://x.com/alice/status/1930000000000000001",
+  leadingTargetHandle: {
+    handle: "alice",
+    state: "present",
+  },
+};
+
 describe("POST /drafts/judge", () => {
   it("returns a judged verdict for a valid draft", async () => {
     const judge = vi.fn(async () => judgedOutcome);
@@ -96,6 +110,29 @@ describe("POST /drafts/judge", () => {
       const body = judgeDraftResponseSchema.parse(parseJson(response.body));
       expect(body.verdict).toEqual(verdict);
       expect(body.model).toBe("codex-cli");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("passes replyContext through to JudgeDraftService options", async () => {
+    const judge = vi.fn(async () => judgedOutcome);
+    const app = buildServer({ judgeDraftService: { judge } });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/drafts/judge",
+        payload: { text: "good point", replyContext },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(judge).toHaveBeenCalledWith("good point", undefined, {
+        replyContext,
+      });
+
+      const body = judgeDraftResponseSchema.parse(parseJson(response.body));
+      expect(body.verdict).toEqual(verdict);
     } finally {
       await app.close();
     }
