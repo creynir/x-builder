@@ -771,7 +771,7 @@ function ActiveCockpit({
   const latestVerdict: JudgeVerdict | null =
     judgeUi.status === "judged" ? judgeUi.verdict : null;
   const judgeReady = readiness?.llm?.state === "ready";
-  const canRunJudge = requestText.trim().length > 0 && judgeReady;
+  const canRunJudge = composerText.trim().length > 0 && judgeReady;
 
   // Map the decoupled judge UI onto the JudgeStrip display state.
   const judgeState: JudgeState =
