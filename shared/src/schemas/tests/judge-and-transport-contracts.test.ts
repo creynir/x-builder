@@ -16,12 +16,16 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  analyzePostsRequestSchema,
   analyzePostsResponseSchema,
+  applyJudgeSuggestionsRequestSchema,
   deriveApproved,
   ENGINE_TRANSPORT_BINDINGS,
   generateIdeaRequestSchema,
   judgeAnnotationSchema,
+  judgeDraftRequestSchema,
   judgeVerdictSchema,
+  replyComposerContextSchema,
 } from "../../index.js";
 
 // ---------------------------------------------------------------------------
@@ -51,6 +55,32 @@ const validVerdict = {
   headline: "Strong hook, weak closer.",
   strengths: ["Opens with a concrete claim"],
   improvements: ["Tighten the middle paragraph"],
+};
+
+const validReplyComposerContext = {
+  source: "same_dialog_dom" as const,
+  targetAuthorHandle: "context_builder",
+  targetDisplayName: "Context Builder",
+  targetText: "The boring version is usually the one people can actually ship.",
+  targetStatusId: "1930000000000000000",
+  targetUrl: "https://x.com/context_builder/status/1930000000000000000",
+  leadingTargetHandle: {
+    handle: "context_builder",
+    state: "present" as const,
+  },
+};
+
+const minimalAnalyzeItem = {
+  id: "candidate-1",
+  text: "What changed when your onboarding finally started working?",
+  sourceFormat: "one-liner" as const,
+};
+
+const minimalAnalyzeRequest = {
+  items: [minimalAnalyzeItem],
+  scoringContext: {
+    followers: 1200,
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -249,6 +279,145 @@ describe("deriveApproved boundary conditions", () => {
     });
 
     expect(deriveApproved(doNotPost)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// reply composer context schema
+// ---------------------------------------------------------------------------
+
+describe("reply composer context schema", () => {
+  it("parses a valid context and round trips every field", () => {
+    const result = replyComposerContextSchema.safeParse(validReplyComposerContext);
+
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error("Expected reply composer context to parse.");
+    expect(result.data).toEqual(validReplyComposerContext);
+  });
+
+  it("parses a valid context without optional status fields and with a deleted leading handle", () => {
+    const input = {
+      source: "same_dialog_dom" as const,
+      targetAuthorHandle: "signal_ops",
+      targetText: "A narrow contract is easier to carry through the whole stack.",
+      leadingTargetHandle: {
+        handle: "signal_ops",
+        state: "user_deleted" as const,
+      },
+    };
+
+    const result = replyComposerContextSchema.safeParse(input);
+
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error("Expected minimal reply composer context to parse.");
+    expect(result.data).toEqual(input);
+  });
+
+  it("rejects handles that include an at sign or invalid characters", () => {
+    const invalidContexts = [
+      {
+        ...validReplyComposerContext,
+        targetAuthorHandle: "@context_builder",
+      },
+      {
+        ...validReplyComposerContext,
+        leadingTargetHandle: {
+          ...validReplyComposerContext.leadingTargetHandle,
+          handle: "context-builder",
+        },
+      },
+    ];
+
+    for (const input of invalidContexts) {
+      expect(replyComposerContextSchema.safeParse(input).success).toBe(false);
+    }
+  });
+
+  it("rejects oversized target text and target url fields", () => {
+    expect(
+      replyComposerContextSchema.safeParse({
+        ...validReplyComposerContext,
+        targetText: "x".repeat(8_001),
+      }).success,
+    ).toBe(false);
+
+    expect(
+      replyComposerContextSchema.safeParse({
+        ...validReplyComposerContext,
+        targetUrl: "https://x.com/context_builder/status/" + "1".repeat(4_100),
+      }).success,
+    ).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// reply context request payloads
+// ---------------------------------------------------------------------------
+
+describe("reply context additive request payloads", () => {
+  it("preserves reply context on a format seeded generation request", () => {
+    const result = generateIdeaRequestSchema.safeParse({
+      format: "hot_take",
+      replyContext: validReplyComposerContext,
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error("Expected generation request with reply context to parse.");
+    expect(result.data.format).toBe("hot_take");
+    expect(result.data.replyContext).toEqual(validReplyComposerContext);
+  });
+
+  it("rejects a generation request that only carries reply context", () => {
+    expect(
+      generateIdeaRequestSchema.safeParse({ replyContext: validReplyComposerContext }).success,
+    ).toBe(false);
+  });
+
+  it("preserves reply context on a judge request", () => {
+    const result = judgeDraftRequestSchema.safeParse({
+      text: "This draft should be judged in the context of the visible reply target.",
+      replyContext: validReplyComposerContext,
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error("Expected judge request with reply context to parse.");
+    expect(result.data.replyContext).toEqual(validReplyComposerContext);
+  });
+
+  it("preserves reply context on an apply suggestions request", () => {
+    const result = applyJudgeSuggestionsRequestSchema.safeParse({
+      text: "Tighten this reply without losing the target context.",
+      replyContext: validReplyComposerContext,
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error("Expected apply suggestions request to parse.");
+    expect(result.data.replyContext).toEqual(validReplyComposerContext);
+  });
+
+  it("preserves reply context on an analyze request item", () => {
+    const result = analyzePostsRequestSchema.safeParse({
+      ...minimalAnalyzeRequest,
+      items: [
+        {
+          ...minimalAnalyzeItem,
+          replyContext: validReplyComposerContext,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error("Expected analyze request with reply context to parse.");
+    expect(result.data.items[0]?.replyContext).toEqual(validReplyComposerContext);
+  });
+
+  it("keeps normal request shapes valid when reply context is absent", () => {
+    expect(generateIdeaRequestSchema.safeParse({ format: "hot_take" }).success).toBe(true);
+    expect(judgeDraftRequestSchema.safeParse({ text: "A normal draft." }).success).toBe(true);
+    expect(
+      applyJudgeSuggestionsRequestSchema.safeParse({ text: "A normal draft." }).success,
+    ).toBe(true);
+    expect(analyzePostsRequestSchema.safeParse(minimalAnalyzeRequest).success).toBe(true);
   });
 });
 
@@ -458,6 +627,12 @@ describe("ENGINE_TRANSPORT_BINDINGS shape and completeness", () => {
     const keys = Object.keys(ENGINE_TRANSPORT_BINDINGS);
 
     expect(keys).toHaveLength(24);
+  });
+
+  it("does not add a transport binding for reply context", () => {
+    expect(ENGINE_TRANSPORT_BINDINGS.replyContext).toBeUndefined();
+    expect(ENGINE_TRANSPORT_BINDINGS.getReplyContext).toBeUndefined();
+    expect(ENGINE_TRANSPORT_BINDINGS.setReplyContext).toBeUndefined();
   });
 
   it("has every value equal to __xbuilder_<methodName>", () => {
