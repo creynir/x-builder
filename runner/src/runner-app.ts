@@ -39,6 +39,7 @@ import {
   judgeProviderRegistry,
   openEngineDatabase,
   resolveWorkspaceRoot,
+  type ExternalPatternSnapshotReader,
   type PostLibraryRepository,
 } from "@x-builder/engine";
 import { ENGINE_TRANSPORT_BINDINGS } from "@x-builder/shared";
@@ -140,6 +141,7 @@ export interface EngineServices {
   postLibraryRepository?: PostLibraryRepository;
   feedbackLoopService?: FeedbackLoopService;
   externalXSignalsService?: ExternalXSignalsService;
+  externalPatternSnapshotReader?: ExternalPatternSnapshotReader;
 }
 
 export interface RunnerAppOptions {
@@ -207,8 +209,9 @@ const defaultCreateServices = (opts: { engineSettingsDir: string }): EngineServi
     feedbackRepository: new SqliteFeedbackLoopRepository(db),
     postLibraryRepository,
   });
+  const externalXSignalsRepository = new SqliteExternalXSignalsRepository(db);
   const externalXSignalsService = new ExternalXSignalsService({
-    repository: new SqliteExternalXSignalsRepository(db),
+    repository: externalXSignalsRepository,
   });
   const liveCapture = new LiveCaptureService(postLibraryRepository);
 
@@ -218,6 +221,7 @@ const defaultCreateServices = (opts: { engineSettingsDir: string }): EngineServi
     postLibraryRepository,
     feedbackLoopService,
     externalXSignalsService,
+    externalPatternSnapshotReader: externalXSignalsRepository,
   };
 };
 
@@ -354,6 +358,7 @@ export class RunnerApp {
       postLibraryRepository: services.postLibraryRepository,
       feedbackLoopService: services.feedbackLoopService,
       externalXSignalsService: services.externalXSignalsService,
+      externalPatternSnapshotReader: services.externalPatternSnapshotReader,
       liveCapture: services.liveCapture as LiveCaptureService,
       llm,
       // A StructuredLlmService's generic generateStructured satisfies the
