@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 
 # RCC-002: [FND] Overlay Reply Detection And Draft Split Helpers
@@ -123,3 +123,4 @@ No visible UI changes.
 
 - 2026-06-29: Ticket authored from approved arch recon.
 - 2026-06-29: Started RGB-TDD implementation after RCC-001 foundation approval.
+- 2026-06-29: Implemented in `3ce6adb`; Red, Blue, Yellow, and `[FND]` architecture checkpoint approved. Targeted reply-context browser tests, anchor-layer tests, focused touched-file TypeScript check, and RGB gates passed; full overlay typecheck/lint remains blocked by unrelated existing fixture drift.
