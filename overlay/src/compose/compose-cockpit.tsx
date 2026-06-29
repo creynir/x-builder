@@ -575,15 +575,16 @@ function ActiveCockpit({
         }
 
         dispatch({ type: "analyze_succeeded", analyzeResult, followers });
-        // The judge does NOT auto-run on edits (XOB #4) — only on an explicit
-        // Run judge click. The static score above still updates live as you type.
+        if (replyContext === undefined && !/^@[A-Za-z0-9_]{1,15}(?:\s+|$)/.test(analyzeText)) {
+          runJudge(analyzeText, text);
+        }
       })();
     }, ANALYZE_DEBOUNCE_MS);
 
     return () => {
       if (timer !== null) clearTimeout(timer);
     };
-  }, [composerText, requestText, transport, followers, replyContext]);
+  }, [composerText, requestText, transport, followers, replyContext, runJudge]);
 
   // ---- Raw-input abort: a genuine edit aborts in-flight work immediately ----
   useEffect(() => {
@@ -631,12 +632,10 @@ function ActiveCockpit({
           });
           if (tokenRef.current !== token) return;
           const best = chooseBestCandidate(response.candidates);
-          // A generated draft is ALWAYS "generated" provenance → green wash,
-          // whether or not the candidate arrived pre-judged. The verdict only
-          // governs the "✓ Judge approved" badge, never the green (XOB bug #1).
+          const hasCandidateVerdict = best.verdict !== undefined;
           const writtenBody = stripLeadingReplyTargetHandle(best.text, replyContext);
           const written = mergeReplyBody(writtenBody, draftSplit, replyContext);
-          writeComposer(written, true);
+          writeComposer(written, hasCandidateVerdict);
           // Draft adopts the text asynchronously, so analyze/judge the REQUESTED
           // text rather than reading the (stale) composer back synchronously.
 

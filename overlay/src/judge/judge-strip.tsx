@@ -397,7 +397,7 @@ function RunJudgeButton({
   // action → the filled (secondary) one. Small + flat (no glow) for the toolbar.
   return (
     <Button variant={judged ? "ghost" : "secondary"} size="sm" flat onClick={onRunJudge}>
-      {judged ? "↻ Re-run" : "Run judge"}
+      {judged ? "↻ Re-run judge" : "Run judge"}
     </Button>
   );
 }
