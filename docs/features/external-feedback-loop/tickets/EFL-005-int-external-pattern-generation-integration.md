@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # EFL-005: [INT] Cover external pattern generation integration
@@ -71,3 +71,4 @@ Coverage level: integration tests. Owning suites: engine and runner integration 
 
 - 2026-06-29: Ticket authored from approved arch recon. Validator construction-contract fix included.
 - 2026-06-29: Integration pipeline started after EFL-004 Yellow approval.
+- 2026-06-29: Purple/Blue approved integration coverage in `47f92b6` plus removed-source-only fix in `3c6e01f`. Integration validation first exposed that persisted patterns tied only to removed sources could still render; `listGenerationPatterns` now requires at least one active supporting source while preserving active-source guidance.
