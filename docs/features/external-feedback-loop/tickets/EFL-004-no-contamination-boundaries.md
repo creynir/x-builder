@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 
 # EFL-004: Enforce no-contamination boundaries
@@ -78,3 +78,4 @@ Coverage level: static policy tests plus focused runtime contract tests. Owning 
 
 - 2026-06-29: Ticket authored from approved arch recon.
 - 2026-06-29: RGB pipeline started.
+- 2026-06-29: Red/Blue/Yellow approved guard-only implementation in `2097825`; existing source boundaries already held, and committed regression coverage now blocks direct external imports, named/namespace barrel imports, archive import contamination, active-context contamination, judge/apply prompt leaks, feedback/category changes, own-corpus writes, voice-sample rendering, and public request external fields.

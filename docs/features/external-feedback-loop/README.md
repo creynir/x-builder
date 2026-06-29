@@ -57,3 +57,4 @@ There is no External Feedback Loop endpoint. `/external-x/signals/overview` rema
 
 - 2026-06-29: Arch recon approved after validator-required construction contract fix: generation guidance must share the exact same `ExternalXSignalsRepository` instance as `ExternalXSignalsService`, or external guidance stays disabled for that host construction.
 - 2026-06-29: RGB ticket audit approved after correcting two Red-blocking details: `generateIdeaRequestSchema` strips unknown external fields rather than rejecting the whole payload, and malformed pattern payloads follow the repository's existing parse-and-throw validation behavior.
+- 2026-06-29: EFL-001 through EFL-004 completed. Generation guidance now consumes sanitized external pattern snapshots, and EFL-004 regression guards enforce the no-contamination boundary across own corpus, voice samples, feedback, category ranking, active context, archive/capture, judge/apply prompts, and public request schemas.
