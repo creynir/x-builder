@@ -14,7 +14,7 @@
  * ModuleNotFoundError / unresolved-export.  That is the correct Red state.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   analyzePostsRequestSchema,
   analyzePostsResponseSchema,
@@ -26,6 +26,7 @@ import {
   judgeDraftRequestSchema,
   judgeVerdictSchema,
   replyComposerContextSchema,
+  type ReplyComposerContext,
 } from "../../index.js";
 
 // ---------------------------------------------------------------------------
@@ -287,6 +288,12 @@ describe("deriveApproved boundary conditions", () => {
 // ---------------------------------------------------------------------------
 
 describe("reply composer context schema", () => {
+  it("exports an inferred public type matching the parser output", () => {
+    expectTypeOf<ReplyComposerContext>().toMatchTypeOf<
+      ReturnType<typeof replyComposerContextSchema.parse>
+    >();
+  });
+
   it("parses a valid context and round trips every field", () => {
     const result = replyComposerContextSchema.safeParse(validReplyComposerContext);
 
@@ -326,6 +333,28 @@ describe("reply composer context schema", () => {
           handle: "context-builder",
         },
       },
+      {
+        ...validReplyComposerContext,
+        targetAuthorHandle: "",
+      },
+      {
+        ...validReplyComposerContext,
+        targetAuthorHandle: "contextbuildertool",
+      },
+      {
+        ...validReplyComposerContext,
+        leadingTargetHandle: {
+          ...validReplyComposerContext.leadingTargetHandle,
+          handle: "",
+        },
+      },
+      {
+        ...validReplyComposerContext,
+        leadingTargetHandle: {
+          ...validReplyComposerContext.leadingTargetHandle,
+          handle: "contextbuildertool",
+        },
+      },
     ];
 
     for (const input of invalidContexts) {
@@ -333,13 +362,46 @@ describe("reply composer context schema", () => {
     }
   });
 
-  it("rejects oversized target text and target url fields", () => {
+  it("rejects empty or oversized target text fields", () => {
+    for (const targetText of ["", "   \n\t "]) {
+      expect(
+        replyComposerContextSchema.safeParse({
+          ...validReplyComposerContext,
+          targetText,
+        }).success,
+      ).toBe(false);
+    }
+
     expect(
       replyComposerContextSchema.safeParse({
         ...validReplyComposerContext,
         targetText: "x".repeat(8_001),
       }).success,
     ).toBe(false);
+  });
+
+  it("rejects invalid target status ids and target urls", () => {
+    for (const targetStatusId of ["abc", "1930000000000000000x"]) {
+      expect(
+        replyComposerContextSchema.safeParse({
+          ...validReplyComposerContext,
+          targetStatusId,
+        }).success,
+      ).toBe(false);
+    }
+
+    for (const targetUrl of [
+      "https://example.com/context_builder/status/1930000000000000000",
+      "https://x.com/context_builder",
+      "not a url",
+    ]) {
+      expect(
+        replyComposerContextSchema.safeParse({
+          ...validReplyComposerContext,
+          targetUrl,
+        }).success,
+      ).toBe(false);
+    }
 
     expect(
       replyComposerContextSchema.safeParse({
