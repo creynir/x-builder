@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 
 # RCC-002: [FND] Overlay Reply Detection And Draft Split Helpers
@@ -122,3 +122,4 @@ No visible UI changes.
 ## Pipeline Log
 
 - 2026-06-29: Ticket authored from approved arch recon.
+- 2026-06-29: Started RGB-TDD implementation after RCC-001 foundation approval.
