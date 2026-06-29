@@ -14,6 +14,7 @@
 //     on unmount; both disconnects are wrapped in try/catch to survive a
 //     document teardown during fast navigation.
 
+import type { ReplyComposerContext } from "@x-builder/shared";
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 
@@ -55,11 +56,27 @@ export function useAnchorRegistry(): AnchorRegistry {
  * the composer's `.textContent`, debounced ~350 ms so a typing burst collapses
  * to one trailing read. When inactive every field is empty/`null`.
  */
+export type ComposeMode = "post" | "reply";
+
+export interface ReplyDraftSplit {
+  mode: ComposeMode;
+  authoredBody: string;
+  structuralPrefix: string;
+  leadingHandleState: ReplyComposerContext["leadingTargetHandle"]["state"];
+  merge(body: string): string;
+}
+
 export interface ComposeContextValue {
   /** The live `div[data-testid="tweetTextarea_0"]` composer, or `null`. */
   composerEl: HTMLElement | null;
   /** `true` while X's compose modal is detected in the DOM / route. */
   isActive: boolean;
+  /** `post` for normal compose, `reply` only when same-dialog target evidence exists. */
+  mode: ComposeMode;
+  /** Same-dialog reply target metadata, present only in reply mode. */
+  replyContext?: ReplyComposerContext;
+  /** Body/prefix split derived from the live composer text and reply context. */
+  draftSplit: ReplyDraftSplit;
   /** The composer's `.textContent`, debounced ~350 ms; `""` when inactive. */
   composerText: string;
   /** `true` while X's discard/"save post?" confirmation sheet is layered up. */
@@ -82,6 +99,182 @@ export function useComposeContext(): ComposeContextValue {
 
 /** The debounce window for the `ComposeContext` composer-text read. */
 const COMPOSE_TEXT_DEBOUNCE_MS = 350;
+
+type ReplyTargetMetadata = Omit<ReplyComposerContext, "leadingTargetHandle">;
+
+function normalizeDomText(value: string | null | undefined): string {
+  return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function parseStatusUrl(value: string):
+  | { handle: string; statusId: string; targetUrl: string }
+  | null {
+  try {
+    const url = new URL(value, location.origin);
+    const host = url.hostname.toLowerCase();
+    const isXHost =
+      host === "x.com" ||
+      host === "www.x.com" ||
+      host === "mobile.x.com" ||
+      host === "twitter.com" ||
+      host === "www.twitter.com" ||
+      host === "mobile.twitter.com";
+    if (!isXHost) return null;
+
+    const match = url.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/status\/([0-9]+)\/?$/);
+    if (match === null) return null;
+
+    const handle = match[1];
+    const statusId = match[2];
+    if (handle === undefined || statusId === undefined) return null;
+
+    return {
+      handle,
+      statusId,
+      targetUrl: "https://x.com/" + handle + "/status/" + statusId,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isTopLevelArticleInDialog(article: Element): boolean {
+  return article.parentElement?.closest(XSelectors.TWEET_ARTICLE) === null;
+}
+
+function directTweetTextElement(article: Element): Element | null {
+  return (
+    safeQueryAll(article, XSelectors.TWEET_TEXT).find(
+      (el) => el.closest(XSelectors.TWEET_ARTICLE) === article,
+    ) ?? null
+  );
+}
+
+function directStatusLink(article: Element): HTMLAnchorElement | null {
+  const link = safeQueryAll(article, XSelectors.TWEET_STATUS_LINK).find(
+    (el) => el instanceof HTMLAnchorElement && el.closest(XSelectors.TWEET_ARTICLE) === article,
+  );
+  return link instanceof HTMLAnchorElement ? link : null;
+}
+
+function readDisplayName(article: Element, statusLink: HTMLAnchorElement): string | undefined {
+  const statusText = normalizeDomText(statusLink.textContent);
+  for (const child of Array.from(article.childNodes)) {
+    if (child === statusLink) continue;
+    const text = normalizeDomText(child.textContent);
+    if (text.length === 0 || text === statusText || text.startsWith("@")) continue;
+    return text.slice(0, 160);
+  }
+  return undefined;
+}
+
+function detectReplyTarget(composerEl: HTMLElement | null): ReplyTargetMetadata | null {
+  if (composerEl === null) return null;
+
+  const dialog = composerEl.closest(XSelectors.COMPOSER_DIALOG);
+  if (!(dialog instanceof HTMLElement)) return null;
+
+  const articles = safeQueryAll(dialog, XSelectors.TWEET_ARTICLE).filter(
+    (article) => !article.contains(composerEl) && isTopLevelArticleInDialog(article),
+  );
+
+  for (const article of articles) {
+    const textEl = directTweetTextElement(article);
+    const statusLink = directStatusLink(article);
+    if (textEl === null || statusLink === null) continue;
+
+    const targetText = normalizeDomText(
+      textEl instanceof HTMLElement ? textEl.innerText : textEl.textContent,
+    );
+    const status = parseStatusUrl(statusLink.href);
+    if (targetText.length === 0 || status === null) continue;
+
+    return {
+      source: "same_dialog_dom",
+      targetAuthorHandle: status.handle,
+      targetDisplayName: readDisplayName(article, statusLink),
+      targetText,
+      targetStatusId: status.statusId,
+      targetUrl: status.targetUrl,
+    };
+  }
+
+  return null;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function structuralPrefixFor(text: string, targetHandle: string): string {
+  const firstMention = text.match(/^@([A-Za-z0-9_]{1,15})(?:\s+|$)/);
+  if (firstMention === null || firstMention[1]?.toLowerCase() !== targetHandle.toLowerCase()) {
+    return "";
+  }
+
+  return text.match(/^((?:@[A-Za-z0-9_]{1,15}(?:\s+|$))+)/)?.[1] ?? firstMention[0];
+}
+
+function stripDuplicateTargetHandle(body: string, targetHandle: string): string {
+  const leadingWhitespace = body.match(/^\s*/)?.[0] ?? "";
+  const withoutWhitespace = body.slice(leadingWhitespace.length);
+  const duplicate = new RegExp("^@" + escapeRegExp(targetHandle) + "(?:\\s+|$)", "i").exec(
+    withoutWhitespace,
+  );
+  if (duplicate === null) return body;
+  return withoutWhitespace.slice(duplicate[0].length);
+}
+
+function createDraftSplit(
+  composerText: string,
+  replyTarget: ReplyTargetMetadata | null,
+): ReplyDraftSplit {
+  if (replyTarget === null) {
+    return {
+      mode: "post",
+      authoredBody: composerText,
+      structuralPrefix: "",
+      leadingHandleState: "user_deleted",
+      merge(body) {
+        return body;
+      },
+    };
+  }
+
+  const structuralPrefix = structuralPrefixFor(composerText, replyTarget.targetAuthorHandle);
+  const leadingHandleState = structuralPrefix.length > 0 ? "present" : "user_deleted";
+  const authoredBody =
+    leadingHandleState === "present" ? composerText.slice(structuralPrefix.length) : composerText;
+
+  return {
+    mode: "reply",
+    authoredBody,
+    structuralPrefix,
+    leadingHandleState,
+    merge(body) {
+      if (leadingHandleState === "user_deleted") return body;
+      return structuralPrefix + stripDuplicateTargetHandle(body, replyTarget.targetAuthorHandle);
+    },
+  };
+}
+
+function makeReplyContext(
+  replyTarget: ReplyTargetMetadata | null,
+  draftSplit: ReplyDraftSplit,
+): ReplyComposerContext | undefined {
+  if (replyTarget === null) return undefined;
+  return {
+    ...replyTarget,
+    leadingTargetHandle: {
+      handle: replyTarget.targetAuthorHandle,
+      state: draftSplit.leadingHandleState,
+    },
+  };
+}
+
+function sameReplyTarget(a: ReplyTargetMetadata | null, b: ReplyTargetMetadata | null): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 /**
  * Detect X's compose surface. The composer is active when its contenteditable
@@ -193,6 +386,7 @@ export function AnchorLayer({ children }: AnchorLayerProps): ReactNode {
   // live element; `composerText` is its ~350 ms-debounced `.textContent`.
   const [composerEl, setComposerEl] = useState<HTMLElement | null>(null);
   const [composerText, setComposerText] = useState<string>("");
+  const [replyTarget, setReplyTarget] = useState<ReplyTargetMetadata | null>(null);
   const [confirmationActive, setConfirmationActive] = useState<boolean>(false);
 
   // Stable register/reconcile API (last-call-wins; never re-bound across renders).
@@ -236,6 +430,8 @@ export function AnchorLayer({ children }: AnchorLayerProps): ReactNode {
       // is owned by the debounce effect below, not re-read here.
       const nextComposer = detectComposer();
       setComposerEl((prev) => (prev === nextComposer ? prev : nextComposer));
+      const nextReplyTarget = detectReplyTarget(nextComposer);
+      setReplyTarget((prev) => (sameReplyTarget(prev, nextReplyTarget) ? prev : nextReplyTarget));
 
       // Track X's confirmation sheet so the cockpit can stand down while it is up.
       const nextConfirmation = detectConfirmationDialog();
@@ -336,10 +532,17 @@ export function AnchorLayer({ children }: AnchorLayerProps): ReactNode {
     };
   }, [composerEl]);
 
+  const activeReplyTarget = composerEl === null ? null : replyTarget;
+  const activeComposerText = composerEl === null ? "" : composerText;
+  const draftSplit = createDraftSplit(activeComposerText, activeReplyTarget);
+  const replyContext = makeReplyContext(activeReplyTarget, draftSplit);
   const composeValue: ComposeContextValue = {
     composerEl,
     isActive: composerEl !== null,
-    composerText,
+    mode: draftSplit.mode,
+    ...(replyContext === undefined ? {} : { replyContext }),
+    draftSplit,
+    composerText: activeComposerText,
     confirmationActive,
   };
 

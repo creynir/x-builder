@@ -10,13 +10,14 @@
 // counter and return `null` / `[]`. XOB-020's `ReadinessIndicator` reads the
 // counter to surface an "X layout changed" flag when misses cross a threshold.
 
-/** The five X target selectors the overlay anchors its affordances to. */
+/** The X target selectors the overlay anchors its affordances to. */
 export const XSelectors = {
   COMPOSER_TEXTAREA: 'div[data-testid="tweetTextarea_0"]',
   COMPOSER_BUTTON: 'div[data-testid="tweetButton"]',
   COMPOSER_DIALOG: '[role="dialog"]',
   TWEET_ARTICLE: 'article[data-testid="tweet"]',
   TWEET_TEXT: 'div[data-testid="tweetText"]',
+  TWEET_STATUS_LINK: 'a[href*="/status/"]',
   // X's discard/"save post?" confirmation sheet, layered over the compose modal.
   CONFIRMATION_DIALOG: '[data-testid="confirmationSheetDialog"]',
 } as const;
