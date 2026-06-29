@@ -10,6 +10,7 @@ import {
   type GenerateIdeaRequest,
   type GenerateIdeaResponse,
   type JudgeVerdict,
+  type ReplyComposerContext,
 } from "@x-builder/shared";
 
 import { openEngineDatabase } from "../open-engine-database";
@@ -25,6 +26,19 @@ const UNRELATED_KB_SENTINEL = "HTTP_UNRELATED_FULL_KB_SENTINEL";
 const KNOWN_VOICE_SENTINEL = "HTTP_KNOWN_POST_VOICE_SENTINEL";
 const FALLBACK_VOICE_SENTINEL = "HTTP_FALLBACK_RECENT_VOICE_SENTINEL";
 const REPLY_VOICE_SENTINEL = "HTTP_REPLY_VOICE_SENTINEL";
+
+const replyContext: ReplyComposerContext = {
+  source: "same_dialog_dom",
+  targetAuthorHandle: "alice",
+  targetDisplayName: "Alice Example",
+  targetText: "Ship the boring version first. The clever version rarely survives contact.",
+  targetStatusId: "1930000000000000001",
+  targetUrl: "https://x.com/alice/status/1930000000000000001",
+  leadingTargetHandle: {
+    handle: "alice",
+    state: "present",
+  },
+};
 
 type LlmCall = { purpose: string; instructions: string; userContent: string };
 
@@ -280,6 +294,58 @@ describe("POST /ideas/generate", () => {
 
       const result = generateIdeaResponseSchema.parse(parseJson(response.body));
       expect(result.candidates).toHaveLength(3);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("passes replyContext through to the injected generation service", async () => {
+    const generateCandidates = vi.fn(
+      async (_input: GenerateIdeaRequest): Promise<GenerateIdeaResponse> => formatPathResponse(),
+    );
+    const app = buildServer({ generateCandidates });
+    const body: GenerateIdeaRequest = { format: "hot_take", replyContext };
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/ideas/generate",
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(generateCandidates).toHaveBeenCalledTimes(1);
+      expect(generateCandidates).toHaveBeenCalledWith(body);
+
+      const result = generateIdeaResponseSchema.parse(parseJson(response.body));
+      expect(result.candidates).toHaveLength(3);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects replyContext-only generation requests before the service boundary", async () => {
+    const generateCandidates = vi.fn(
+      async (_input: GenerateIdeaRequest): Promise<GenerateIdeaResponse> => formatPathResponse(),
+    );
+    const app = buildServer({ generateCandidates });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/ideas/generate",
+        payload: { replyContext },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(generateCandidates).not.toHaveBeenCalled();
+
+      const error = apiErrorSchema.parse(parseJson(response.body));
+      expect(error).toMatchObject({
+        code: "validation_failed",
+        retryable: false,
+        status: 400,
+      });
     } finally {
       await app.close();
     }

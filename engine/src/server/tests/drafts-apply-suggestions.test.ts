@@ -9,6 +9,7 @@ import {
   type ApplyJudgeSuggestionsRequest,
   type ApplyJudgeSuggestionsResponse,
   type JudgeVerdict,
+  type ReplyComposerContext,
 } from "@x-builder/shared";
 
 import type { StructuredLlmRequest } from "../../llm/structured-llm-service";
@@ -21,6 +22,19 @@ const parseJson = (payload: string): unknown => JSON.parse(payload);
 
 const originalText = "The original draft worth improving.";
 const rewrittenText = "A sharper, reply-friendlier rewrite of the draft.";
+
+const replyContext: ReplyComposerContext = {
+  source: "same_dialog_dom",
+  targetAuthorHandle: "alice",
+  targetDisplayName: "Alice Example",
+  targetText: "Ship the boring version first. The clever version rarely survives contact.",
+  targetStatusId: "1930000000000000001",
+  targetUrl: "https://x.com/alice/status/1930000000000000001",
+  leadingTargetHandle: {
+    handle: "alice",
+    state: "present",
+  },
+};
 
 const ISO = "2026-06-20T12:00:00.000Z";
 const START = new Date(ISO);
@@ -176,6 +190,32 @@ describe("POST /drafts/apply-suggestions", () => {
       expect(body.improvedOverOriginal).toBe(true);
       expect(body.text).toBe(rewrittenText);
       expect(body.text).not.toBe(originalText);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("passes replyContext through to the injected apply service", async () => {
+    const seenRequests: ApplyJudgeSuggestionsRequest[] = [];
+    const app = buildServer({
+      applyJudgeSuggestionsService: serviceWith(async (request) => {
+        seenRequests.push(request);
+        return improvedResponse();
+      }),
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/drafts/apply-suggestions",
+        payload: { text: "good point", replyContext },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(seenRequests).toEqual([{ text: "good point", replyContext }]);
+
+      const body = applyJudgeSuggestionsResponseSchema.parse(parseJson(response.body));
+      expect(body.text).toBe(rewrittenText);
     } finally {
       await app.close();
     }

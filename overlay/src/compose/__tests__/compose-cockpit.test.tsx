@@ -552,6 +552,75 @@ describe("ComposeCockpit — reply-aware orchestration", () => {
     expect(composerText()).toBe("@alice improved body");
   });
 
+  it("carries authored reply body plus replyContext through analyze, judge, generate, and apply", async () => {
+    fixture = insertXReplyComposer("@alice body");
+    const analyzeCalls: AnalyzePostsRequest[] = [];
+    const judgeCalls: JudgeDraftRequest[] = [];
+    const generateCalls: GenerateIdeaRequest[] = [];
+    const applyCalls: ApplyJudgeSuggestionsRequest[] = [];
+    const response = makeGenerateResponse([
+      { text: "@alice generated body", overall: 88 },
+      { text: "lower option", overall: 72 },
+      { text: "weak option", overall: 40 },
+    ]);
+    const fake = new FakeEngineTransport({
+      getGenerateCategories: async () => makeGenerateCategories(),
+      getCaptureSummary: async () => makeCapture(),
+      getOverlayReadiness: async () => {
+        const { makeOverlayReadiness } = await import("../../testing/fixtures");
+        return makeOverlayReadiness();
+      },
+      analyzePosts: async (request) => {
+        analyzeCalls.push(request);
+        const { readyResult } = await import("../../testing/analyze-state");
+        return { items: [readyResult] };
+      },
+      judgeDraft: async (request) => {
+        judgeCalls.push(request);
+        return makeJudgeResponse(74);
+      },
+      generateIdeas: async (request) => {
+        generateCalls.push(request);
+        return response;
+      },
+      applyJudgeSuggestions: async (request) => {
+        applyCalls.push(request);
+        return makeApplyResponse({ text: "@alice applied body", improvedOverOriginal: true });
+      },
+    });
+
+    mountCockpit(fake);
+    await settleUntil(() => analyzeCalls.length > 0, "reply analyze request");
+
+    expect(analyzeCalls[0]?.items[0]).toMatchObject({
+      text: "body",
+      replyContext: { targetAuthorHandle: "alice" },
+    });
+
+    await clickWhenPresent(/run judge/i);
+    await settleUntil(() => judgeCalls.length === 1, "reply judge request");
+    expect(judgeCalls[0]).toMatchObject({
+      text: "body",
+      replyContext: { targetAuthorHandle: "alice" },
+    });
+
+    await clickWhenPresent(/apply all suggestions/i);
+    await settleUntil(() => applyCalls.length === 1, "reply apply request");
+    expect(applyCalls[0]).toMatchObject({
+      text: "body",
+      replyContext: { targetAuthorHandle: "alice" },
+    });
+    expect(composerText()).toBe("@alice applied body");
+
+    await clickWhenPresent(/hot take/i);
+    await settleUntil(() => generateCalls.length === 1, "reply generate request");
+    expect(generateCalls[0]).toMatchObject({
+      format: "hot_take",
+      replyContext: { targetAuthorHandle: "alice" },
+    });
+    expect(composerText()).toBe("@alice generated body");
+  });
+
   it("does not restore a user-deleted structural prefix when generating or applying", async () => {
     fixture = insertXReplyComposer("original body");
     const generateCalls: GenerateIdeaRequest[] = [];
@@ -610,7 +679,13 @@ describe("ComposeCockpit — reply-aware orchestration", () => {
     fixture = insertXComposer("@alice good point");
     const analyzeCalls: AnalyzePostsRequest[] = [];
     const judgeCalls: JudgeDraftRequest[] = [];
+    const generateCalls: GenerateIdeaRequest[] = [];
     const applyCalls: ApplyJudgeSuggestionsRequest[] = [];
+    const response = makeGenerateResponse([
+      { text: "@alice generated normal post", overall: 88 },
+      { text: "lower option", overall: 72 },
+      { text: "weak option", overall: 40 },
+    ]);
     const fake = new FakeEngineTransport({
       getGenerateCategories: async () => makeGenerateCategories(),
       getCaptureSummary: async () => makeCapture(),
@@ -626,6 +701,10 @@ describe("ComposeCockpit — reply-aware orchestration", () => {
       judgeDraft: async (request) => {
         judgeCalls.push(request);
         return makeJudgeResponse(74);
+      },
+      generateIdeas: async (request) => {
+        generateCalls.push(request);
+        return response;
       },
       applyJudgeSuggestions: async (request) => {
         applyCalls.push(request);
@@ -647,6 +726,11 @@ describe("ComposeCockpit — reply-aware orchestration", () => {
     await settleUntil(() => applyCalls.length === 1, "normal apply request");
     expect(applyCalls[0]).toEqual({ text: "@alice good point" });
     expect(composerText()).toBe("@alice improved normal post");
+
+    await clickWhenPresent(/hot take/i);
+    await settleUntil(() => generateCalls.length === 1, "normal generate request");
+    expect(generateCalls[0]).toEqual({ format: "hot_take" });
+    expect(composerText()).toBe("@alice generated normal post");
   });
 
   it("records generated reply feedback using authored body text", async () => {

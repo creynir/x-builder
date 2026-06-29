@@ -9,6 +9,7 @@ import {
   type AnalyzedPostItem,
   type AnalyzePostsRequest,
   type AnalyzePostsResponse,
+  type ReplyComposerContext,
 } from "@x-builder/shared";
 import { buildServer } from "../server";
 import { classifyPostFormat } from "../../deterministic/format-classifier";
@@ -22,6 +23,19 @@ import { SqlitePostLibraryRepository } from "../sqlite-post-library-repository";
 import { openEngineDatabase } from "../open-engine-database";
 
 type AnalyzePostsFake = (request: AnalyzePostsRequest) => Promise<AnalyzePostsResponse> | AnalyzePostsResponse;
+
+const replyContext: ReplyComposerContext = {
+  source: "same_dialog_dom",
+  targetAuthorHandle: "alice",
+  targetDisplayName: "Alice Example",
+  targetText: "Ship the boring version first. The clever version rarely survives contact.",
+  targetStatusId: "1930000000000000001",
+  targetUrl: "https://x.com/alice/status/1930000000000000001",
+  leadingTargetHandle: {
+    handle: "alice",
+    state: "present",
+  },
+};
 
 type BuildServerAnalyzeOptions = Parameters<typeof buildServer>[0] & {
   analyzePosts?: AnalyzePostsFake;
@@ -387,6 +401,45 @@ describe("posts analyze API", () => {
       expect(wire).not.toContain("founder_story_event");
       expect(wire).not.toContain("founder_story_personal_stakes");
       expect(wire).not.toContain("founder_story_reuse_decay");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("preserves item-level replyContext into the injected analyzer", async () => {
+    const seenRequests: AnalyzePostsRequest[] = [];
+    const analyzePosts = vi.fn((request: AnalyzePostsRequest): AnalyzePostsResponse => {
+      seenRequests.push(request);
+      return scoredResponse(request);
+    });
+    const request = analyzeRequest({
+      items: [
+        {
+          id: "reply-draft",
+          text: "good point",
+          replyContext,
+        },
+      ],
+    });
+    const app = buildServerWithAnalyzePosts(analyzePosts);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/posts/analyze",
+        payload: request,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(analyzePosts).toHaveBeenCalledOnce();
+      expect(seenRequests[0]?.items[0]).toMatchObject({
+        id: "reply-draft",
+        text: "good point",
+        replyContext,
+      });
+
+      const result = parseAnalyzeResponse(parseJsonPayload(response.body));
+      expectScoredItem(result.items[0]);
     } finally {
       await app.close();
     }
