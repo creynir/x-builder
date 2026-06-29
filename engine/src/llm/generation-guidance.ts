@@ -3,6 +3,10 @@ import type { DetectedPostFormat } from "@x-builder/shared";
 
 import type { CanonicalOwnPost, PostLibraryRepository } from "../server/post-library-repository.js";
 import type { AppSettingsRepository } from "../server/settings-repository.js";
+import {
+  renderExternalPatternGuidance,
+  type ExternalPatternGuidanceProvider,
+} from "./external-pattern-guidance.js";
 
 const PLAYBOOK_SLICE_CHAR_LIMIT = 6_000;
 const KNOWLEDGE_BASE_FILE_BYTE_LIMIT = 256_000;
@@ -70,6 +74,7 @@ export type RenderedVoiceSamples = {
 export type CreateGenerationGuidanceResolverInput = {
   settingsRepository: Pick<AppSettingsRepository, "load">;
   postLibraryRepository: Pick<PostLibraryRepository, "loadStore">;
+  externalPatternGuidanceProvider?: ExternalPatternGuidanceProvider;
 };
 
 export type GenerationContext = {
@@ -362,12 +367,17 @@ const resolveKnowledgeBasePath = async (
 const renderGenerationGuidance = (
   request: GenerationGuidanceRequest,
   playbook: PlaybookSlice,
+  renderedExternalPatternGuidance: string | undefined,
   renderedVoiceSamples: RenderedVoiceSamples,
 ): string | undefined => {
   const sections: string[] = [];
 
   if (playbook.content.length > 0) {
     sections.push(`${PLAYBOOK_GUIDANCE_HEADER}\n${playbook.content}`);
+  }
+
+  if (renderedExternalPatternGuidance !== undefined) {
+    sections.push(renderedExternalPatternGuidance);
   }
 
   if (renderedVoiceSamples.content.length > 0) {
@@ -385,13 +395,28 @@ const renderGenerationGuidance = (
   return sections.join("\n\n");
 };
 
+const resolveExternalPatternGuidance = async (
+  provider: ExternalPatternGuidanceProvider | undefined,
+  request: GenerationGuidanceRequest,
+): Promise<string | undefined> => {
+  if (provider === undefined) {
+    return undefined;
+  }
+
+  try {
+    return renderExternalPatternGuidance(await provider(request));
+  } catch {
+    return undefined;
+  }
+};
+
 export const createGenerationGuidanceResolver = (
   input: CreateGenerationGuidanceResolverInput,
 ): GenerationGuidanceResolver => {
   return async (request) => {
     try {
       const knowledgeBasePath = await resolveKnowledgeBasePath(input.settingsRepository);
-      const [playbook, voiceSamples] = await Promise.all([
+      const [playbook, voiceSamples, externalPatternGuidance] = await Promise.all([
         resolvePlaybookSlice({
           format: request.format,
           knowledgeBasePath,
@@ -401,11 +426,13 @@ export const createGenerationGuidanceResolver = (
           useKnownPostIds: request.useKnownPostIds,
           voiceProfileId: request.voiceProfileId,
         }),
+        resolveExternalPatternGuidance(input.externalPatternGuidanceProvider, request),
       ]);
 
       return renderGenerationGuidance(
         request,
         playbook,
+        externalPatternGuidance,
         renderVoiceSampleGuidance(voiceSamples),
       );
     } catch {

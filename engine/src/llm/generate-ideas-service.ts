@@ -163,11 +163,10 @@ const generationInstructions = (
 
   const base = lines.join(" ");
 
-  // The reach/format playbook + the author's own voice examples (when configured
-  // and captured) are appended as a verbatim block so the model writes drafts
-  // that follow what actually performs and sound like the author.
+  // The configured guidance block can combine the requested playbook, external
+  // pattern constraints, and the author's own voice examples.
   if (guidance !== undefined && guidance.trim().length > 0) {
-    return `${base}\n\nGround your drafts in the following guidance — it reflects what actually reaches on X and the author's own voice. Prefer its recommendations over generic advice:\n\n${guidance.trim()}`;
+    return `${base}\n\nGround your drafts in the following guidance. It may include the requested format playbook, external performance constraints, and the author's own voice samples. Prefer its specific recommendations over generic advice:\n\n${guidance.trim()}`;
   }
 
   return base;

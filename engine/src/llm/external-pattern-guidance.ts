@@ -1,5 +1,6 @@
 import type { DetectedPostFormat, ExternalXSignalPattern } from "@x-builder/shared";
 
+import type { ListGenerationPatternsRequest } from "../external/external-x-signals-repository.js";
 import type { GenerationGuidanceRequest } from "./generation-guidance.js";
 
 const EXTERNAL_PATTERN_GUIDANCE_HEADER =
@@ -31,6 +32,12 @@ export type ExternalPatternGuidanceItem = {
 export type ExternalPatternGuidanceProvider = (
   request: ExternalPatternGuidanceRequest,
 ) => Promise<ExternalPatternGuidanceItem[]>;
+
+export type ExternalPatternSnapshotReader = {
+  listGenerationPatterns: (
+    request: ListGenerationPatternsRequest,
+  ) => Promise<ExternalXSignalPattern[]>;
+};
 
 const normalizeInlineText = (value: string): string => value.replace(/\s+/g, " ").trim();
 
@@ -108,4 +115,30 @@ export const renderExternalPatternGuidance = (
   }
 
   return lines.join("\n");
+};
+
+const toGuidanceItem = (pattern: ExternalXSignalPattern): ExternalPatternGuidanceItem => ({
+  id: pattern.id,
+  patternType: pattern.patternType,
+  ...(pattern.format === undefined ? {} : { format: pattern.format }),
+  statement: pattern.statement,
+  confidence: pattern.confidence,
+  supportCount: pattern.supportCount,
+  generatedAt: pattern.generatedAt,
+  version: pattern.version,
+});
+
+export const createExternalPatternGuidanceProvider = (
+  snapshotReader: ExternalPatternSnapshotReader,
+): ExternalPatternGuidanceProvider => {
+  return async (request) => {
+    const patterns = await snapshotReader.listGenerationPatterns({
+      format: request.format,
+      ...(request.maxPatterns === undefined ? {} : { limit: request.maxPatterns }),
+      ...(request.minConfidence === undefined ? {} : { minConfidence: request.minConfidence }),
+      ...(request.minSupportCount === undefined ? {} : { minSupportCount: request.minSupportCount }),
+    });
+
+    return patterns.map(toGuidanceItem);
+  };
 };

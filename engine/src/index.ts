@@ -46,6 +46,11 @@ export {
 } from "./llm/judge-draft-service.js";
 export { GenerateIdeasService } from "./llm/generate-ideas-service.js";
 export {
+  createExternalPatternGuidanceProvider,
+  type ExternalPatternGuidanceProvider,
+  type ExternalPatternSnapshotReader,
+} from "./llm/external-pattern-guidance.js";
+export {
   createGenerationGuidanceResolver,
   type CreateGenerationGuidanceResolverInput,
   type GenerationGuidanceResolver,

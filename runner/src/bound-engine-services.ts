@@ -42,9 +42,12 @@ import {
   RepetitionWindowService,
   SuggestPostService,
   createDefaultReadinessService,
+  createExternalPatternGuidanceProvider,
   createGenerationGuidanceResolver,
   openEngineDatabase,
   createSettingsJudgeProviderResolver,
+  type ExternalPatternGuidanceProvider,
+  type ExternalPatternSnapshotReader,
   type JudgeLlmGateway,
   type PostLibraryRepository,
   type ReadinessService,
@@ -75,6 +78,8 @@ export interface CreateBoundEngineServicesOptions {
   liveCapture: LiveCaptureService;
   feedbackLoopService?: FeedbackLoopService;
   externalXSignalsService?: ExternalXSignalsService;
+  externalPatternGuidanceProvider?: ExternalPatternGuidanceProvider;
+  externalPatternSnapshotReader?: ExternalPatternSnapshotReader;
   /** Structured-LLM gateway for generate / apply-suggestions / suggest. */
   llm: StructuredLlmGateway;
   /** Judge gateway for judgeDraft and the generate/apply judge passes. */
@@ -186,11 +191,24 @@ export function createBoundEngineServices(
       feedbackRepository: new SqliteFeedbackLoopRepository(openEngineDatabase(":memory:")),
       postLibraryRepository,
     });
-  const externalXSignalsService =
-    options.externalXSignalsService ??
-    new ExternalXSignalsService({
-      repository: new SqliteExternalXSignalsRepository(openEngineDatabase(":memory:")),
-    });
+  let externalXSignalsService = options.externalXSignalsService;
+  let externalPatternGuidanceProvider = options.externalPatternGuidanceProvider;
+  if (externalXSignalsService === undefined) {
+    const externalXSignalsRepository = new SqliteExternalXSignalsRepository(
+      openEngineDatabase(":memory:"),
+    );
+    externalXSignalsService = new ExternalXSignalsService({ repository: externalXSignalsRepository });
+    externalPatternGuidanceProvider ??= createExternalPatternGuidanceProvider(
+      options.externalPatternSnapshotReader ?? externalXSignalsRepository,
+    );
+  } else if (
+    externalPatternGuidanceProvider === undefined &&
+    options.externalPatternSnapshotReader !== undefined
+  ) {
+    externalPatternGuidanceProvider = createExternalPatternGuidanceProvider(
+      options.externalPatternSnapshotReader,
+    );
+  }
   // GenerateCategoryService takes (repo, windowService); a fresh window service
   // matches buildServer's per-service instance.
   const generateCategoryService = new GenerateCategoryService(
@@ -214,6 +232,9 @@ export function createBoundEngineServices(
     createGenerationGuidanceResolver({
       settingsRepository,
       postLibraryRepository,
+      ...(externalPatternGuidanceProvider === undefined
+        ? {}
+        : { externalPatternGuidanceProvider }),
     }),
   );
   const applyJudgeSuggestionsService = new ApplyJudgeSuggestionsService(
