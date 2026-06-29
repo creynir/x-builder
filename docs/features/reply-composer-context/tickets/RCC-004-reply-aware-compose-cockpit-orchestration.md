@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 
 # RCC-004: Reply-Aware Compose Cockpit Orchestration
@@ -119,3 +119,4 @@ Isolation boundary: browser test fixture with teardown after each test.
 ## Pipeline Log
 
 - 2026-06-29: Ticket authored from approved arch recon.
+- 2026-06-29: Started RGB-TDD implementation after RCC-003 Blue/Yellow approval.
