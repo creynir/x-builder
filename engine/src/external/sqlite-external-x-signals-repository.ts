@@ -1,8 +1,10 @@
 import type Database from "better-sqlite3";
 import {
   addExternalXSignalSourceRequestSchema,
+  detectedPostFormatSchema,
   externalXSignalEvidenceSchema,
   externalXSignalPatternSchema,
+  externalXSignalPatternTypeSchema,
   externalXSignalRefreshRunSchema,
   externalXSignalSourceSchema,
   getExternalXSignalsOverviewRequestSchema,
@@ -26,6 +28,7 @@ import { PostLibraryStorageError } from "../server/post-library-repository.js";
 import type {
   ExternalXSignalsRepository,
   ExternalXSignalsWriteResult,
+  ListGenerationPatternsRequest,
 } from "./external-x-signals-repository.js";
 
 type DatabaseHandle = Database.Database;
@@ -86,6 +89,19 @@ type RepositoryOptions = {
   now?: () => string;
   id?: () => string;
 };
+
+const listGenerationPatternsRequestSchema = z.object({
+  format: detectedPostFormatSchema.optional(),
+  patternTypes: z.array(externalXSignalPatternTypeSchema).default(["format"]),
+  minConfidence: z.number().min(0).max(1).default(0.5),
+  minSupportCount: z.number().int().min(0).default(2),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .default(20)
+    .transform((limit) => Math.min(limit, 20)),
+});
 
 const stableJson = (value: unknown): string => JSON.stringify(value);
 const parseJson = (value: string): unknown => JSON.parse(value);
@@ -452,6 +468,20 @@ export class SqliteExternalXSignalsRepository implements ExternalXSignalsReposit
     }
   }
 
+  async listGenerationPatterns(input: ListGenerationPatternsRequest): Promise<ExternalXSignalPattern[]> {
+    try {
+      const request = listGenerationPatternsRequestSchema.parse(input);
+
+      return this.readGenerationPatterns(request);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw storageError("External X signal generation pattern request failed schema validation.", error);
+      }
+
+      throw storageError("Failed to list external X signal generation patterns.", error);
+    }
+  }
+
   private evidenceRow(evidence: ExternalXSignalEvidence): Record<string, unknown> {
     return {
       id: evidence.id,
@@ -549,6 +579,41 @@ export class SqliteExternalXSignalsRepository implements ExternalXSignalsReposit
     const rows = this.db
       .prepare("SELECT payload FROM external_x_signal_pattern ORDER BY generated_at DESC, id ASC LIMIT ?")
       .all(limit) as PatternRow[];
+
+    return rows.map((row) => externalXSignalPatternSchema.parse(parseJson(row.payload)));
+  }
+
+  private readGenerationPatterns(request: z.infer<typeof listGenerationPatternsRequestSchema>): ExternalXSignalPattern[] {
+    if (request.patternTypes.length === 0) {
+      return [];
+    }
+
+    const patternTypePlaceholders = request.patternTypes.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(
+        `SELECT payload FROM external_x_signal_pattern
+         WHERE pattern_type IN (${patternTypePlaceholders})
+           AND confidence >= ?
+           AND support_count >= ?
+         ORDER BY
+           CASE
+             WHEN ? IS NOT NULL AND json_extract(payload, '$.format') = ? THEN 0
+             ELSE 1
+           END,
+           confidence DESC,
+           support_count DESC,
+           generated_at DESC,
+           id ASC
+         LIMIT ?`,
+      )
+      .all(
+        ...request.patternTypes,
+        request.minConfidence,
+        request.minSupportCount,
+        request.format ?? null,
+        request.format ?? null,
+        request.limit,
+      ) as PatternRow[];
 
     return rows.map((row) => externalXSignalPatternSchema.parse(parseJson(row.payload)));
   }
