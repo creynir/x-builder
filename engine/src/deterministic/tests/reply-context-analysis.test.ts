@@ -84,4 +84,39 @@ describe("DeterministicAnalysisService reply context handling", () => {
     expect(item.score.checks.some((check) => check.id === "reply.duplicate-leading-target-handle"))
       .toBe(false);
   });
+
+  it("does not score a prefix-only reply body after removing the structural target handle", () => {
+    const capturedTexts: string[] = [];
+    const service = new DeterministicAnalysisService({
+      analyzePost: (text, options) => {
+        capturedTexts.push(text);
+        return analyzeDraftText(text, options);
+      },
+    });
+
+    const response = service.analyzePosts({
+      items: [
+        {
+          id: "reply-empty",
+          text: "@alice",
+          replyContext,
+        },
+      ],
+      scoringContext: {},
+      presentation: {
+        postCoachMode: "expanded",
+      },
+    });
+
+    const item = response.items[0];
+    expect(capturedTexts).toEqual([]);
+    expect(item).toMatchObject({
+      status: "score_failed",
+      id: "reply-empty",
+      text: "@alice",
+      retryable: false,
+    });
+    if (item?.status !== "score_failed") throw new Error("Expected prefix-only reply to fail.");
+    expect(item.message.toLowerCase()).toContain("reply body");
+  });
 });

@@ -1,5 +1,9 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { judgeVerdictSchema, type JudgeVerdict } from "@x-builder/shared";
+import {
+  judgeVerdictSchema,
+  type JudgeVerdict,
+  type ReplyComposerContext,
+} from "@x-builder/shared";
 
 import {
   JudgeDraftService,
@@ -64,7 +68,10 @@ const failure = (
 
 describe("JudgeDraftService", () => {
   it("exposes additive timeout options on the JudgeDraft contract", () => {
-    expectTypeOf<JudgeDraftOptions>().toEqualTypeOf<{ timeoutMs?: number }>();
+    expectTypeOf<JudgeDraftOptions>().toEqualTypeOf<{
+      timeoutMs?: number;
+      replyContext?: ReplyComposerContext;
+    }>();
     expectTypeOf<JudgeDraft["judge"]>().toEqualTypeOf<
       (
         text: string,
