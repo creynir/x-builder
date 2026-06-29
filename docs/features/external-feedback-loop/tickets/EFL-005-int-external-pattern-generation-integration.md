@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # EFL-005: [INT] Cover external pattern generation integration
@@ -70,3 +70,4 @@ Coverage level: integration tests. Owning suites: engine and runner integration 
 ## Pipeline Log
 
 - 2026-06-29: Ticket authored from approved arch recon. Validator construction-contract fix included.
+- 2026-06-29: Integration pipeline started after EFL-004 Yellow approval.
