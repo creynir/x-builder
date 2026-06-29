@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 
 # RCC-005: [INT] Reply Context Integration Coverage
@@ -93,3 +93,4 @@ No new visual behavior is introduced by this test ticket. Existing cockpit layou
 ## Pipeline Log
 
 - 2026-06-29: Ticket authored from approved arch recon.
+- 2026-06-29: Started RGB-TDD integration coverage after RCC-004 Blue/Yellow approval.

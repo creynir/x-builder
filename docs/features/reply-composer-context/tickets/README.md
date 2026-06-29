@@ -8,7 +8,7 @@ Tickets build top to bottom. This epic adds reply awareness to the existing comp
 | RCC-002 | [FND] | Overlay Reply Detection And Draft Split Helpers | overlay/dom | done | RCC-001 |
 | RCC-003 | - | Reply-Aware Engine Consumers | engine/llm + engine/deterministic | done | RCC-001 |
 | RCC-004 | - | Reply-Aware Compose Cockpit Orchestration | overlay/compose | done | RCC-001, RCC-002, RCC-003 |
-| RCC-005 | [INT] | Reply Context Integration Coverage | shared/engine/overlay tests | todo | RCC-003, RCC-004 |
+| RCC-005 | [INT] | Reply Context Integration Coverage | shared/engine/overlay tests | in_progress | RCC-003, RCC-004 |
 | RCC-006 | [E2E] | Reply Composer Overlay Flow | runner/e2e | todo | RCC-005 |
 
 ## Pipeline Log
