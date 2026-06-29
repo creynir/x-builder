@@ -8,6 +8,8 @@ const EXTERNAL_PATTERN_GUIDANCE_INTRO =
   "Use these as weak writing constraints from external performance patterns, not author voice.";
 const DEFAULT_EXTERNAL_PATTERN_LIMIT = 4;
 const DEFAULT_EXTERNAL_PATTERN_GUIDANCE_CHAR_LIMIT = 1_200;
+const STATEMENT_PREFIX = "- ";
+const METADATA_PREFIX = "  metadata: ";
 
 export type ExternalPatternGuidanceRequest = GenerationGuidanceRequest & {
   maxPatterns?: number;
@@ -49,6 +51,24 @@ const buildMetadata = (item: ExternalPatternGuidanceItem): string => {
 const truncateToBudget = (content: string, maxLength: number): string =>
   content.length > maxLength ? content.slice(0, maxLength).trimEnd() : content;
 
+type RenderableExternalPatternGuidanceItem = {
+  metadataLine: string;
+  statement: string;
+};
+
+const fixedGuidanceLength = (items: RenderableExternalPatternGuidanceItem[]): number => {
+  const baseLength = [
+    EXTERNAL_PATTERN_GUIDANCE_HEADER,
+    EXTERNAL_PATTERN_GUIDANCE_INTRO,
+  ].join("\n").length;
+
+  return items.reduce(
+    (length, item) =>
+      length + 1 + STATEMENT_PREFIX.length + 1 + item.metadataLine.length,
+    baseLength,
+  );
+};
+
 export const renderExternalPatternGuidance = (
   items: ExternalPatternGuidanceItem[],
 ): string | undefined => {
@@ -56,15 +76,36 @@ export const renderExternalPatternGuidance = (
     return undefined;
   }
 
+  const renderableItems = items
+    .slice(0, DEFAULT_EXTERNAL_PATTERN_LIMIT)
+    .map((item) => ({
+      metadataLine: `${METADATA_PREFIX}${buildMetadata(item)}`,
+      statement: normalizeInlineText(item.statement),
+    }));
+
+  while (
+    renderableItems.length > 0 &&
+    fixedGuidanceLength(renderableItems) > DEFAULT_EXTERNAL_PATTERN_GUIDANCE_CHAR_LIMIT
+  ) {
+    renderableItems.pop();
+  }
+
   const lines = [
     EXTERNAL_PATTERN_GUIDANCE_HEADER,
     EXTERNAL_PATTERN_GUIDANCE_INTRO,
   ];
+  let remainingStatementBudget =
+    DEFAULT_EXTERNAL_PATTERN_GUIDANCE_CHAR_LIMIT - fixedGuidanceLength(renderableItems);
 
-  for (const item of items.slice(0, DEFAULT_EXTERNAL_PATTERN_LIMIT)) {
-    lines.push(`- ${normalizeInlineText(item.statement)}`);
-    lines.push(`  metadata: ${buildMetadata(item)}`);
+  for (const [index, item] of renderableItems.entries()) {
+    const remainingItems = renderableItems.length - index;
+    const statementBudget = Math.floor(remainingStatementBudget / remainingItems);
+    const statement = truncateToBudget(item.statement, statementBudget);
+
+    remainingStatementBudget -= statement.length;
+    lines.push(`${STATEMENT_PREFIX}${statement}`);
+    lines.push(item.metadataLine);
   }
 
-  return truncateToBudget(lines.join("\n"), DEFAULT_EXTERNAL_PATTERN_GUIDANCE_CHAR_LIMIT);
+  return lines.join("\n");
 };
