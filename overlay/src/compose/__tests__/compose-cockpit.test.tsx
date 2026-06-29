@@ -1203,7 +1203,7 @@ describe("ComposeCockpit — judge readiness gate", () => {
     expect(cockpitText().toLowerCase()).toContain("judge not configured");
   });
 
-  it("auto-kicks judgeDraft when readiness llm.state is ready", async () => {
+  it("enables manual judge when readiness llm.state is ready", async () => {
     fixture = insertXComposer("a judgeable draft once the judge is ready");
     let judgeCallCount = 0;
     const fake = new FakeEngineTransport({
@@ -1226,9 +1226,11 @@ describe("ComposeCockpit — judge readiness gate", () => {
     mountCockpit(fake);
     await settle();
 
-    // The gate opened: judgeDraft ran exactly once after static_ready.
+    expect(judgeCallCount).toBe(0);
+    await clickWhenPresent(/run judge/i);
+    await settle();
+
     expect(judgeCallCount).toBe(1);
-    // The verdict landed in the judge channel (slight_rework band for overall 74).
     expect(/slight|rework/i.test(cockpitText())).toBe(true);
   });
 });
