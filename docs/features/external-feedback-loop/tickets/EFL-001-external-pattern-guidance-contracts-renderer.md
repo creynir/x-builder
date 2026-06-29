@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in-progress
 ---
 
 # EFL-001: [FND] Define external pattern guidance contracts and renderer
@@ -91,3 +91,4 @@ Coverage level: engine unit tests. Owning suite: engine LLM guidance tests. Fixt
 ## Pipeline Log
 
 - 2026-06-29: Ticket authored from approved arch recon.
+- 2026-06-29: RGB pipeline started.
