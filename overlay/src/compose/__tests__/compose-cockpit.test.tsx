@@ -799,8 +799,8 @@ describe("ComposeCockpit — apply-all flow", () => {
     });
 
     mountCockpit(fake);
-    // Settle the analyze debounce + the auto-kicked judge so we reach judged,
-    // draining until the Apply-all affordance is present, then click it.
+    await settle();
+    await clickWhenPresent(/run judge/i);
     await settle();
     await clickWhenPresent(/apply all suggestions/i);
 
@@ -890,10 +890,10 @@ describe("ComposeCockpit — auto-apply-best candidate selection", () => {
     expect(composerText()).toBe("first unapproved candidate");
   });
 
-  it("treats a chosen candidate with no verdict as user_written and runs the normal judge flow", async () => {
+  it("anchors a chosen candidate with no verdict as generated and runs the normal judge flow", async () => {
     fixture = insertXComposer();
-    // Single candidate carrying NO verdict → applied as user_written; the cockpit
-    // then auto-kicks the normal judgeDraft flow on the written text.
+    // Single candidate carrying NO verdict → written with generated provenance;
+    // the cockpit then kicks the judge flow on the written text.
     const response = makeGenerateResponse([
       { text: "verdict-less candidate", verdict: null },
       { text: "rejected b", overall: 20 },
@@ -904,6 +904,7 @@ describe("ComposeCockpit — auto-apply-best candidate selection", () => {
     expect(response.candidates[0]!.verdict).toBeUndefined();
 
     let judgeCalls = 0;
+    const pendingJudge = deferred<JudgeDraftResponse>();
     const fake = new FakeEngineTransport({
       getGenerateCategories: async () => makeGenerateCategories(),
       getCaptureSummary: async () => makeCapture(),
@@ -912,9 +913,9 @@ describe("ComposeCockpit — auto-apply-best candidate selection", () => {
         return makeOverlayReadiness();
       },
       generateIdeas: async () => response,
-      judgeDraft: async (): Promise<JudgeDraftResponse> => {
+      judgeDraft: (): Promise<JudgeDraftResponse> => {
         judgeCalls += 1;
-        return makeJudgeResponse(80);
+        return pendingJudge.promise;
       },
     });
 
@@ -924,13 +925,15 @@ describe("ComposeCockpit — auto-apply-best candidate selection", () => {
     await clickWhenPresent(/hot take/i);
     await settle();
 
-    // The verdict-less candidate's text was written…
+    // The verdict-less candidate's text was written and judged rather than
+    // reusing a missing candidate verdict.
     expect(composerText()).toBe("verdict-less candidate");
-    // …and because it carried no verdict, the normal judge flow was kicked
-    // (judgeDraft ran for the written text rather than reusing a candidate verdict).
-    expect(judgeCalls).toBeGreaterThanOrEqual(1);
-    // No pre-approved badge (provenance is user_written for a verdict-less apply).
+    expect(judgeCalls).toBe(1);
     expect(cockpitText()).not.toContain("✓ Judge approved");
+
+    pendingJudge.resolve(makeJudgeResponse(80));
+    await settle();
+    expect(cockpitText()).toContain("✓ Judge approved");
   });
 });
 
@@ -958,6 +961,8 @@ describe("ComposeCockpit — apply-all writes the improved text", () => {
     });
 
     mountCockpit(fake);
+    await settle();
+    await clickWhenPresent(/run judge/i);
     await settle();
 
     await clickWhenPresent(/apply all suggestions/i);
@@ -1145,7 +1150,9 @@ describe("ComposeCockpit — in-flight abort on composer edit", () => {
     });
 
     mountCockpit(fake);
-    await settle(); // analyze (1) → static_ready → judge (1) kicked, held open.
+    await settle(); // analyze (1) → static_ready; judge waits for the manual trigger.
+    await clickWhenPresent(/run judge/i);
+    await settle();
 
     expect(judgeCallCount).toBe(1);
     const analyzeAfterFirst = analyzeCallCount;
