@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 
 # RCC-003: Reply-Aware Engine Consumers
@@ -132,3 +132,4 @@ N/A.
 
 - 2026-06-29: Ticket authored from approved arch recon.
 - 2026-06-29: Started RGB-TDD implementation after RCC-001 and RCC-002 foundation approvals.
+- 2026-06-29: Completed with Blue/Yellow re-validation after generated-body normalization and public judge adapter pass-through fixes.
