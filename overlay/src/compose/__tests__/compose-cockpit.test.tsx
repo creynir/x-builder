@@ -65,7 +65,11 @@ import {
 } from "../../testing/compose-cockpit";
 
 import type {
+  AnalyzePostsRequest,
+  ApplyJudgeSuggestionsRequest,
+  GenerateIdeaRequest,
   GenerateIdeaResponse,
+  JudgeDraftRequest,
   JudgeDraftResponse,
   RecordFeedbackPredictionRequest,
   RecordFeedbackPredictionResponse,
@@ -132,6 +136,46 @@ async function settle(extraMs = 0): Promise<void> {
 function composerText(): string {
   const el = document.querySelector<HTMLElement>('div[data-testid="tweetTextarea_0"]');
   return el?.textContent ?? "";
+}
+
+interface ReplyTargetFixture {
+  handle?: string;
+  statusId?: string;
+  targetText?: string;
+  displayName?: string;
+}
+
+function buildReplyTargetArticle(opts: ReplyTargetFixture = {}): HTMLElement {
+  const handle = opts.handle ?? "alice";
+  const statusId = opts.statusId ?? "1930000000000000001";
+  const article = document.createElement("article");
+  article.setAttribute("data-testid", "tweet");
+
+  const displayName = document.createElement("span");
+  displayName.textContent = opts.displayName ?? "Alice Example";
+  article.append(displayName);
+
+  const link = document.createElement("a");
+  link.href = `https://x.com/${handle}/status/${statusId}`;
+  link.textContent = `@${handle}`;
+  article.append(link);
+
+  const targetText = document.createElement("div");
+  targetText.setAttribute("data-testid", "tweetText");
+  targetText.textContent =
+    opts.targetText ?? "The boring version is usually the one people can ship.";
+  article.append(targetText);
+
+  return article;
+}
+
+function insertXReplyComposer(
+  text = "",
+  replyTarget: ReplyTargetFixture = {},
+): XComposerHandle {
+  const handle = insertXComposer(text);
+  handle.dialog.insertBefore(buildReplyTargetArticle(replyTarget), handle.composer);
+  return handle;
 }
 
 function makeFeedbackRecordResponse(
@@ -343,6 +387,169 @@ describe("ComposeCockpit — static⟂judge channel captions", () => {
     const text = cockpitText();
     expect(text).toContain("◆ Static engine");
     expect(text).toContain("✦ AI judge");
+  });
+});
+
+// ===========================================================================
+// 6. Reply orchestration — split authored body, preserve structural prefix.
+// ===========================================================================
+
+describe("ComposeCockpit — reply-aware orchestration", () => {
+  it("sends authored reply body plus replyContext to static analyze and manual judge", async () => {
+    fixture = insertXReplyComposer("@alice good point", {
+      targetText: "The boring version is usually the one people can ship.",
+    });
+    const analyzeCalls: AnalyzePostsRequest[] = [];
+    const judgeCalls: JudgeDraftRequest[] = [];
+    const fake = new FakeEngineTransport({
+      getGenerateCategories: async () => makeGenerateCategories(),
+      getCaptureSummary: async () => makeCapture(),
+      getOverlayReadiness: async () => {
+        const { makeOverlayReadiness } = await import("../../testing/fixtures");
+        return makeOverlayReadiness();
+      },
+      analyzePosts: async (request) => {
+        analyzeCalls.push(request);
+        const { readyResult } = await import("../../testing/analyze-state");
+        return { items: [readyResult] };
+      },
+      judgeDraft: async (request) => {
+        judgeCalls.push(request);
+        return makeJudgeResponse(74);
+      },
+    });
+
+    mountCockpit(fake);
+    await settleUntil(() => analyzeCalls.length > 0, "reply analyze request");
+
+    expect(analyzeCalls[0]).toMatchObject({
+      items: [
+        {
+          text: "good point",
+          replyContext: {
+            targetAuthorHandle: "alice",
+            targetText: "The boring version is usually the one people can ship.",
+            leadingTargetHandle: { handle: "alice", state: "present" },
+          },
+        },
+      ],
+    });
+
+    await clickWhenPresent(/run judge/i);
+    await settleUntil(() => judgeCalls.length === 1, "reply judge request");
+
+    expect(judgeCalls[0]).toMatchObject({
+      text: "good point",
+      replyContext: {
+        targetAuthorHandle: "alice",
+        targetText: "The boring version is usually the one people can ship.",
+        leadingTargetHandle: { handle: "alice", state: "present" },
+      },
+    });
+  });
+
+  it("does not analyze or judge a prefix-only reply body", async () => {
+    fixture = insertXReplyComposer("@alice ");
+    const analyzeCalls: AnalyzePostsRequest[] = [];
+    const judgeCalls: JudgeDraftRequest[] = [];
+    const fake = new FakeEngineTransport({
+      getGenerateCategories: async () => makeGenerateCategories(),
+      getCaptureSummary: async () => makeCapture(),
+      getOverlayReadiness: async () => {
+        const { makeOverlayReadiness } = await import("../../testing/fixtures");
+        return makeOverlayReadiness();
+      },
+      analyzePosts: async (request) => {
+        analyzeCalls.push(request);
+        const { readyResult } = await import("../../testing/analyze-state");
+        return { items: [readyResult] };
+      },
+      judgeDraft: async (request) => {
+        judgeCalls.push(request);
+        return makeJudgeResponse(74);
+      },
+    });
+
+    mountCockpit(fake);
+    await settle();
+    await clickWhenPresent(/run judge/i);
+    await settle();
+
+    expect(analyzeCalls).toEqual([]);
+    expect(judgeCalls).toEqual([]);
+  });
+
+  it("generates with replyContext and writes generated body with the current structural prefix", async () => {
+    fixture = insertXReplyComposer("@alice ");
+    const generateCalls: GenerateIdeaRequest[] = [];
+    const response = makeGenerateResponse([
+      { text: "agree with this", overall: 88 },
+      { text: "lower option", overall: 72 },
+      { text: "weak option", overall: 40 },
+    ]);
+    const fake = new FakeEngineTransport({
+      getGenerateCategories: async () => makeGenerateCategories(),
+      getCaptureSummary: async () => makeCapture(),
+      getOverlayReadiness: async () => {
+        const { makeOverlayReadiness } = await import("../../testing/fixtures");
+        return makeOverlayReadiness();
+      },
+      generateIdeas: async (request) => {
+        generateCalls.push(request);
+        return response;
+      },
+      analyzePosts: async () => {
+        const { readyResult } = await import("../../testing/analyze-state");
+        return { items: [readyResult] };
+      },
+    });
+
+    mountCockpit(fake);
+    await settle();
+    await clickWhenPresent(/hot take/i);
+    await settle();
+
+    expect(generateCalls).toHaveLength(1);
+    expect(generateCalls[0]).toMatchObject({
+      format: "hot_take",
+      replyContext: { targetAuthorHandle: "alice" },
+    });
+    expect(composerText()).toBe("@alice agree with this");
+  });
+
+  it("applies suggestions to the authored body and writes the returned body with one prefix", async () => {
+    fixture = insertXReplyComposer("@alice original body");
+    const applyCalls: ApplyJudgeSuggestionsRequest[] = [];
+    const fake = new FakeEngineTransport({
+      getGenerateCategories: async () => makeGenerateCategories(),
+      getCaptureSummary: async () => makeCapture(),
+      getOverlayReadiness: async () => {
+        const { makeOverlayReadiness } = await import("../../testing/fixtures");
+        return makeOverlayReadiness();
+      },
+      analyzePosts: async () => {
+        const { readyResult } = await import("../../testing/analyze-state");
+        return { items: [readyResult] };
+      },
+      judgeDraft: async () => makeJudgeResponse(74),
+      applyJudgeSuggestions: async (request) => {
+        applyCalls.push(request);
+        return makeApplyResponse({ text: "improved body", improvedOverOriginal: true });
+      },
+    });
+
+    mountCockpit(fake);
+    await settle();
+    await clickWhenPresent(/run judge/i);
+    await clickWhenPresent(/apply all suggestions/i);
+    await settle();
+
+    expect(applyCalls).toHaveLength(1);
+    expect(applyCalls[0]).toMatchObject({
+      text: "original body",
+      replyContext: { targetAuthorHandle: "alice" },
+    });
+    expect(composerText()).toBe("@alice improved body");
   });
 });
 
