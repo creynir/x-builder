@@ -1,61 +1,54 @@
 ---
-status: in-progress
+status: done
 ---
 
 # External Feedback Loop
 
-Purpose: convert evidence-backed external performance patterns into writer constraints without importing another account into the user's own corpus, voice samples, feedback actuals, active context, or local post history.
+External Feedback Loop lets generation borrow abstract writing constraints from the delivered External X Signals ledger without importing another account into the user's own writing system.
 
-## Architecture Context
+It consumes persisted External X Signals pattern snapshots as sanitized generation guidance. Those patterns can shape a writer prompt as weak constraints, but they do not become the user's voice, history, feedback actuals, local post library, active context, scoring data, or remediation basis.
 
-External Feedback Loop is an engine-private generation guidance extension on top of the delivered External X Signals ledger. It consumes only persisted `ExternalXSignalPattern` snapshots, never raw `ExternalXSignalEvidence`, and renders a bounded external-constraints section inside the existing generation guidance path.
+## What It Consumes
 
-The hard consumer boundary is:
+External X Signals remains the producer, source-management, and ledger feature. It owns external sources, evidence capture, refresh runs, and locally persisted derived pattern snapshots.
 
-1. `ExternalXSignalsService` remains the only writer of persisted external patterns.
-2. `ExternalPatternSnapshotReader` is read-only and is constructed from the same `ExternalXSignalsRepository` instance used by `ExternalXSignalsService`.
-3. `ExternalPatternGuidanceProvider` sanitizes snapshots into generation-safe guidance items.
-4. `createGenerationGuidanceResolver` appends the rendered section to the existing playbook and own-voice guidance.
-5. `GenerateIdeasService` keeps its public request and response contract unchanged.
+External Feedback Loop is only the generation consumer boundary. It reads eligible persisted pattern snapshots and turns them into sanitized prompt guidance. It does not read or render raw evidence text, preview text, handles, platform post IDs, source IDs, evidence IDs, metrics, raw external post bodies, or patterns supported only by removed sources.
 
-No external pattern data may be written to `PostLibraryRepository`, `CanonicalOwnPost`, voice sample selection, feedback actuals, archive import, live capture, category ranking, cooldown, active scoring context, judge prompts, apply prompts, or local post history. External patterns are derived constraints, not the user's voice.
+EFL-005 fixed the removed-source case: generation-eligible patterns must have at least one active supporting source before they can be listed for guidance.
 
-V1 intentionally does not add a new public API route, `EngineTransport` method, overlay UI, or `generateIdeaRequestSchema` field. The existing Generate rail remains the user entry point. `JudgeDraftService` and `ApplyJudgeSuggestionsService` stay unchanged; they may evaluate text generated under external constraints, but they do not receive external pattern context directly.
+## Where It Appears
 
-## API Endpoints
+The user entry point is unchanged: the existing Generate rail calls `POST /ideas/generate`, which flows through `generateIdeas({ format })`.
 
-- `POST /ideas/generate` - unchanged. The request remains `generateIdeaRequestSchema`; the response remains `generateIdeaResponseSchema`.
+The public generate request and response schemas are unchanged. There is no new request field for external guidance, and unknown external guidance fields are stripped during request parsing. There is also no new `EngineTransport` method, overlay UI, External Feedback Loop endpoint, or separate generation API surface.
 
-There is no External Feedback Loop endpoint. `/external-x/signals/overview` remains a settings/read-only source-management surface and is not a generation consumer contract.
+External guidance is engine-private because external patterns are weak writing constraints. They are not user-authored voice samples, user history, or feedback outcomes, so exposing them as public generation inputs would make them look more authoritative than they are.
 
-## Component Breakdown
+## How Guidance Is Built
 
-- `ExternalPatternGuidanceItem` - engine-private sanitized pattern shape for generation prompts. It contains pattern metadata and statement only, not source ids, evidence ids, evidence previews, handles, platform post ids, metrics, or raw external text.
-- `renderExternalPatternGuidance` - deterministic bounded renderer for the external constraints section.
-- `ExternalPatternSnapshotReader` - read-only pattern snapshot boundary over persisted `ExternalXSignalPattern` rows.
-- `ExternalPatternGuidanceProvider` - converts pattern snapshots into sanitized guidance for generation.
-- `createGenerationGuidanceResolver` - existing guidance composition point; gains an optional external pattern provider.
-- `GenerateIdeasService` - existing writer entry point; public contract remains unchanged.
+The construction contract keeps the producer and consumer attached to the same local ledger. `ExternalXSignalsService` writes patterns to an `ExternalXSignalsRepository`. The default server and runner generation guidance provider/readers are constructed from that same repository source.
 
-## Dependencies
+If a host injects an external signals service without a paired reader/provider, generation keeps external guidance disabled instead of creating an unrelated reader. That prevents a split-brain setup where the service writes to one ledger while generation reads from another.
 
-- `external-x-import-signals` is complete. It provides the separate local external ledger, persisted pattern snapshots, observe-only runner ingestion, source-gated capture, and own-corpus isolation tests.
-- `generation-and-judge-surface` is implemented. It provides `GenerateIdeasService`, `createGenerationGuidanceResolver`, the Generate rail, and the existing judge/apply loop.
-- `my-feedback-loop` is complete and remains own-corpus-only; external patterns must not affect feedback actuals.
-- Local SQLite storage remains local-only under the existing engine storage root.
+At generation time, the flow is:
 
-## Sub-Tickets Overview
+1. `ExternalPatternSnapshotReader` reads eligible persisted pattern snapshots.
+2. `ExternalPatternGuidanceProvider` converts those snapshots into sanitized guidance items.
+3. Generation guidance composes the external section with the requested format playbook and the user's own voice samples.
+4. `GenerateIdeasService` appends the resulting guidance to the writer prompt.
 
-1. `EFL-001: [FND] Define external pattern guidance contracts and renderer`
-2. `EFL-002: [FND] Add pattern-only snapshot reader`
-3. `EFL-003: Wire external pattern guidance into generation`
-4. `EFL-004: Enforce no-contamination boundaries`
-5. `EFL-005: [INT] Cover external pattern generation integration`
-6. `EFL-006: [DOC] Document External Feedback Loop`
+The external section is bounded. Duplicate or high-volume patterns are capped, and provider or read failures do not fail generation. If external guidance cannot be read safely, generation continues without it.
 
-## Pipeline Log
+## Contamination Boundaries
 
-- 2026-06-29: Arch recon approved after validator-required construction contract fix: generation guidance must share the exact same `ExternalXSignalsRepository` instance as `ExternalXSignalsService`, or external guidance stays disabled for that host construction.
-- 2026-06-29: RGB ticket audit approved after correcting two Red-blocking details: `generateIdeaRequestSchema` strips unknown external fields rather than rejecting the whole payload, and malformed pattern payloads follow the repository's existing parse-and-throw validation behavior.
-- 2026-06-29: EFL-001 through EFL-004 completed. Generation guidance now consumes sanitized external pattern snapshots, and EFL-004 regression guards enforce the no-contamination boundary across own corpus, voice samples, feedback, category ranking, active context, archive/capture, judge/apply prompts, and public request schemas.
-- 2026-06-29: EFL-005 completed. The integration path proves persisted eligible external patterns reach generation guidance through existing server/runner generation paths, and removed-source-only patterns are filtered out before prompt rendering.
+External Feedback Loop is intentionally narrow. Tests enforce that external patterns do not write to `PostLibraryRepository`, own posts, or local post history. External data is not rendered as voice samples. It is not recorded as feedback actuals and does not contaminate active context, scoring, cooldown, category ranking, archive import, live capture, judge prompts, or apply prompts.
+
+Judge/apply in v1 may evaluate generated text after generation has used external constraints, but those services do not receive external pattern context directly. Passing external evidence into judge or apply would turn external observations into a scoring or remediation basis rather than keeping them as generation-only constraints.
+
+## How It Differs From Related Features
+
+My Feedback Loop learns from the user's own predictions and outcomes. It is grounded in the user's own posts, expectations, and actual performance. External Feedback Loop does not create user actuals and does not train on another account as if it were the user. It only borrows abstract pattern constraints from external accounts.
+
+External X Signals collects, stores, refreshes, and derives the external ledger. External Feedback Loop starts after that ledger work is done. Its job is to render only sanitized eligible patterns into generation guidance, while preserving the boundary between external observations and the user's own writing system.
+
+<!-- Tickets: EFL-001, EFL-002, EFL-003, EFL-004, EFL-005, EFL-006 — last verified against codebase 2026-06-29 -->
