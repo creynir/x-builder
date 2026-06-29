@@ -30,7 +30,7 @@ beforeEach(() => {
 });
 
 describe("XSelectors constant", () => {
-  it("exposes the five X target selector strings", () => {
+  it("exposes the centralized X target selector strings", () => {
     expect(XSelectors.COMPOSER_TEXTAREA).toBe(
       'div[data-testid="tweetTextarea_0"]',
     );
@@ -38,6 +38,7 @@ describe("XSelectors constant", () => {
     expect(XSelectors.COMPOSER_DIALOG).toBe('[role="dialog"]');
     expect(XSelectors.TWEET_ARTICLE).toBe('article[data-testid="tweet"]');
     expect(XSelectors.TWEET_TEXT).toBe('div[data-testid="tweetText"]');
+    expect(XSelectors.TWEET_STATUS_LINK).toBe('a[href*="/status/"]');
   });
 });
 
