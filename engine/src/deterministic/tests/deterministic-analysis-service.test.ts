@@ -223,6 +223,44 @@ describe("deterministic analysis service", () => {
     expect(item.prediction.escapeRange).toEqual({ low: 6000, high: 24000 });
   });
 
+  it("threads advanced context fields into the reach model", async () => {
+    const request = {
+      items: [
+        {
+          id: "candidate-1",
+          text: "hot take: specific launch proof beats generic positioning every week",
+        },
+      ],
+      scoringContext: {
+        followers: 5000,
+      },
+      presentation: {
+        postCoachMode: "preview",
+      },
+    } satisfies AnalyzePostsRequest;
+    const baseline = await analyzeOne(request);
+    const advanced = await analyzeOne({
+      ...request,
+      scoringContext: {
+        ...request.scoringContext,
+        plannedHourUtc: 14,
+        willAttachMedia: true,
+        accountAgeYears: 12,
+      },
+    });
+
+    if (baseline.prediction.status !== "available" || advanced.prediction.status !== "available") {
+      throw new Error("Expected available predictions for both baseline and advanced contexts.");
+    }
+
+    expect(advanced.prediction.predictedMidImpressions).toBeGreaterThan(
+      baseline.prediction.predictedMidImpressions,
+    );
+    expect(advanced.prediction.expectedReplies).toBeGreaterThan(
+      baseline.prediction.expectedReplies,
+    );
+  });
+
   it("does not expose the analyzer implicit follower fallback as a prediction", async () => {
     const item = await analyzeOne({
       items: [

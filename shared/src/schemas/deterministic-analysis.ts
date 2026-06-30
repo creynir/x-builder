@@ -137,9 +137,8 @@ export const judgeSignalsSchema = z.object({
   replies: z.number().int().min(0).max(100),
 });
 
-// Optional-until-producer: repeatHistory and willAttachMedia carry no schema
-// default. A {followers}-only context round-trips unchanged; consumers apply
-// use-time defaults (RMU-006).
+// No schema defaults: a {followers}-only context round-trips unchanged, and
+// consumers apply use-time defaults or neutral multipliers.
 export const scoringContextSchema = z.object({
   followers: z.number().int().positive().optional(),
   trailingMedianImpressions: z.number().int().min(0).optional(),

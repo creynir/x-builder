@@ -8,7 +8,11 @@ import {
   toJudgedQualityMultiplier,
 } from "../prediction-estimator";
 import {
+  accountAgeMultiplierFloor,
+  accountAgeMultiplierMax,
   formatReachTable,
+  mediaAttachmentMultiplier,
+  postingHourMultipliers,
   replyRateTable,
 } from "../const/reach-model-weights";
 import { buildReachInput } from "./test-helpers";
@@ -402,6 +406,98 @@ describe("computeRepeatMultiplier", () => {
     const input = buildReachInput({ format: "hot_take", repeatHistory: [] });
 
     expect(computeRepeatMultiplier(input.repeatHistory, input.format)).toBe(1);
+  });
+});
+
+describe("computeReachModel advanced-context multipliers", () => {
+  it("applies the planned posting-hour multiplier to the midpoint", () => {
+    const baseline = requirePrediction(
+      ctaFarmInput(NEUTRAL_DRAFT, {
+        plannedHourUtc: undefined,
+      }),
+    );
+    const planned = requirePrediction(
+      ctaFarmInput(NEUTRAL_DRAFT, {
+        plannedHourUtc: 14,
+      }),
+    );
+
+    expect(postingHourMultipliers[14]).not.toBe(1);
+    expect(planned.predictedMidImpressions).toBe(
+      Math.round(baseline.predictedMidImpressions * postingHourMultipliers[14]),
+    );
+    expect(planned.expectedReplies).toBeGreaterThan(baseline.expectedReplies);
+  });
+
+  it("applies the media attachment multiplier to the midpoint", () => {
+    const baseline = requirePrediction(
+      ctaFarmInput(NEUTRAL_DRAFT, {
+        willAttachMedia: false,
+      }),
+    );
+    const withMedia = requirePrediction(
+      ctaFarmInput(NEUTRAL_DRAFT, {
+        willAttachMedia: true,
+      }),
+    );
+
+    expect(mediaAttachmentMultiplier).toBeGreaterThan(1);
+    expect(withMedia.predictedMidImpressions).toBe(
+      Math.round(baseline.predictedMidImpressions * mediaAttachmentMultiplier),
+    );
+    expect(withMedia.expectedReplies).toBeGreaterThan(baseline.expectedReplies);
+  });
+
+  it("applies a bounded account-age maturity multiplier to the midpoint", () => {
+    const baseline = requirePrediction(
+      ctaFarmInput(NEUTRAL_DRAFT, {
+        accountAgeYears: undefined,
+      }),
+    );
+    const newAccount = requirePrediction(
+      ctaFarmInput(NEUTRAL_DRAFT, {
+        accountAgeYears: 0,
+      }),
+    );
+    const matureAccount = requirePrediction(
+      ctaFarmInput(NEUTRAL_DRAFT, {
+        accountAgeYears: 12,
+      }),
+    );
+
+    expect(newAccount.predictedMidImpressions).toBe(
+      Math.round(baseline.predictedMidImpressions * accountAgeMultiplierFloor),
+    );
+    expect(matureAccount.predictedMidImpressions).toBe(
+      Math.round(baseline.predictedMidImpressions * accountAgeMultiplierMax),
+    );
+    expect(newAccount.predictedMidImpressions).toBeLessThan(baseline.predictedMidImpressions);
+    expect(matureAccount.predictedMidImpressions).toBeGreaterThan(baseline.predictedMidImpressions);
+  });
+
+  it("keeps the composed placeholder multiplier inside a bounded band", () => {
+    const neutral = requirePrediction(ctaFarmInput(NEUTRAL_DRAFT));
+    const low = requirePrediction(
+      ctaFarmInput(NEUTRAL_DRAFT, {
+        plannedHourUtc: 3,
+        willAttachMedia: false,
+        accountAgeYears: 0,
+      }),
+    );
+    const high = requirePrediction(
+      ctaFarmInput(NEUTRAL_DRAFT, {
+        plannedHourUtc: 14,
+        willAttachMedia: true,
+        accountAgeYears: 20,
+      }),
+    );
+
+    expect(low.predictedMidImpressions).toBeGreaterThanOrEqual(
+      Math.round(neutral.predictedMidImpressions * 0.85),
+    );
+    expect(high.predictedMidImpressions).toBeLessThanOrEqual(
+      Math.round(neutral.predictedMidImpressions * 1.25),
+    );
   });
 });
 

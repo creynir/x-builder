@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # RMU-021: Compact candidate summary should use the chip, not the full ReachRegimeBlock
@@ -23,3 +23,7 @@ This is test-driven: RMU-011's writer-page assertions pin the spaced `"800 – 2
 - The compact candidate summary renders the `predictionSummary` chip (typical range + escape %), not the five-row `ReachRegimeBlock`.
 - The full `ReachRegimeBlock` still renders in the detail/evaluation call sites.
 - `pnpm --filter @x-builder/client test` + `typecheck` green.
+
+## Completion Notes
+
+- 2026-06-30 — Done in the current overlay surface. The removed `client/` tree's compact candidate summary maps to `overlay/src/compose/static-engine-column.tsx`; it now renders a single compact prediction badge (`typical · escape`) and no full stall/escape/probability row block. Pinned by `overlay/src/compose/__tests__/static-engine-column.test.tsx`.

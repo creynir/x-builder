@@ -83,6 +83,9 @@ export class DeterministicAnalysisService {
             parsedRequest.scoringContext.trailingMedianImpressions,
           repeatHistory: parsedRequest.scoringContext.repeatHistory ?? [],
           hasExternalLink: detectExternalLink(prepared.text),
+          plannedHourUtc: parsedRequest.scoringContext.plannedHourUtc,
+          willAttachMedia: parsedRequest.scoringContext.willAttachMedia,
+          accountAgeYears: parsedRequest.scoringContext.accountAgeYears,
           // Pass-2: a judged scoringContext threads judgeSignals into the reach
           // model's judged-quality branch. Absent (pass-1) -> static quality.
           ...(parsedRequest.scoringContext.judgeSignals !== undefined

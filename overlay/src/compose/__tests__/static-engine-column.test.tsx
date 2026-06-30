@@ -157,7 +157,7 @@ describe("StaticEngineColumn — ready", () => {
     expect(root.textContent).toContain(coach.passed[0]!.label);
   });
 
-  it("renders the reach prediction (stall range, escape range, escape probability)", () => {
+  it("renders the compact reach prediction chip without the full regime rows", () => {
     const root = mount(
       <StaticEngineColumn
         analyzeState={readyState}
@@ -172,12 +172,15 @@ describe("StaticEngineColumn — ready", () => {
     }
     const prediction = readyResult.prediction;
     const text = root.textContent ?? "";
-    // Reach range bounds appear.
-    expect(text).toContain(String(prediction.stallRange.low));
-    expect(text).toContain(String(prediction.escapeRange.high));
-    // Escape probability (0.1 → "10%") is surfaced; assert on the raw number
-    // form OR a percentage, whichever the impl chooses, via the digit "10".
-    expect(/10\s*%|0\.1/.test(text)).toBe(true);
+    const summary = `${prediction.stallRange.low}–${prediction.stallRange.high} typical · ${Math.round(
+      prediction.escapeProbability * 100,
+    )}% escape`;
+
+    expect(text).toContain(summary);
+    expect(text).not.toContain("Stall range");
+    expect(text).not.toContain("Escape range");
+    expect(text).not.toContain("Escape probability");
+    expect(text).not.toContain(String(prediction.escapeRange.high));
   });
 });
 

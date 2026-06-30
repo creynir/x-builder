@@ -115,6 +115,9 @@ export type AnalyzeOptions = {
   trailingMedianImpressions?: number;
   hasExternalLink?: boolean;
   repeatHistory?: RepeatHistoryEntry[];
+  plannedHourUtc?: number;
+  willAttachMedia?: boolean;
+  accountAgeYears?: number;
   // Pass-2 judge signals (judged impressions/replies). When present they drive
   // the judged-quality reach branch instead of the static-quality path.
   judgeSignals?: { impressions: number; replies: number };

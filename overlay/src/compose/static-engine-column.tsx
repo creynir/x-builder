@@ -191,10 +191,8 @@ function PostCoachStrip({
 /** Reach range + escape probability, or the disabled "no follower data" state. */
 function ReachPredictionBlock({
   result,
-  source,
 }: {
   result: ScoredPostItem;
-  source: ExplainerSource;
 }): ReactElement {
   const { prediction } = result;
 
@@ -210,40 +208,13 @@ function ReachPredictionBlock({
   }
 
   const escapePercent = Math.round(prediction.escapeProbability * 100);
+  const predictionSummary = `${prediction.stallRange.low}–${prediction.stallRange.high} typical · ${escapePercent}% escape`;
 
   return (
     <section style={{ display: "grid", gap: "var(--space-1)" }}>
       <p style={SECTION_TITLE_STYLE}>Reach prediction</p>
       <div style={LABEL_ROW_STYLE}>
-        <MetricLabel
-          text="Stall range"
-          metricKey="stallRange"
-          source={source}
-          value={prediction.stallRange.low}
-        />
-        <span style={{ font: "var(--type-data)", color: "var(--xb-text)" }}>
-          {prediction.stallRange.low}–{prediction.stallRange.high}
-        </span>
-      </div>
-      <div style={LABEL_ROW_STYLE}>
-        <MetricLabel
-          text="Escape range"
-          metricKey="escapeRange"
-          source={source}
-          value={prediction.escapeRange.high}
-        />
-        <span style={{ font: "var(--type-data)", color: "var(--xb-text)" }}>
-          {prediction.escapeRange.low}–{prediction.escapeRange.high}
-        </span>
-      </div>
-      <div style={LABEL_ROW_STYLE}>
-        <MetricLabel
-          text="Escape probability"
-          metricKey="escapeProbability"
-          source={source}
-          value={prediction.escapeProbability}
-        />
-        <span style={{ font: "var(--type-data)", color: "var(--xb-text)" }}>{escapePercent}%</span>
+        <Badge variant="neutral">{predictionSummary}</Badge>
       </div>
     </section>
   );
@@ -292,7 +263,7 @@ function ReadyBody({
           <Badge variant="warning">{cooldown.message}</Badge>
         </div>
       ) : null}
-      <ReachPredictionBlock result={result} source={source} />
+      <ReachPredictionBlock result={result} />
       <PostCoachStrip result={result} source={source} />
       <RecommendationsList result={result} />
     </div>

@@ -37,16 +37,15 @@ A high score does **not** mean high reach. Reach is driven mainly by the post's 
 
 In the Studio, open the **Advanced context (optional)** section — it is collapsed by default, below the main scoring controls. Every field here is optional; the prediction works without any of them.
 
-Two of these inputs change the reach estimate today:
+All five inputs change the reach estimate today:
 
 1. **Typical impressions** — the median views of your last ~20 original posts. Exclude pinned posts and reposts; you can find this in X Analytics. When you set this, it **replaces** the rough follower-based estimate with your real baseline, so it is the single most useful field to fill in. Changing it re-scores the draft.
 2. **Posted something similar in the last 7 days?** — a checkbox. Tick it if you have recently posted a similar take; an optional date field appears so you can say when. Reusing a format or angle too soon dampens the estimate. Changing it re-scores the draft.
+3. **Planned posting hour** — the hour you plan to post, 0–23 in **UTC** (out-of-range values are rejected inline). Until there is enough calibration data, this uses a narrow placeholder time-of-day curve.
+4. **Whether you'll attach media** — toggle on if the post will include an image or video. Until calibration data is available, this applies a small bounded placeholder lift.
+5. **Account age** — how many years old your account is. Until calibration data is available, this applies a small bounded account-maturity adjustment.
 
-The remaining inputs are **recorded but do not change today's estimate** — they are captured for upcoming calibration of the model, so set them if you like, but the reach numbers won't move based on them yet:
-
-3. **Planned posting hour** — the hour you plan to post, 0–23 in **UTC** (out-of-range values are rejected inline).
-4. **Whether you'll attach media** — toggle on if the post will include an image or video.
-5. **Account age** — how many years old your account is.
+The posting-hour, media, and account-age effects are intentionally modest for now. They make the estimate respond to the fields you set, but they are still calibration placeholders and should be refit once there is a labeled outcome corpus.
 
 For the audience-match angle of the estimate, see [Set your account profile](set-account-profile.md).
 
@@ -63,4 +62,4 @@ The pre-judge and post-judge reach numbers are on **different scales** and are *
 
 If you edit the draft while a refine is in flight, the stale result is discarded so a changed draft never shows reach from the old text. If judging fails, the earlier estimate stays in place and the judge error is shown.
 
-<!-- Tickets: RMU-005..013, RMU-019 — last verified against codebase 2026-06-14 -->
+<!-- Tickets: RMU-005..013, RMU-019, RMU-022 — last verified against codebase 2026-06-30 -->

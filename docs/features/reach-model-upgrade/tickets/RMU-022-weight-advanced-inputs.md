@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 
 # RMU-022: Weight the advanced-context inputs (plannedHourUtc, willAttachMedia, accountAgeYears) in the reach model
@@ -29,3 +29,7 @@ Three advanced-context inputs are collected by `AdvancedContextPanel`, validated
 - `computeReachModel` reads `plannedHourUtc`/`willAttachMedia`/`accountAgeYears` from `scoringContext` and applies bounded multipliers; setting them shifts the prediction.
 - `estimate-post-reach.md` updated to reflect that all five advanced inputs affect the estimate.
 - `pnpm test` + `pnpm typecheck` green.
+
+## Completion Notes
+
+- 2026-06-30 — Done. `computeReachModel` now composes bounded `// CALIBRATE` placeholder multipliers for planned hour, media attachment, and account age into the midpoint/reply path; `DeterministicAnalysisService` and `analyzeDraftText` thread the existing `scoringContext` fields through. Bounds are intentionally narrow until RMU-016 calibration has a labeled corpus.

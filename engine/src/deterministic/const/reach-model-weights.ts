@@ -63,3 +63,19 @@ export const repeatDecayFloor = 0.2; // CALIBRATE
 export const wisdomStatusDivisor = 20000; // CALIBRATE
 export const wisdomStatusMin = 0.3; // CALIBRATE
 export const wisdomStatusMax = 1.5; // CALIBRATE
+
+/**
+ * Placeholder advanced-context multipliers. These are intentionally narrow until
+ * the calibration workspace has a labeled corpus for time-of-day, media, and
+ * account-maturity effects.
+ */
+export const postingHourMultipliers = [
+  0.95, 0.94, 0.93, 0.92, 0.93, 0.95, 0.98, 1.0,
+  1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.07,
+  1.05, 1.03, 1.02, 1.01, 1.0, 0.98, 0.97, 0.96,
+] as const; // CALIBRATE
+
+export const mediaAttachmentMultiplier = 1.06; // CALIBRATE
+export const accountAgeMultiplierFloor = 0.95; // CALIBRATE
+export const accountAgeMultiplierMax = 1.08; // CALIBRATE
+export const accountAgeMaturityYears = 10; // CALIBRATE

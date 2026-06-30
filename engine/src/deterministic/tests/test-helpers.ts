@@ -20,6 +20,9 @@ export type ReachInput = {
   trailingMedianImpressions: number | undefined;
   hasExternalLink: boolean;
   repeatHistory: RepeatHistoryEntry[];
+  plannedHourUtc?: number;
+  willAttachMedia?: boolean;
+  accountAgeYears?: number;
   judgeSignals?: JudgeSignals;
 };
 

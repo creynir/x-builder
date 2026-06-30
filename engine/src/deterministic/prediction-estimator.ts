@@ -1,10 +1,15 @@
 import { engagementPredictionWeights } from "./const/scoring-weights.js";
 import {
+  accountAgeMaturityYears,
+  accountAgeMultiplierFloor,
+  accountAgeMultiplierMax,
   escapeRangeHighCoeff,
   escapeRangeLowCoeff,
   externalLinkEscapeCap,
   externalLinkMidpointMultiplier,
   formatReachTable,
+  mediaAttachmentMultiplier,
+  postingHourMultipliers,
   repeatDecayBase,
   repeatDecayFloor,
   replyRateTable,
@@ -36,6 +41,9 @@ export type ReachModelInput = {
   trailingMedianImpressions: number | undefined;
   hasExternalLink: boolean;
   repeatHistory: RepeatHistoryEntry[];
+  plannedHourUtc?: number;
+  willAttachMedia?: boolean;
+  accountAgeYears?: number;
   // Pass-2 of the two-pass contract. When present, the judged 0..100 impressions
   // score drives the quality slot and the judged replies score drives the reply
   // rate, replacing the static-quality and format-reply-rate paths respectively.
@@ -143,6 +151,7 @@ export function computeReachModel(
   const linkMultiplier = input.hasExternalLink ? externalLinkMidpointMultiplier : 1;
   const repeatMultiplier = computeRepeatMultiplier(input.repeatHistory, input.format);
   const statusMultiplier = computeStatusMultiplier(input.format, input.followers);
+  const advancedContextMultiplier = computeAdvancedContextMultiplier(input);
 
   const mid = Math.max(
     1,
@@ -151,7 +160,8 @@ export function computeReachModel(
       qualityMultiplier *
       linkMultiplier *
       repeatMultiplier *
-      statusMultiplier,
+      statusMultiplier *
+      advancedContextMultiplier,
   );
   const predictedMidImpressions = Math.round(mid);
 
@@ -353,5 +363,43 @@ export function computeStatusMultiplier(
   return Math.min(
     wisdomStatusMax,
     Math.max(wisdomStatusMin, followers / wisdomStatusDivisor),
+  );
+}
+
+/**
+ * Composes the Phase-0 advanced-context inputs into a narrow midpoint multiplier.
+ * The fields are real producers now, but the constants are placeholders until a
+ * calibration export can refit them from labeled post outcomes.
+ */
+export function computeAdvancedContextMultiplier({
+  plannedHourUtc,
+  willAttachMedia,
+  accountAgeYears,
+}: Pick<
+  ReachModelInput,
+  "plannedHourUtc" | "willAttachMedia" | "accountAgeYears"
+>): number {
+  const hourMultiplier =
+    plannedHourUtc === undefined ? 1 : postingHourMultipliers[plannedHourUtc] ?? 1;
+  const mediaMultiplier = willAttachMedia === true ? mediaAttachmentMultiplier : 1;
+  const accountMultiplier =
+    accountAgeYears === undefined ? 1 : computeAccountAgeMultiplier(accountAgeYears);
+
+  return hourMultiplier * mediaMultiplier * accountMultiplier;
+}
+
+function computeAccountAgeMultiplier(accountAgeYears: number): number {
+  if (accountAgeYears <= 0) {
+    return accountAgeMultiplierFloor;
+  }
+
+  if (accountAgeYears >= accountAgeMaturityYears) {
+    return accountAgeMultiplierMax;
+  }
+
+  const progress = accountAgeYears / accountAgeMaturityYears;
+  return (
+    accountAgeMultiplierFloor +
+    (accountAgeMultiplierMax - accountAgeMultiplierFloor) * progress
   );
 }

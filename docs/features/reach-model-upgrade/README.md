@@ -96,13 +96,13 @@ already present, but it must not ask users to add emotional content for reach.
 
 - `classifyPostFormat` — rebuilt cascade + new `PostFormat` members. Consumed by `analyzeDraftText`, `formatReachTable`, `replyRateTable`, label maps (all `Record<PostFormat, …>`, compile-exhaustive).
 - `computeReachModel` (in `prediction-estimator`) — the two-regime engine; replaces the body of `estimateEngagementRange`.
-- `reach-model-weights` — new const module (`formatReachTable`, `replyRateTable`, status/link/repeat/range coefficients), all `// CALIBRATE`.
+- `reach-model-weights` — new const module (`formatReachTable`, `replyRateTable`, status/link/repeat/range coefficients, and bounded placeholder advanced-context multipliers), all `// CALIBRATE`.
 - `detectExternalLink` (in `quality-signal-checks`) — server-side URL-vs-media detection. `evaluateLinkDensity` (the `link_density` quality check) is kept unchanged.
 - `trending-topic-lexicon` (dated) + `tribeVocativeTerms` — split out of `timelyTopicTerms`.
 - `JudgeDraftService.judge` — +5 dims, `accountProfile` prompt input.
 - `toJudgedQualityMultiplier` / reply-rate override — the greenfield bridge.
 - `@x-builder/calibration` (`tools/calibration`) — normalizer, predictor-runner, per-format fit, leave-one-account-out validator.
-- Client: `AdvancedContextPanel`, `RepeatHistoryControl`, `ReachRegimeBlock`, extended `EngagementPredictionCard`/`JudgePanel`, `AccountProfileField`, `Switch`, and the `WriterPageModel.refinement` two-pass orchestration.
+- Client: `AdvancedContextPanel`, `RepeatHistoryControl`, compact prediction chip, extended `EngagementPredictionCard`/`JudgePanel`, `AccountProfileField`, `Switch`, and the `WriterPageModel.refinement` two-pass orchestration.
 
 ## Dependencies
 
@@ -112,5 +112,5 @@ already present, but it must not ask users to add emotional content for reach.
 
 ## Sub-Tickets Overview
 
-See `tickets/README.md` for the build-order index. 20 tickets: 1 `[FND]`, 2 `[RFR]`,
-1 `[CHORE]`, 10 implementation, 2 `[INT]`, 1 `[E2E]`, 1 `[DOC]`.
+See `tickets/README.md` for the build-order index. 22 tickets: 1 `[FND]`, 2 `[RFR]`,
+1 `[CHORE]`, 12 implementation, 2 `[INT]`, 1 `[E2E]`, 1 `[DOC]`.

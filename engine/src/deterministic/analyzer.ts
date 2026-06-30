@@ -20,6 +20,9 @@ export function analyzeDraftText(
     trailingMedianImpressions: options.trailingMedianImpressions,
     hasExternalLink: options.hasExternalLink ?? false,
     repeatHistory: options.repeatHistory ?? [],
+    plannedHourUtc: options.plannedHourUtc,
+    willAttachMedia: options.willAttachMedia,
+    accountAgeYears: options.accountAgeYears,
     ...(options.judgeSignals !== undefined ? { judgeSignals: options.judgeSignals } : {}),
   });
 
