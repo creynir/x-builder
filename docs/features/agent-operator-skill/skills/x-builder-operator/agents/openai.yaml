@@ -1,0 +1,4 @@
+interface:
+  display_name: "X Builder Operator"
+  short_description: "Run and explain local x-builder"
+  default_prompt: "Use $x-builder-operator to run, inspect, or explain the local x-builder system."

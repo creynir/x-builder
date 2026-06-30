@@ -1,0 +1,4 @@
+interface:
+  display_name: "X Builder Doctor"
+  short_description: "Diagnose local x-builder setup"
+  default_prompt: "Use $x-builder-doctor to diagnose why local x-builder is not running correctly."

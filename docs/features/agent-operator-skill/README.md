@@ -1,5 +1,5 @@
 ---
-status: planned
+status: implemented
 ---
 
 # Agent Operator Skill
@@ -8,9 +8,7 @@ Roadmap note: package x-builder setup and daily operation into an agent skill so
 
 ## Goal
 
-Create an `x-builder-operator` skill that helps agents operate the local system correctly before routing feature work to implementation agents.
-
-This is a bookkeeping item, not an implementation plan. Dedicated tickets are intentionally not created yet.
+Create an `x-builder-operator` skill that helps agents operate the local system correctly before routing feature work to implementation agents, plus an `x-builder-doctor` skill for repeatable setup/runtime diagnosis.
 
 ## Why It Matters
 
@@ -43,12 +41,22 @@ The skill should keep those distinctions clear for future agents and users.
 - `runner/package.json` - runner package scripts and `x-builder` bin.
 - `package.json` - workspace build/test/typecheck/lint scripts.
 
-## Bookkeeping Notes
+## Artifacts
 
-Likely artifact name: `x-builder-operator`.
-
-Likely repo source, if versioned here later:
+Versioned skill sources live here:
 
 ```txt
-docs/features/agent-operator-skill/skill/SKILL.md
+docs/features/agent-operator-skill/skills/x-builder-operator/SKILL.md
+docs/features/agent-operator-skill/skills/x-builder-doctor/SKILL.md
+docs/features/agent-operator-skill/skills/x-builder-doctor/scripts/doctor.mjs
 ```
+
+The operator skill covers launch commands, CDP/session expectations, local SQLite boundaries, archive/active-context behavior, feedback-loop linking, live-capture safety, and explanation anchors.
+
+The doctor skill covers read-only health checks for repo prerequisites, build artifacts, local storage, SQLite migration version, and Chrome CDP availability.
+
+## Verification
+
+- `node --check docs/features/agent-operator-skill/skills/x-builder-doctor/scripts/doctor.mjs`
+- skill-creator `quick_validate.py` for both skill folders
+- `node docs/features/agent-operator-skill/skills/x-builder-doctor/scripts/doctor.mjs`
