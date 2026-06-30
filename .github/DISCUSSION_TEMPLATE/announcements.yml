@@ -1,0 +1,34 @@
+title: "[Announcement] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use Announcements for maintainer updates that affect users or contributors.
+        Link the related issue, PR, release, or documentation page.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What changed?
+      placeholder: Short maintainer update.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Who should care and what should they do?
+      placeholder: Users running the overlay should...
+    validations:
+      required: true
+  - type: textarea
+    id: links
+    attributes:
+      label: Links
+      description: Link issues, PRs, docs, releases, or follow-up discussions.
+      placeholder: |
+        - PR:
+        - Issue:
+        - Docs:
+    validations:
+      required: false

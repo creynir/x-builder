@@ -1,0 +1,31 @@
+title: "[Feedback] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use General for broad feedback or community/process topics that are not
+        ready to become a scoped issue.
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What triggered this discussion?
+      placeholder: I was using x-builder to...
+    validations:
+      required: true
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Feedback or question
+      description: What should maintainers understand or decide?
+      placeholder: The confusing part is...
+    validations:
+      required: true
+  - type: textarea
+    id: next-step
+    attributes:
+      label: Possible next step
+      description: If this becomes implementation work, what issue should exist?
+      placeholder: This may need an issue for...
+    validations:
+      required: false
