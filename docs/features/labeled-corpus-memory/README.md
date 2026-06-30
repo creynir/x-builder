@@ -4,7 +4,7 @@ status: planned
 
 # Labeled Corpus Memory
 
-Purpose: turn the local corpus into a labeled memory layer for both posts and replies, including reply parent context, generated-content exclusions, and cheap LLM labels for retrieval.
+Purpose: turn the local corpus into a labeled memory layer for both posts and replies, including reply parent context, generated-content exclusions, cheap LLM labels, and grounded fact/belief projections for retrieval.
 
 ## What Exists Today
 
@@ -13,12 +13,15 @@ Purpose: turn the local corpus into a labeled memory layer for both posts and re
 - Reply context exists only as live same-dialog context for compose calls.
 - Feedback predictions are stored separately from canonical posts.
 - There is no generated replies ledger and no advanced LLM label projection in x-builder.
+- Reply examples are not split into separate "what can I claim" and "how do I sound in this situation" retrieval contracts.
 
 ## Target Shape
 
 Create a derived labeled memory layer over the canonical corpus. It should support retrieval over real user-authored originals and replies, while excluding generated content that the system created and later sees again.
 
 Reply examples should preserve parent/root/thread context when available. The label projection should integrate current deterministic labels where possible and add cheap LLM labels for retrieval and generation control.
+
+The memory layer should also derive a compact fact/belief projection from real authored examples. This projection is not a style example list. It records what the user has directly claimed, preferred, disliked, rejected, or admitted uncertainty about, with support and confidence. Reply generation can then retrieve grounded statements separately from similar-situation voice examples.
 
 Suggested first label set, borrowed from `../XActions` Reply RAG:
 
@@ -29,6 +32,15 @@ Suggested first label set, borrowed from `../XActions` Reply RAG:
 - `contextDependency`: `none`, `parent_helpful`, `parent_required`, `root_required`, or `full_chain_required`.
 - `voiceUsefulness`, `qualityTier`, `semanticTags`, `confidence`, and `reason`.
 
+Suggested fact/belief projection fields, borrowed from `../XActions` Reply Drafter Dual RAG:
+
+- `entity`: tool, company, person, product, pattern, or topic the claim is about.
+- `claimType`: `first_person_experience`, `preference`, `dislike`, `negative_claim`, `uncertainty`, `repeated_position`, or `comparison`.
+- `claim`: compact statement the user is grounded to make.
+- `polarity`: `positive`, `negative`, `mixed`, `neutral`, or `uncertain`.
+- `supportingExampleIds`: authored post/reply ids that support the claim.
+- `supportCount`, `confidence`, `reason`, and `lastSeenAt`.
+
 ## Boundaries
 
 - The canonical corpus remains source of truth; labels and embeddings are rebuildable projections.
@@ -36,6 +48,8 @@ Suggested first label set, borrowed from `../XActions` Reply RAG:
 - Do not make labels required for normal generation; missing labels fail open.
 - Do not merge external X signals into the user's own corpus or voice.
 - Parent/root text is context for retrieval and generation, not factual truth to invent from.
+- Fact/belief projections must not promote topic mentions into personal claims without explicit support.
+- Similar-situation examples remain voice/context evidence, not factual truth by default.
 
 ## Existing References
 
@@ -46,12 +60,13 @@ Suggested first label set, borrowed from `../XActions` Reply RAG:
 - `engine/src/server/post-library-repository.ts`
 - Reference repo labels: `../XActions/src/agents/replyRagLlmLabeler.js`
 - Reference repo store: `../XActions/data/reply-rag.sqlite`
+- Reference repo dual-RAG plan: `../XActions/docs/features/reply-drafter-dual-rag/README.md`
 
 ## Bookkeeper Prompt
 
 ```txt
 Goal:
-Add a labeled corpus memory layer for x-builder posts and replies, with parent/root context for replies, generated-content exclusion, and cheap LLM labels for retrieval.
+Add a labeled corpus memory layer for x-builder posts and replies, with parent/root context for replies, generated-content exclusion, cheap LLM labels, and a compact fact/belief projection for retrieval.
 
 Existing files:
 - docs/features/labeled-corpus-memory/README.md
@@ -62,13 +77,14 @@ Existing files:
 - engine/src/server/post-library-repository.ts
 - ../XActions/src/agents/replyRagLlmLabeler.js
 - ../XActions/data/reply-rag.sqlite
+- ../XActions/docs/features/reply-drafter-dual-rag/README.md
 
 Intent:
-Keep canonical posts/replies unchanged, then add rebuildable label and retrieval projections. Integrate existing deterministic format/kind labels, add LLM labels for intent/situation/tone/context dependency, and exclude generated replies/posts from RAG if they later appear in capture/import.
+Keep canonical posts/replies unchanged, then add rebuildable label and retrieval projections. Integrate existing deterministic format/kind labels, add LLM labels for intent/situation/tone/context dependency, and exclude generated replies/posts from RAG if they later appear in capture/import. Add a separate fact/belief projection that records supported first-person claims, preferences, dislikes, negative claims, uncertainty, repeated positions, and entity comparisons with confidence and evidence ids.
 
 Boundaries:
-No external-account contamination. No generated output as voice evidence. Labels must be optional and fail open. Do not block existing post generation when labels are missing.
+No external-account contamination. No generated output as voice evidence. Labels must be optional and fail open. Do not block existing post generation when labels are missing. Do not treat topic mentions in similar examples as grounded personal claims.
 
 Workflow:
-Run arch-recon first, then tickets, then RGB/TDD. Start with schema/projection contracts and label taxonomy tests before wiring retrieval or generation.
+Run arch-recon first, then tickets, then RGB/TDD. Start with schema/projection contracts, label taxonomy tests, and fact/belief extraction fixtures before wiring retrieval or generation.
 ```

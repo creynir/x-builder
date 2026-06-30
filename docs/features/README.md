@@ -54,10 +54,10 @@ arch-recon
 
 **Next build queue:**
 
-1. [`labeled-corpus-memory`](./labeled-corpus-memory/) — add post/reply labels, parent context, and generated-content exclusion to local RAG memory.
+1. [`labeled-corpus-memory`](./labeled-corpus-memory/) — add post/reply labels, parent context, generated-content exclusion, and grounded fact/belief projections to local RAG memory.
 2. [`reply-thread-context`](./reply-thread-context/) — capture the available root/parent/ancestor reply graph for parent-aware replies.
-3. [`reply-variant-assistant`](./reply-variant-assistant/) — replace post-like reply generation with 3-4 parent-aware reply variants and a generated-reply ledger.
-4. [`unified-generation-context`](./unified-generation-context/) — make posts and replies consume the shared voice skill and labeled memory with task-specific context policies.
+3. [`reply-variant-assistant`](./reply-variant-assistant/) — replace post-like reply generation with 3-4 parent-aware variants drafted from a grounded reply plan and a generated-reply ledger.
+4. [`unified-generation-context`](./unified-generation-context/) — make posts and replies consume the shared voice skill and labeled memory with task-specific context policies, including dual retrieval for reply grounding vs voice.
 
 **Planned feature areas:**
 
