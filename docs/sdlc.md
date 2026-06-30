@@ -28,6 +28,7 @@ The required CI workflow runs on pull requests to `main` and pushes to `main`:
 
 ```txt
 pnpm install --frozen-lockfile
+pnpm exec turbo build --filter=@x-builder/engine --filter=@x-builder/overlay --filter=@x-builder/runner --filter=@x-builder/shared
 pnpm --filter @x-builder/runner exec playwright install --with-deps chromium
 pnpm exec turbo lint --filter=@x-builder/engine --filter=@x-builder/overlay --filter=@x-builder/runner --filter=@x-builder/shared
 pnpm exec turbo typecheck --filter=@x-builder/engine --filter=@x-builder/overlay --filter=@x-builder/runner --filter=@x-builder/shared
