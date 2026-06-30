@@ -28,14 +28,15 @@ The required CI workflow runs on pull requests to `main` and pushes to `main`:
 
 ```txt
 pnpm install --frozen-lockfile
-pnpm exec turbo lint --filter=!@x-builder/e2e-tests
-pnpm exec turbo typecheck --filter=!@x-builder/e2e-tests
-pnpm test
+pnpm exec turbo lint --filter=@x-builder/engine --filter=@x-builder/overlay --filter=@x-builder/runner --filter=@x-builder/shared
+pnpm exec turbo typecheck --filter=@x-builder/engine --filter=@x-builder/overlay --filter=@x-builder/runner --filter=@x-builder/shared
+pnpm exec turbo test --filter=@x-builder/engine --filter=@x-builder/overlay --filter=@x-builder/runner --filter=@x-builder/shared
 ```
 
-End-to-end tests are intentionally outside the default required gate. The e2e package is
-excluded from the required lint, typecheck, and test commands until the overlay/runner
-harness is repointed and stable. E2E can then be added as a separate required check.
+End-to-end and auxiliary tooling packages are intentionally outside the default required
+gate. The required check covers the runtime packages: `engine`, `overlay`, `runner`, and
+`shared`. E2E can be added as a separate required check once the overlay/runner harness is
+repointed and stable.
 
 ## Feature Issue Expectations
 

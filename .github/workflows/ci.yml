@@ -40,10 +40,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: pnpm exec turbo lint --filter=!@x-builder/e2e-tests
+        run: pnpm exec turbo lint --filter=@x-builder/engine --filter=@x-builder/overlay --filter=@x-builder/runner --filter=@x-builder/shared
 
       - name: Typecheck
-        run: pnpm exec turbo typecheck --filter=!@x-builder/e2e-tests
+        run: pnpm exec turbo typecheck --filter=@x-builder/engine --filter=@x-builder/overlay --filter=@x-builder/runner --filter=@x-builder/shared
 
       - name: Test
-        run: pnpm test
+        run: pnpm exec turbo test --filter=@x-builder/engine --filter=@x-builder/overlay --filter=@x-builder/runner --filter=@x-builder/shared

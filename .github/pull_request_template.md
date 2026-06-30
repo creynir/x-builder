@@ -8,9 +8,9 @@ Closes #
 
 ## Validation
 
-- [ ] `pnpm exec turbo lint --filter=!@x-builder/e2e-tests`
-- [ ] `pnpm exec turbo typecheck --filter=!@x-builder/e2e-tests`
-- [ ] `pnpm test`
+- [ ] `pnpm exec turbo lint --filter=@x-builder/engine --filter=@x-builder/overlay --filter=@x-builder/runner --filter=@x-builder/shared`
+- [ ] `pnpm exec turbo typecheck --filter=@x-builder/engine --filter=@x-builder/overlay --filter=@x-builder/runner --filter=@x-builder/shared`
+- [ ] `pnpm exec turbo test --filter=@x-builder/engine --filter=@x-builder/overlay --filter=@x-builder/runner --filter=@x-builder/shared`
 
 ## Review Checklist
 
