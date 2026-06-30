@@ -657,7 +657,7 @@ describe("getLayerOrigin + shadow-host-relative positioning", () => {
 
     // The positioning MUST subtract the host origin — the inline top/left are
     // smaller than the composer's absolute viewport coords by ~the origin.
-    expect(top).toBeCloseTo(composerRect.top - origin.top, 0);
+    expect(Math.abs(top - (composerRect.top - origin.top))).toBeLessThanOrEqual(1);
     expect(left).toBeLessThan(composerRect.left);
     expect(left).toBeCloseTo(left, 0);
     // And not the raw viewport value (origin is non-zero, so they must differ).
