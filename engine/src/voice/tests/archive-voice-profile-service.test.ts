@@ -43,10 +43,12 @@ const profileOutput = {
 };
 
 const createLlm = (output: unknown = profileOutput) => {
-  const calls: Array<{ purpose: string; content: string }> = [];
+  const calls: Array<{ purpose: string; provider: string; model?: string; content: string }> = [];
   const generateStructured = vi.fn(async (request: any) => {
     calls.push({
       purpose: request.purpose,
+      provider: request.provider,
+      model: request.options?.model,
       content: request.turns.find((turn: any) => turn.role === "user")?.content ?? "",
     });
 
@@ -182,6 +184,33 @@ describe("ArchiveVoiceProfileService", () => {
 
     expect(profile?.evidence.map((item) => item.postId)).toEqual(["post-sent"]);
     expect(profile?.evidence.every((item) => item.postId !== "post-unsent")).toBe(true);
+    expect(profile?.evidencePostIds).toEqual([]);
+  });
+
+  it("passes the selected provider into model resolution", async () => {
+    const db = makeTempEngineDb();
+    await seedPosts(db, [canonicalPost({ id: "post-original" })]);
+    const { llm, calls } = createLlm();
+    const resolveProvider = vi.fn(async () => "claude-cli");
+    const resolveModel = vi.fn(async (provider: string) =>
+      provider === "claude-cli" ? "claude-sonnet-profile" : "wrong-model",
+    );
+    const service = new ArchiveVoiceProfileService({
+      db,
+      llm: llm as never,
+      resolveProvider,
+      resolveModel,
+      now: () => ISO,
+    });
+
+    await service.getCurrentProfile();
+
+    expect(resolveProvider).toHaveBeenCalledTimes(1);
+    expect(resolveModel).toHaveBeenCalledWith("claude-cli");
+    expect(calls[0]).toMatchObject({
+      provider: "claude-cli",
+      model: "claude-sonnet-profile",
+    });
   });
 
   it("reuses the current profile when the corpus hash has not changed", async () => {
@@ -247,5 +276,21 @@ describe("ArchiveVoiceProfileService", () => {
 
     await expect(provider({ surface: "post" })).resolves.toBeUndefined();
     expect(llm.generateStructured).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the provider wait timer after a fast profile read", async () => {
+    vi.useFakeTimers();
+    try {
+      const service = {
+        getCurrentProfile: vi.fn(async () => undefined),
+      } as unknown as ArchiveVoiceProfileService;
+      const provider = createArchiveVoiceProfileProvider(service, { maxWaitMs: 1_500 });
+
+      await expect(provider({ surface: "post" })).resolves.toBeUndefined();
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -60,7 +60,7 @@ export type ArchiveVoiceProfileServiceOptions = {
   db: DatabaseHandle;
   llm: Pick<StructuredLlmService, "generateStructured">;
   resolveProvider: JudgeProviderResolver;
-  resolveModel?: () => Promise<string | undefined> | string | undefined;
+  resolveModel?: (provider: string) => Promise<string | undefined> | string | undefined;
   now?: () => string;
   maxExamplesPerKind?: number;
 };
@@ -178,7 +178,7 @@ export class ArchiveVoiceProfileService {
   private readonly db: DatabaseHandle;
   private readonly llm: Pick<StructuredLlmService, "generateStructured">;
   private readonly resolveProvider: JudgeProviderResolver;
-  private readonly resolveModel: () => Promise<string | undefined> | string | undefined;
+  private readonly resolveModel: (provider: string) => Promise<string | undefined> | string | undefined;
   private readonly now: () => string;
   private readonly maxExamplesPerKind: number;
 
@@ -294,7 +294,7 @@ export class ArchiveVoiceProfileService {
     corpusHash: string,
   ): Promise<ArchiveVoiceProfile | undefined> {
     const provider = await resolveProviderId(this.resolveProvider);
-    const model = await this.resolveModel();
+    const model = await this.resolveModel(provider);
     const postRows = corpusRows
       .filter((row) => row.kind === "original")
       .slice(0, this.maxExamplesPerKind);
@@ -345,6 +345,10 @@ export class ArchiveVoiceProfileService {
     const selectedEvidenceIds = new Set(
       result.output.evidencePostIds.filter((postId) => sentRowIds.has(postId)),
     );
+    const sanitizedOutput: ArchiveVoiceProfileOutput = {
+      ...result.output,
+      evidencePostIds: [...selectedEvidenceIds],
+    };
     const sampledEvidenceIds = new Set(
       [...postRows.slice(0, 3), ...replyRows.slice(0, 3)].map((row) => row.id),
     );
@@ -372,7 +376,7 @@ export class ArchiveVoiceProfileService {
         replies: replyRows.length,
       },
       evidence: evidenceRows,
-      ...result.output,
+      ...sanitizedOutput,
     });
 
     return this.readProfile(corpusHash);
@@ -473,11 +477,18 @@ export const createArchiveVoiceProfileProvider = (
       return profilePromise;
     }
 
-    return Promise.race([
-      profilePromise,
-      new Promise<undefined>((resolve) => {
-        setTimeout(() => resolve(undefined), maxWaitMs);
-      }),
-    ]);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        profilePromise,
+        new Promise<undefined>((resolve) => {
+          timeout = setTimeout(() => resolve(undefined), maxWaitMs);
+        }),
+      ]);
+    } finally {
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+      }
+    }
   };
 };

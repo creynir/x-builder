@@ -326,10 +326,9 @@ export const createServerServiceBundle = (
               db: engineStorage.db,
               llm: structuredLlm,
               resolveProvider,
-              resolveModel: async () => {
+              resolveModel: async (provider) => {
                 try {
                   const { settings } = await settingsRepository.load();
-                  const provider = await resolveProvider();
                   const modelKey = judgeProviderModelKeys[provider as keyof typeof judgeProviderModelKeys];
                   const model = modelKey === undefined ? undefined : settings[modelKey]?.trim();
 
