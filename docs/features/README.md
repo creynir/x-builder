@@ -45,17 +45,24 @@ arch-recon
 - [`my-feedback-loop`](./my-feedback-loop/) — local predicted-vs-actual feedback over captured post performance
 - [`llm-chain-budget-rate-guard`](./llm-chain-budget-rate-guard/) — chain budgets for multi-call LLM flows plus runner-side LLM binding protection
 - [`voice-rag-generation`](./voice-rag-generation/) — local voice retrieval projection on the SQLite corpus for generation grounding
+- [`smarter-generation-context`](./smarter-generation-context/) — requested-format playbook slices plus bounded voice samples for generation
+- [`generation-category-panel`](./generation-category-panel/) — bounded left-side generation category panel with internal scroll
+- [`external-x-import-signals`](./external-x-import-signals/) — observe-only external X signal ledger
+- [`external-feedback-loop`](./external-feedback-loop/) — sanitized external pattern guidance for generation
+- [`reply-composer-context`](./reply-composer-context/) — same-dialog reply detection and safe reply body split/merge through the existing cockpit
 
 **Next build queue:**
 
-1. [`smarter-generation-context`](./smarter-generation-context/) - send the LLM only the requested format's playbook slice plus a tight voice sample instead of the whole knowledge base.
-2. [`generation-category-panel`](./generation-category-panel/) - show all post generation categories in a bounded left-side panel with internal scrolling when the list overflows.
-3. **Refactor hotspots** — split `engine/src/server/server.ts` and `overlay/src/compose/compose-cockpit.tsx` after behavior is pinned.
+1. [`archive-voice-skill`](./archive-voice-skill/) — derive an explicit local voice skill/profile from the user's own uploaded archive corpus.
+2. [`labeled-corpus-memory`](./labeled-corpus-memory/) — add post/reply labels, parent context, and generated-content exclusion to local RAG memory.
+3. [`reply-thread-context`](./reply-thread-context/) — capture the available root/parent/ancestor reply graph for parent-aware replies.
+4. [`reply-variant-assistant`](./reply-variant-assistant/) — replace post-like reply generation with 3-4 parent-aware reply variants and a generated-reply ledger.
+5. [`unified-generation-context`](./unified-generation-context/) — make posts and replies consume the shared voice skill and labeled memory with task-specific context policies.
 
 **Planned feature areas:**
 
 - [`agent-operator-skill`](./agent-operator-skill/) - agent-run setup and operating skill so users do not manually bootstrap, launch, inspect, and explain the local system
-- [`external-feedback-loop`](./external-feedback-loop/) — external or hosted feedback-signal expansion beyond the local My Feedback Loop
-- [`external-x-import-signals`](./external-x-import-signals/) — external reach signals
+- **Refactor hotspots** — split `engine/src/server/server.ts` and `overlay/src/compose/compose-cockpit.tsx` after behavior is pinned.
+- **Reach model follow-ups** — `RMU-021` compact candidate summary chip and `RMU-022` advanced-context weighting.
 
 > Folders removed in the overlay pivot (the SPA writer studio era): `be-ui-shell`, `voice-profile`, `writer-logic`, `my-x-data-import`, `my-x-api-sync`, `post-library-manual-import`, `publish-export`. Voice is now corpus-derived (no standalone voice-profile builder); capture replaces API sync. Ticket files under those older feature trees are historical and should not be used as current product truth without checking the feature README and code.
