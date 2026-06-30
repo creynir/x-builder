@@ -1,0 +1,41 @@
+title: "[Idea] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use Ideas for product proposals and RFCs before they become GitHub issues.
+        Once the idea is scoped, create or link an issue and follow the SDLC.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem or workflow gap does this solve?
+      placeholder: Today, when I...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should x-builder do differently?
+      placeholder: Add a flow that...
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options and tradeoffs
+      description: List alternatives if there are multiple ways to solve this.
+      placeholder: |
+        Option A:
+        Option B:
+    validations:
+      required: false
+  - type: textarea
+    id: issue-readiness
+    attributes:
+      label: Issue readiness
+      description: What would make this ready for a GitHub issue?
+      placeholder: This is ready when we know...
+    validations:
+      required: false

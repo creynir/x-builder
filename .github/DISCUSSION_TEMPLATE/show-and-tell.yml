@@ -1,0 +1,42 @@
+title: "[Show and tell] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use Show and tell for workflows, examples, screenshots, and experiments
+        built with x-builder.
+  - type: textarea
+    id: what
+    attributes:
+      label: What did you build or try?
+      description: Describe the workflow, output, or experiment.
+      placeholder: I used x-builder to...
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Setup
+      description: Include relevant providers, archive/RAG setup, or local settings.
+      placeholder: My setup was...
+    validations:
+      required: false
+  - type: textarea
+    id: result
+    attributes:
+      label: Result
+      description: What worked, what surprised you, or what should improve?
+      placeholder: The useful part was...
+    validations:
+      required: true
+  - type: textarea
+    id: links
+    attributes:
+      label: Links or media
+      description: Add screenshots, recordings, examples, or follow-up issues.
+      placeholder: |
+        - Screenshot:
+        - Issue:
+        - PR:
+    validations:
+      required: false

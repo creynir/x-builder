@@ -1,0 +1,46 @@
+title: "[Help] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use Q&A for answerable setup and usage questions. If this is a reproducible
+        bug with clear steps, open an issue instead.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What do you need help with?
+      placeholder: How do I...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, Node, pnpm, browser, and any relevant command.
+      placeholder: |
+        OS:
+        Node:
+        pnpm:
+        Browser:
+        Command:
+    validations:
+      required: false
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you tried
+      description: Paste commands, logs, screenshots, or links when useful.
+      placeholder: I ran...
+    validations:
+      required: false
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: Expected vs actual
+      description: What did you expect, and what happened instead?
+      placeholder: |
+        Expected:
+        Actual:
+    validations:
+      required: false
