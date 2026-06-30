@@ -19,6 +19,8 @@ Reply generation should have its own UI and generation contract. The user opens 
 
 The reply assistant should not show reach estimation, Post Coach scoring, or LLM judge verdicts. Reply quality is contextual and user-selected. The system should help write, not score.
 
+Variants should be drafted from a reply plan that separates grounded claims from similar-situation voice guidance. The UI can show the parent/thread context and variants, but it should not expose a judge panel or score each variant.
+
 When a reply variant is chosen, x-builder records it in a generated reply ledger. If the same text appears later in live capture or archive import, the memory layer should recognize it as generated and exclude it from voice/RAG training evidence.
 
 ## Boundaries
@@ -28,6 +30,7 @@ When a reply variant is chosen, x-builder records it in a generated reply ledger
 - Do not reuse post generation category UI as the primary reply UI.
 - Generated replies are excluded from RAG until/unless the user explicitly promotes them as examples in a later feature.
 - User edits after choosing a variant remain user-authored content; the exclusion boundary should be conservative and content-hash based.
+- Do not use similar-situation examples as factual claims unless the generation context provides a grounded fact/belief statement.
 
 ## Existing References
 
@@ -38,6 +41,7 @@ When a reply variant is chosen, x-builder records it in a generated reply ledger
 - `engine/src/llm/generate-ideas-service.ts`
 - `shared/src/schemas/shell.ts`
 - Reference repo: `../XActions/docs/features/reply-rag-validator/README.md`
+- Reference repo dual-RAG plan: `../XActions/docs/features/reply-drafter-dual-rag/README.md`
 
 ## Bookkeeper Prompt
 
@@ -54,12 +58,13 @@ Existing files:
 - engine/src/llm/generate-ideas-service.ts
 - shared/src/schemas/shell.ts
 - ../XActions/docs/features/reply-rag-validator/README.md
+- ../XActions/docs/features/reply-drafter-dual-rag/README.md
 
 Intent:
-Separate reply generation from post generation at the product and contract level. Show reply variants in a reply-specific UI, preserve native composer editing, and record chosen generated replies so the memory layer can exclude them from RAG when observed later.
+Separate reply generation from post generation at the product and contract level. Show reply variants in a reply-specific UI, preserve native composer editing, and record chosen generated replies so the memory layer can exclude them from RAG when observed later. Generate variants from a reply plan that separates grounded facts/beliefs from similar-situation voice examples.
 
 Boundaries:
-No auto-posting. No post reach model, Post Coach, LLM judge, or apply-all in reply mode. Do not make generated replies voice evidence. Do not invent missing thread context.
+No auto-posting. No post reach model, Post Coach, LLM judge, or apply-all in reply mode. Do not make generated replies voice evidence. Do not invent missing thread context. Do not surface grounding as reply scoring UI.
 
 Workflow:
 Run product-flow-map for the reply flow, then product-flow-spec for the reply UI, then arch-recon, tickets, and RGB/TDD. Start by pinning current reply compose behavior so the new reply assistant does not regress split/merge safety.
