@@ -137,9 +137,6 @@ const forbiddenExternalTokens = (sourceId: string): string[] => [
   EVIDENCE_PREVIEW_SENTINEL,
   REMOVED_SOURCE_SENTINEL,
   METRIC_VALUE_SENTINEL,
-  "likes",
-  "reposts",
-  "bookmarks",
 ];
 
 const evidenceFor = (

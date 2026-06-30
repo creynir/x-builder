@@ -31,7 +31,7 @@ These decisions were taken with the maintainer immediately before kicking off `a
 
 1. **Settings button** — persistent, anchored to a top corner (recon/design picks left vs right). Opens overlay settings: archive upload → voice extraction, judge provider + readiness, active context.
 2. **Compose / post-modal experience** — X's composer is effectively its own route/modal; this is the centerpiece:
-   - On open: show a **static-engine "waiting" state** (empty metric slots), an **LLM "waiting"** indicator, and **3–4 "generate a post" buttons** for different categories/formats.
+   - On open: show a **static-engine "waiting" state** (empty metric slots), an **LLM "waiting"** indicator, and **15 "generate a post" buttons** for different categories/formats.
    - On the user typing: **static-engine metrics appear fast**, then a **pulsing "judge running"** indicator, then the **judge metrics fill in**.
    - On a generate-button click: produce a draft in the chosen category/format; thereafter the flow is identical to manual typing (the LLM may be pre-run before the draft is returned — a refinement, not required for v1).
    - Profile metrics are auto-available → **no manual follower input**.

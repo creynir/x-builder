@@ -82,7 +82,7 @@ No crafted GraphQL request is ever issued. No authentication header is replayed.
 
 ### Dynamic generate categories — `GenerateCategoryService`
 
-`getGenerateCategories()` replaces the hardcoded label→format map that previously lived as a UI constant. The service loads the corpus, ranks formats by frequency × replies-weighted performance (using `metricSnapshots[x_live_capture].replies` falling back to `weakMetrics.favoriteCount`), excludes formats in cooldown, and returns 3–4 `GenerateCategory` entries with shape `{id, label, format, basis: top_performer|frequent|default, cooldownStatus, sampleCount}`. When the corpus has fewer than 10 originals (cold start), it returns the fixed default set (hot take / build-in-public / question / story) with `basis: "default"` and `cooldownStatus: "clear"`. The overlay renders one button per returned category; the hardcoded map is gone from the UI.
+`getGenerateCategories()` replaces the hardcoded label→format map that previously lived as a UI constant. The service loads the corpus, ranks formats by frequency × replies-weighted performance (using `metricSnapshots[x_live_capture].replies` falling back to `weakMetrics.favoriteCount`), annotates cooldown formats without hiding them, and returns 15 `GenerateCategory` entries with shape `{id, label, format, basis: top_performer|frequent|default, cooldownStatus, sampleCount}`. When the corpus has fewer than 10 originals (cold start), or when fewer than 15 generator formats are observed, it backfills the fixed generator-format set with `basis: "default"` and `cooldownStatus: "clear"`. The overlay renders one button per returned category; the hardcoded map is gone from the UI.
 
 ### Generate→judge refine — `GenerateIdeasService`
 
@@ -145,7 +145,7 @@ The overlay has one persistent affordance (`SettingsAffordance`, top-left corner
 
 `ComposeCockpit` mounts when `ComposeContext` is active (X's compose modal is open). It places three Aurora-Glass panels around the modal rect using the shared rAF rect tracker:
 
-- **LEFT — `ComposeGenerateRail`**: 3–4 generate category buttons, one per `GenerateCategory` from `getGenerateCategories()`. Each button shows `category.label`; annotated with a cooldown badge when `category.cooldownStatus !== "clear"`. Click → `generateIdeas({format: category.format})`.
+- **LEFT — `ComposeGenerateRail`**: 15 generate category buttons, one per `GenerateCategory` from `getGenerateCategories()`. Each button shows `category.label`; annotated with a cooldown badge when `category.cooldownStatus !== "clear"`. Click → `generateIdeas({format: category.format})`.
 
 - **RIGHT — `StaticEngineColumn`**: static deterministic metrics (`ScoreBar`s, `PostCoachStrip`, `ReachPredictionBlock`) from `analyzePosts`. Fills fast (pure CPU, typically < 400 ms). Auto-followers from `getCaptureSummary().followers`; when absent, reach prediction enters the `disabled/missing_followers` state — no manual input is ever requested.
 

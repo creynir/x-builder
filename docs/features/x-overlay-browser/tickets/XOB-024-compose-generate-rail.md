@@ -11,7 +11,7 @@ status: done
 **Props:**
 ```ts
 {
-  categories: GenerateCategory[];   // from getGenerateCategories(); 3–4 items
+  categories: GenerateCategory[];   // from getGenerateCategories(); 15 items
   pending?: string;                 // category.id currently generating (L4, from parent)
   onGenerate: (category: GenerateCategory) => void;
 }
@@ -113,7 +113,7 @@ export const cooldownCategory: GenerateCategory = {
 
 ## Acceptance Criteria
 
-**Given** `ComposeContext` is active and `getGenerateCategories()` returns 3–4 categories  
+**Given** `ComposeContext` is active and `getGenerateCategories()` returns 15 categories  
 **When** `ComposeGenerateRail` renders  
 **Then** exactly one button appears per category, labelled with `category.label`.
 

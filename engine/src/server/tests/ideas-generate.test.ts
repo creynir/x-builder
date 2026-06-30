@@ -471,7 +471,7 @@ describe("POST /ideas/generate", () => {
     }
   });
 
-  it("keeps the base writer prompt reachable when guidance inputs are absent", async () => {
+  it("keeps the base writer prompt reachable when only default guidance is available", async () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "x-builder-http-generate-empty-"));
     tempRoots.push(tempRoot);
     const settingsRepository = new JsonFileAppSettingsRepository({ root: join(tempRoot, "settings") });
@@ -491,7 +491,8 @@ describe("POST /ideas/generate", () => {
 
       const instructions = writerInstructions();
       expect(instructions).toContain('Produce exactly 3 distinct draft posts in the "hot_take" format.');
-      expect(instructions).not.toContain("# Requested format playbook");
+      expect(instructions).toContain("# Requested format playbook");
+      expect(instructions).toContain("Hot take shape:");
       expect(instructions).not.toContain("# Voice samples (match tone, do not copy)");
     } finally {
       await app.close();

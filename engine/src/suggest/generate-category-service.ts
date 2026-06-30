@@ -13,57 +13,30 @@ import {
 } from "../server/post-library-repository.js";
 
 // Below this many `original`-kind posts the corpus is too thin to rank, so the
-// service short-circuits to the fixed default set.
+// service short-circuits to the fixed generator-format default set.
 const CORPUS_THRESHOLD = 10;
 
 // The cooldown window: how many days back "recent" / the clear→warming→cooldown
 // signal is measured over.
 const COOLDOWN_WINDOW_DAYS = 7;
+const MAX_RANKED_CATEGORIES = 15;
 
-// The fixed cold-start categories, returned verbatim when the corpus is thin or
-// yields no rankable (non-"other") formats. Order is significant — the tests
-// assert this exact sequence.
-const DEFAULT_CATEGORIES: readonly GenerateCategory[] = [
-  {
-    id: "default_hot_take",
-    label: "Hot take",
-    format: "hot_take",
-    basis: "default",
-    cooldownStatus: "clear",
-    sampleCount: 0,
-    recentCount: 0,
-    windowDays: COOLDOWN_WINDOW_DAYS,
-  },
-  {
-    id: "default_founder_story",
-    label: "Build-in-public",
-    format: "founder_story",
-    basis: "default",
-    cooldownStatus: "clear",
-    sampleCount: 0,
-    recentCount: 0,
-    windowDays: COOLDOWN_WINDOW_DAYS,
-  },
-  {
-    id: "default_audience_q",
-    label: "Question",
-    format: "audience_question",
-    basis: "default",
-    cooldownStatus: "clear",
-    sampleCount: 0,
-    recentCount: 0,
-    windowDays: COOLDOWN_WINDOW_DAYS,
-  },
-  {
-    id: "default_story",
-    label: "Story",
-    format: "story",
-    basis: "default",
-    cooldownStatus: "clear",
-    sampleCount: 0,
-    recentCount: 0,
-    windowDays: COOLDOWN_WINDOW_DAYS,
-  },
+const GENERATION_FORMATS: readonly PostFormat[] = [
+  "fill_blank_tribal",
+  "cta_farm",
+  "fantasy_question",
+  "binary_choice",
+  "recognition_roast",
+  "audience_question",
+  "genuine_question",
+  "ab_choice",
+  "milestone",
+  "founder_story",
+  "story",
+  "insight_share",
+  "hot_take",
+  "nuanced_question",
+  "wisdom_one_liner",
 ];
 
 // Display labels shared with the overlay button map. Formats absent here derive
@@ -74,6 +47,27 @@ const FORMAT_LABELS: Partial<Record<PostFormat, string>> = {
   audience_question: "Question",
   story: "Story",
 };
+
+const GENERATION_OPPORTUNITY_WEIGHT: Partial<Record<PostFormat, number>> = {
+  fill_blank_tribal: 3.0,
+  cta_farm: 3.0,
+  fantasy_question: 2.5,
+  binary_choice: 2.0,
+  recognition_roast: 1.8,
+  audience_question: 1.6,
+  ab_choice: 1.2,
+  genuine_question: 1.2,
+  milestone: 1.0,
+  founder_story: 1.0,
+  story: 0.8,
+  hot_take: 0.8,
+  nuanced_question: 0.5,
+  insight_share: 0.3,
+  wisdom_one_liner: 0.3,
+};
+
+const opportunityWeightForFormat = (format: PostFormat): number =>
+  GENERATION_OPPORTUNITY_WEIGHT[format] ?? 1;
 
 const labelForFormat = (format: PostFormat): string => {
   const known = FORMAT_LABELS[format];
@@ -86,6 +80,23 @@ const labelForFormat = (format: PostFormat): string => {
     .map((part) => (part.length === 0 ? part : part[0]!.toUpperCase() + part.slice(1)))
     .join(" ");
 };
+
+const defaultCategoryForFormat = (
+  format: PostFormat,
+  signal?: CooldownSignal,
+): GenerateCategory => ({
+  id: `default_${format}`,
+  label: labelForFormat(format),
+  format,
+  basis: "default",
+  cooldownStatus: signal?.status ?? "clear",
+  sampleCount: 0,
+  recentCount: signal?.countInWindow ?? 0,
+  windowDays: signal?.windowDays ?? COOLDOWN_WINDOW_DAYS,
+});
+
+const defaultCategories = (): GenerateCategory[] =>
+  GENERATION_FORMATS.map((format) => defaultCategoryForFormat(format));
 
 // The reply metric for ranking: live replies first, then the archive favorite
 // count as a weak proxy, then zero. metricSnapshots is a discriminated union on
@@ -103,6 +114,7 @@ type RankedFormat = {
   sampleCount: number;
   avgReplies: number;
   performanceScore: number;
+  opportunityWeight: number;
 };
 
 export class GenerateCategoryService {
@@ -116,29 +128,38 @@ export class GenerateCategoryService {
     const store = await this.repo.loadStore();
     const originals = store.posts.filter((post) => post.kind === "original");
 
-    // Cold-start: too few originals to rank — return the fixed defaults.
+    // Cold-start: too few originals to rank — return the fixed generator defaults.
     if (originals.length < CORPUS_THRESHOLD) {
-      return DEFAULT_CATEGORIES.map((category) => ({ ...category }));
+      return defaultCategories();
     }
 
     const ranked = this.rankFormats(originals);
 
     // No rankable (non-"other") formats — fall back to the full default set.
     if (ranked.length === 0) {
-      return DEFAULT_CATEGORIES.map((category) => ({ ...category }));
+      return defaultCategories();
     }
 
     const report = await this.windowService.compute(COOLDOWN_WINDOW_DAYS);
     const signalByFormat = this.signalLookup(report);
 
-    const categories: GenerateCategory[] = ranked.map((entry, index) => {
-      const signal = signalByFormat.get(entry.format);
+    const rankedByFormat = new Map<PostFormat, RankedFormat>(
+      ranked.map((entry) => [entry.format, entry]),
+    );
+
+    const categories: GenerateCategory[] = GENERATION_FORMATS.map((format) => {
+      const entry = rankedByFormat.get(format);
+      const signal = signalByFormat.get(format);
+
+      if (entry === undefined) {
+        return defaultCategoryForFormat(format, signal);
+      }
 
       return {
         id: `corpus_${entry.format}`,
         label: labelForFormat(entry.format),
         format: entry.format,
-        basis: index === 0 ? "top_performer" : "frequent",
+        basis: "frequent",
         // `cooldownStatus` + `recentCount` come from the WINDOW (what "recent"
         // means); `sampleCount` stays the all-time corpus count for ranking.
         cooldownStatus: signal?.status ?? "clear",
@@ -148,33 +169,34 @@ export class GenerateCategoryService {
       };
     });
 
-    // Always return at least 3; include a 4th only when its score is non-zero
-    // and it is not in cooldown. Backfill from defaults when fewer than 3 exist.
-    const selected = categories.slice(0, 3);
-
-    const fourth = categories[3];
-    if (fourth !== undefined && fourth.sampleCount > 0) {
-      const ranked4th = ranked[3]!;
-      if (ranked4th.performanceScore > 0 && fourth.cooldownStatus !== "cooldown") {
-        selected.push(fourth);
+    categories.sort((a, b) => {
+      const opportunityDelta =
+        opportunityWeightForFormat(b.format) - opportunityWeightForFormat(a.format);
+      if (opportunityDelta !== 0) {
+        return opportunityDelta;
       }
+
+      const performanceLeft = rankedByFormat.get(a.format)?.performanceScore ?? 0;
+      const performanceRight = rankedByFormat.get(b.format)?.performanceScore ?? 0;
+      if (performanceRight !== performanceLeft) {
+        return performanceRight - performanceLeft;
+      }
+
+      return GENERATION_FORMATS.indexOf(a.format) - GENERATION_FORMATS.indexOf(b.format);
+    });
+
+    const topCorpusIndex = categories.findIndex((category) => category.basis !== "default");
+    if (topCorpusIndex !== -1) {
+      categories[topCorpusIndex] = {
+        ...categories[topCorpusIndex]!,
+        basis: "top_performer",
+      };
     }
 
-    if (selected.length < 3) {
-      for (const fallback of DEFAULT_CATEGORIES) {
-        if (selected.length >= 3) {
-          break;
-        }
-
-        if (selected.some((category) => category.format === fallback.format)) {
-          continue;
-        }
-
-        selected.push({ ...fallback });
-      }
-    }
-
-    return selected;
+    // Return the most relevant ranked lanes. Relevance is the existing
+    // playbook opportunity weight, with corpus performance as a secondary tie-break.
+    // Cooldown is informational and does not hide a lane from the picker.
+    return categories.slice(0, MAX_RANKED_CATEGORIES);
   }
 
   private rankFormats(originals: CanonicalOwnPost[]): RankedFormat[] {
@@ -209,16 +231,23 @@ export class GenerateCategoryService {
         sampleCount,
         avgReplies,
         performanceScore: sampleCount * avgReplies,
+        opportunityWeight: opportunityWeightForFormat(format),
       });
     }
 
-    // Descending by performanceScore, tie-break alphabetically by format name.
+    // Descending by playbook opportunity first, then corpus performance, then the
+    // fixed generator order. This keeps status-gated/weak formats from leading
+    // merely because they appeared often in the local corpus.
     ranked.sort((a, b) => {
+      if (b.opportunityWeight !== a.opportunityWeight) {
+        return b.opportunityWeight - a.opportunityWeight;
+      }
+
       if (b.performanceScore !== a.performanceScore) {
         return b.performanceScore - a.performanceScore;
       }
 
-      return a.format.localeCompare(b.format);
+      return GENERATION_FORMATS.indexOf(a.format) - GENERATION_FORMATS.indexOf(b.format);
     });
 
     return ranked;

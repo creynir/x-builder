@@ -62,6 +62,7 @@ export {
   type VoiceRetrievalSample,
   type VoiceSampleProvider,
 } from "./llm/generation-guidance.js";
+export { resolveDefaultKnowledgeBasePath } from "./llm/default-knowledge-base.js";
 export { ApplyJudgeSuggestionsService } from "./llm/apply-judge-suggestions-service.js";
 export {
   ArchiveImportService,
