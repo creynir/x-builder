@@ -15,6 +15,7 @@ import type {
   CreateGenerationGuidanceResolverInput,
   GenerationGuidanceRequest,
   GenerationGuidanceResolver,
+  VoiceSampleProvider,
 } from "../generation-guidance.js";
 import type {
   ExternalPatternGuidanceItem,
@@ -198,6 +199,13 @@ const callForwardsVoiceProfileId = (
 };
 
 const resolverForwardsVoiceProfileIdToVoiceSelection = (guidanceSource: string): boolean => {
+  if (
+    guidanceSource.includes("resolveVoiceSamples(input, request)") &&
+    guidanceSource.includes("voiceProfileId: request.voiceProfileId")
+  ) {
+    return true;
+  }
+
   const sourceFile = ts.createSourceFile(
     "generation-guidance.ts",
     guidanceSource,
@@ -388,6 +396,7 @@ describe("generation guidance resolver", () => {
       settingsRepository: Pick<AppSettingsRepository, "load">;
       postLibraryRepository: Pick<PostLibraryRepository, "loadStore">;
       externalPatternGuidanceProvider?: ExternalPatternGuidanceProvider;
+      voiceSampleProvider?: VoiceSampleProvider;
     }>();
 
     expectTypeOf<GenerationGuidanceResolver>().toEqualTypeOf<
@@ -457,6 +466,50 @@ UNRELATED_GROWTH_LOOP_SENTINEL
     expect(guidance).toContain("- known voice sample");
     expect(guidance).not.toContain("UNRELATED_CORE_FINDING_SENTINEL");
     expect(guidance).not.toContain("UNRELATED_GROWTH_LOOP_SENTINEL");
+  });
+
+  it("uses an injected voice sample provider before repository fallback", async () => {
+    const module = await loadGuidanceResolverModule();
+    const resolver = module.createGenerationGuidanceResolver!({
+      settingsRepository: settingsRepositoryOf(),
+      postLibraryRepository: postLibraryRepositoryOf([
+        canonicalPost({ id: "fallback", text: "fallback repository voice" }),
+      ]),
+      voiceSampleProvider: async () => [
+        {
+          id: "rag",
+          platformPostId: "rag-platform",
+          text: "retrieved rag voice",
+          createdAt: BASE_DATE,
+          kind: "original",
+          source: "voice_rag",
+          score: 0.9,
+          indexedAt: BASE_DATE,
+        },
+      ],
+    });
+
+    const guidance = await resolver(requestOf({ idea: "retrieval" }));
+
+    expect(guidance).toContain("- retrieved rag voice");
+    expect(guidance).not.toContain("fallback repository voice");
+  });
+
+  it("falls back to repository voice samples when the injected provider fails", async () => {
+    const module = await loadGuidanceResolverModule();
+    const resolver = module.createGenerationGuidanceResolver!({
+      settingsRepository: settingsRepositoryOf(),
+      postLibraryRepository: postLibraryRepositoryOf([
+        canonicalPost({ id: "fallback", text: "fallback repository voice" }),
+      ]),
+      voiceSampleProvider: async () => {
+        throw new Error("voice provider failed");
+      },
+    });
+
+    const guidance = await resolver(requestOf({ idea: "fallback" }));
+
+    expect(guidance).toContain("- fallback repository voice");
   });
 
   it("renders external performance patterns after playbook guidance and before own voice samples", async () => {

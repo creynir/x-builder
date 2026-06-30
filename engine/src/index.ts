@@ -54,6 +54,9 @@ export {
   createGenerationGuidanceResolver,
   type CreateGenerationGuidanceResolverInput,
   type GenerationGuidanceResolver,
+  type VoiceRetrievalRequest,
+  type VoiceRetrievalSample,
+  type VoiceSampleProvider,
 } from "./llm/generation-guidance.js";
 export { ApplyJudgeSuggestionsService } from "./llm/apply-judge-suggestions-service.js";
 export {
@@ -81,3 +84,6 @@ export * from "./llm/codex-cli-provider.js";
 export * from "./llm/cursor-cli-provider.js";
 export * from "./llm/structured-prompt-envelope.js";
 export * from "./llm/cli-readiness-probe.js";
+export * from "./voice/voice-embedder.js";
+export * from "./voice/voice-index-service.js";
+export * from "./voice/sqlite-voice-sample-provider.js";

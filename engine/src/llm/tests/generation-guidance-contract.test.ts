@@ -77,7 +77,7 @@ describe("generation guidance playbook mapping", () => {
       text: string;
       createdAt: string;
       kind: "original";
-      source: "known_post_id" | "profile_sample" | "recent_original";
+      source: "known_post_id" | "profile_sample" | "voice_rag" | "recent_original";
     }>();
 
     expectTypeOf<GenerationContext>().toEqualTypeOf<{

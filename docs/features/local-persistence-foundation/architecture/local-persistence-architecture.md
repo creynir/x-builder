@@ -1,6 +1,6 @@
 # Local Persistence Foundation — Architecture
 
-This document is the design for migration 1 of the local SQLite store: the base relational schema, the database open/migration mechanism, the SQLite-backed repository, and the one-time JSON importer. It is the foundation that `voice-rag-generation` builds migrations 2–3 (the vector index) on top of.
+This document is the design for migration 1 of the local SQLite store: the base relational schema, the database open/migration mechanism, the SQLite-backed repository, and the one-time JSON importer. Later local-data features append migrations to the same runner; `voice-rag-generation` now appends the local voice projection as migration 4.
 
 ## Storage layering
 
@@ -44,7 +44,7 @@ flowchart TD
 
   db --> tables
 
-  NOTE["post_vec + embedder\nlive in voice-rag-generation\n(migrations 2 to 3, NOT here)"]
+  NOTE["voice_post_embedding + embedder\nlive in voice-rag-generation\n(migration 4, NOT here)"]
   tables -.derived index, separate feature.-> NOTE
 ```
 
@@ -52,7 +52,7 @@ The split that matters:
 
 - **Canonical, normalized data** lives in real columns: `post`, `metric_obs`, `source_ref`, `profile_snapshot`. SQL is the source of truth for corpus content and metric observations. `loadStore()` reassembles `CanonicalOwnPost[]` from these tables and re-parses the whole store through `postLibraryStoreSchema`, so the on-wire `PostLibraryStore` shape cannot drift.
 - **Opaque validated payloads** stay as JSON columns: `import_run`, `derived_insight`, `active_context`. These three already carry their own validated Zod payloads (`archiveImportRunSchema`, `archiveDerivedInsightsSchema`, `activeArchiveContextSchema`). Re-normalizing them buys nothing, so they are stored verbatim as a `payload TEXT` column and parsed back through their existing schema on read.
-- **Derived indexes** (the vector embedding table) are explicitly **not here**. They are a derived projection of `post`, rebuildable from the canonical store, and belong to `voice-rag-generation`'s migrations 2–3.
+- **Derived indexes** (the voice embedding projection) are explicitly **not here**. They are a derived projection of `post`, rebuildable from the canonical store, and belong to `voice-rag-generation` migration 4.
 
 ### Database location and PRAGMAs
 
@@ -85,7 +85,7 @@ const migrations: Migration[] = [
 ];
 ```
 
-The runner reads `user_version`, applies every migration whose `version` is greater than it in order (each inside its own transaction), and writes the new `user_version`. This feature ships migration 1 only — but the mechanism is authored so `voice-rag-generation` can append migrations 2 (vector table) and 3 without touching this code.
+The runner reads `user_version`, applies every migration whose `version` is greater than it in order (each inside its own transaction), and writes the new `user_version`. This feature originally shipped migration 1 only; later features append higher versions without editing existing entries.
 
 ## Migration flow (one-time JSON → SQLite)
 
@@ -117,7 +117,7 @@ Idempotency has three independent guards, any one of which makes a re-run a no-o
 
 ## SQLite DDL (migration 1)
 
-Authored verbatim here and in LPF-002. This is the **entire** schema for this feature; the `post_vec` table is explicitly absent (it is migration 2 in `voice-rag-generation`).
+Authored verbatim here and in LPF-002. This is the **entire** schema for this feature; the voice projection tables are explicitly absent here because they belong to `voice-rag-generation`.
 
 ```sql
 -- post: canonical own-post corpus. Snowflake IDs are TEXT.

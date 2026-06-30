@@ -10,7 +10,7 @@ The canonical corpus is a single JSON file, `post-library.json`, owned by `JsonF
 - **Append-only metric history without rewrite amplification.** The periodic-snapshot metric model (`metric_obs`) only grows. Appending one observation to a JSON file rewrites the entire corpus; in SQLite it is one `INSERT OR IGNORE`.
 - **Real atomicity without a hand-rolled queue.** `better-sqlite3` is synchronous; `db.transaction(...)` gives multi-statement atomicity directly, retiring the `withSerializedWrite` promise queue.
 - **Embedded, local, zero-config.** No server, no daemon. One file under the user's home directory, `chmod 0600`, WAL journaling. The product stays single-binary and offline-first.
-- **A place for the vector index.** `voice-rag-generation` adds `sqlite-vec` as migration 2 on the same handle — no second store, no cross-store consistency problem.
+- **A place for the voice index.** `voice-rag-generation` adds a local rebuildable voice projection as a later migration on the same handle — no second store, no cross-store consistency problem.
 
 ## Source of truth vs derived index
 
@@ -18,7 +18,7 @@ The redesign draws a hard line:
 
 - **Source of truth (canonical, normalized):** `post`, `metric_obs`, `source_ref`, `profile_snapshot`. These hold corpus content and metric observations as first-class columns. Nothing else may claim to be the canonical corpus.
 - **Opaque validated payloads:** `import_run`, `derived_insight`, `active_context`. These already carry self-contained, Zod-validated payloads (`archiveImportRunSchema`, `archiveDerivedInsightsSchema`, `activeArchiveContextSchema`). They are stored verbatim as JSON `payload` columns and parsed back through their existing schema. SQL does not introspect them; re-normalizing them would add coupling for no query benefit.
-- **Derived index (rebuildable projection):** the vector embedding table. It is a function of `post` and can always be rebuilt from the source of truth, so it is not canonical and not in this feature. It is migration 2 in `voice-rag-generation`.
+- **Derived index (rebuildable projection):** the voice embedding table. It is a function of `post` and can always be rebuilt from the source of truth, so it is not canonical and not in this feature. It belongs to `voice-rag-generation`.
 
 The contract guard for "source of truth": `loadStore()` reassembles `CanonicalOwnPost[]` from the canonical tables and re-parses the full store through `postLibraryStoreSchema`. If a mapping drifts, the parse throws — the wire shape cannot silently diverge from the JSON era.
 
@@ -49,4 +49,4 @@ Rationale: downstream voice retrieval filters on `kind = 'original'`, and `loadS
 
 ## Out of scope (this feature)
 
-The vector index (`post_vec` / `sqlite-vec`), the embedder, `@huggingface/transformers`, and migrations 2–3 belong to `voice-rag-generation`. No transport method is added or changed — the "exactly 17" `EngineTransport` invariant is untouched. This feature is migration 1 (base store) plus the migration mechanism only.
+The voice index, embedder, and retrieval provider belong to `voice-rag-generation`. No transport method is added or changed by the local-persistence foundation. This feature is migration 1 (base store) plus the migration mechanism only.

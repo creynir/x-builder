@@ -35,12 +35,14 @@ import {
   SqliteExternalXSignalsRepository,
   SqlitePostLibraryRepository,
   StructuredLlmService,
+  createSqliteVoiceSampleProvider,
   importPostLibraryJsonToSqlite,
   judgeProviderRegistry,
   openEngineDatabase,
   resolveWorkspaceRoot,
   type ExternalPatternSnapshotReader,
   type PostLibraryRepository,
+  type VoiceSampleProvider,
 } from "@x-builder/engine";
 import { ENGINE_TRANSPORT_BINDINGS } from "@x-builder/shared";
 import { chromium } from "playwright";
@@ -142,6 +144,7 @@ export interface EngineServices {
   feedbackLoopService?: FeedbackLoopService;
   externalXSignalsService?: ExternalXSignalsService;
   externalPatternSnapshotReader?: ExternalPatternSnapshotReader;
+  voiceSampleProvider?: VoiceSampleProvider;
 }
 
 export interface RunnerAppOptions {
@@ -222,6 +225,7 @@ const defaultCreateServices = (opts: { engineSettingsDir: string }): EngineServi
     feedbackLoopService,
     externalXSignalsService,
     externalPatternSnapshotReader: externalXSignalsRepository,
+    voiceSampleProvider: createSqliteVoiceSampleProvider({ db }),
   };
 };
 
@@ -359,6 +363,7 @@ export class RunnerApp {
       feedbackLoopService: services.feedbackLoopService,
       externalXSignalsService: services.externalXSignalsService,
       externalPatternSnapshotReader: services.externalPatternSnapshotReader,
+      voiceSampleProvider: services.voiceSampleProvider,
       liveCapture: services.liveCapture as LiveCaptureService,
       llm,
       // A StructuredLlmService's generic generateStructured satisfies the

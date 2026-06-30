@@ -75,8 +75,12 @@ import {
   type JudgeDraftOutcome,
 } from "../llm/judge-draft-service.js";
 import { GenerateIdeasService } from "../llm/generate-ideas-service.js";
-import { createGenerationGuidanceResolver } from "../llm/generation-guidance.js";
+import {
+  createGenerationGuidanceResolver,
+  type CreateGenerationGuidanceResolverInput,
+} from "../llm/generation-guidance.js";
 import { createExternalPatternGuidanceProvider } from "../llm/external-pattern-guidance.js";
+import { createSqliteVoiceSampleProvider } from "../voice/sqlite-voice-sample-provider.js";
 import { ApplyJudgeSuggestionsService } from "../llm/apply-judge-suggestions-service.js";
 import { SuggestPostService } from "../suggest/suggest-post-service.js";
 import { judgeProviderRegistry } from "../llm/judge-provider-registry.js";
@@ -743,6 +747,7 @@ type EngineStorageRepositories = {
   postLibraryRepository: PostLibraryRepository;
   feedbackLoopRepository: FeedbackLoopRepository;
   externalXSignalsRepository: ExternalXSignalsRepository;
+  voiceSampleProvider?: CreateGenerationGuidanceResolverInput["voiceSampleProvider"];
 };
 
 // Resolve storage repositories in fixed precedence while preserving the production
@@ -773,6 +778,7 @@ const resolveEngineStorageRepositories = (
       postLibraryRepository: new SqlitePostLibraryRepository(db),
       feedbackLoopRepository: new SqliteFeedbackLoopRepository(db),
       externalXSignalsRepository: new SqliteExternalXSignalsRepository(db),
+      voiceSampleProvider: createSqliteVoiceSampleProvider({ db }),
     };
   }
 
@@ -782,6 +788,7 @@ const resolveEngineStorageRepositories = (
     postLibraryRepository: new SqlitePostLibraryRepository(db),
     feedbackLoopRepository: new SqliteFeedbackLoopRepository(db),
     externalXSignalsRepository: new SqliteExternalXSignalsRepository(db),
+    voiceSampleProvider: createSqliteVoiceSampleProvider({ db }),
   };
 };
 
@@ -938,6 +945,9 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       createGenerationGuidanceResolver({
         settingsRepository,
         postLibraryRepository,
+        ...(engineStorage.voiceSampleProvider === undefined
+          ? {}
+          : { voiceSampleProvider: engineStorage.voiceSampleProvider }),
         ...(usesDefaultExternalXSignalsService
           ? {
               externalPatternGuidanceProvider: createExternalPatternGuidanceProvider(

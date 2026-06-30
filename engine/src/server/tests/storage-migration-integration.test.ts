@@ -68,6 +68,8 @@ const MIGRATION_1_TABLES = [
   "active_context",
 ] as const;
 
+const MIGRATION_4_TABLES = ["voice_index_meta", "voice_post_embedding"] as const;
+
 const importedAt = "2026-06-16T10:00:00.000Z";
 const sourceHash =
   "sha256:7a2f4e9c1b3d5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcd";
@@ -590,12 +592,12 @@ describe("user flow: round-trip through the repository interface", () => {
 // ARCHITECTURAL INVARIANT — SQLite is the real on-disk artifact.
 //
 // Falsifiable: a JSON-under-the-hood facade (or an in-memory-only impl) would
-// lack a real x-builder.db file whose PRAGMA user_version is 3 and whose
+// lack a real x-builder.db file whose PRAGMA user_version is 4 and whose
 // sqlite_master holds the seven migration-1 tables — so this test would fail it.
 // ===========================================================================
 
 describe("invariant: the migrated artifact is a real SQLite database on disk", () => {
-  it("after a buildServer migration, x-builder.db opens as a real db with user_version 3 and the migration tables", async () => {
+  it("after a buildServer migration, x-builder.db opens as a real db with user_version 4 and the migration tables", async () => {
     const root = await makeTempRoot("artifact");
     const dir = storageDir(root);
     await writeStoreFile(dir, v2Store());
@@ -615,7 +617,7 @@ describe("invariant: the migrated artifact is a real SQLite database on disk", (
     const raw = new Database(join(dir, DB_FILE), { readonly: true });
     try {
       const userVersion = Number(raw.pragma("user_version", { simple: true }));
-      expect(userVersion).toBe(3);
+      expect(userVersion).toBe(4);
 
       const tableRows = raw
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -623,6 +625,9 @@ describe("invariant: the migrated artifact is a real SQLite database on disk", (
       const tableNames = new Set(tableRows.map((row) => row.name));
 
       for (const table of MIGRATION_1_TABLES) {
+        expect(tableNames.has(table)).toBe(true);
+      }
+      for (const table of MIGRATION_4_TABLES) {
         expect(tableNames.has(table)).toBe(true);
       }
 
@@ -636,6 +641,59 @@ describe("invariant: the migrated artifact is a real SQLite database on disk", (
       raw.close();
     }
   });
+
+  it("cascades the voice projection when the canonical post row is deleted", async () => {
+    const db = makeTempEngineDb();
+    await seedPosts(db, [canonicalPost()]);
+
+    const row = db
+      .prepare(
+        "SELECT id, platform_post_id, content_hash, updated_at FROM post WHERE id = ?",
+      )
+      .get("post-1") as
+      | {
+          id: string;
+          platform_post_id: string;
+          content_hash: string;
+          updated_at: string;
+        }
+      | undefined;
+    expect(row).toBeDefined();
+
+    db.prepare(
+      `INSERT INTO voice_post_embedding (
+        post_id,
+        platform_post_id,
+        content_hash,
+        post_updated_at,
+        embedder_id,
+        embedder_version,
+        dimensions,
+        vector_blob,
+        indexed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      row!.id,
+      row!.platform_post_id,
+      row!.content_hash,
+      row!.updated_at,
+      "local-hashing-voice-embedder",
+      "1",
+      1,
+      Buffer.from(new Float32Array([1]).buffer),
+      importedAt,
+    );
+
+    expect(
+      db.prepare("SELECT COUNT(*) AS count FROM voice_post_embedding").get(),
+    ).toEqual({ count: 1 });
+
+    db.prepare("DELETE FROM post WHERE id = ?").run("post-1");
+
+    expect(
+      db.prepare("SELECT COUNT(*) AS count FROM voice_post_embedding").get(),
+    ).toEqual({ count: 0 });
+  });
 });
 
 // ===========================================================================
@@ -647,11 +705,11 @@ describe("invariant: the migrated artifact is a real SQLite database on disk", (
 // ===========================================================================
 
 describe("invariant: the transport and repository surfaces are unchanged by LPF", () => {
-  it("ENGINE_TRANSPORT_BINDINGS exposes exactly 20 methods", () => {
+  it("ENGINE_TRANSPORT_BINDINGS exposes exactly 24 methods", () => {
     const keys = Object.keys(ENGINE_TRANSPORT_BINDINGS).filter(
       (key) => typeof ENGINE_TRANSPORT_BINDINGS[key] === "string",
     );
-    expect(keys).toHaveLength(20);
+    expect(keys).toHaveLength(24);
   });
 
   it("the SqlitePostLibraryRepository implements exactly the 6 PostLibraryRepository methods", async () => {

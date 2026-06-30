@@ -56,7 +56,7 @@ export type VoiceSamplePost = {
   text: string;
   createdAt: string;
   kind: "original";
-  source: "known_post_id" | "profile_sample" | "recent_original";
+  source: "known_post_id" | "profile_sample" | "voice_rag" | "recent_original";
 };
 
 export type SelectVoiceSamplesInput = {
@@ -75,7 +75,22 @@ export type CreateGenerationGuidanceResolverInput = {
   settingsRepository: Pick<AppSettingsRepository, "load">;
   postLibraryRepository: Pick<PostLibraryRepository, "loadStore">;
   externalPatternGuidanceProvider?: ExternalPatternGuidanceProvider;
+  voiceSampleProvider?: VoiceSampleProvider;
 };
+
+export type VoiceRetrievalRequest = GenerationGuidanceRequest & {
+  limit?: number;
+};
+
+export type VoiceRetrievalSample = VoiceSamplePost & {
+  source: "known_post_id" | "voice_rag" | "recent_original";
+  score?: number;
+  indexedAt?: string;
+};
+
+export type VoiceSampleProvider = (
+  request: VoiceRetrievalRequest,
+) => Promise<VoiceRetrievalSample[]>;
 
 export type GenerationContext = {
   request: GenerationGuidanceRequest;
@@ -410,6 +425,28 @@ const resolveExternalPatternGuidance = async (
   }
 };
 
+const resolveVoiceSamples = async (
+  input: CreateGenerationGuidanceResolverInput,
+  request: GenerationGuidanceRequest,
+): Promise<VoiceSamplePost[]> => {
+  if (input.voiceSampleProvider !== undefined) {
+    try {
+      const samples = await input.voiceSampleProvider(request);
+      if (samples.length > 0) {
+        return samples;
+      }
+    } catch {
+      // Fall through to the existing fail-open repository selector.
+    }
+  }
+
+  return selectVoiceSamples({
+    postLibraryRepository: input.postLibraryRepository,
+    useKnownPostIds: request.useKnownPostIds,
+    voiceProfileId: request.voiceProfileId,
+  });
+};
+
 export const createGenerationGuidanceResolver = (
   input: CreateGenerationGuidanceResolverInput,
 ): GenerationGuidanceResolver => {
@@ -421,11 +458,7 @@ export const createGenerationGuidanceResolver = (
           format: request.format,
           knowledgeBasePath,
         }),
-        selectVoiceSamples({
-          postLibraryRepository: input.postLibraryRepository,
-          useKnownPostIds: request.useKnownPostIds,
-          voiceProfileId: request.voiceProfileId,
-        }),
+        resolveVoiceSamples(input, request),
         resolveExternalPatternGuidance(input.externalPatternGuidanceProvider, request),
       ]);
 

@@ -213,6 +213,36 @@ CREATE TABLE external_x_signal_pattern_evidence (
 CREATE INDEX idx_external_x_signal_pattern_evidence_evidence ON external_x_signal_pattern_evidence(evidence_id);
 `;
 
+const migration4Ddl = `
+CREATE TABLE voice_index_meta (
+  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+  embedder_id TEXT NOT NULL,
+  embedder_version TEXT NOT NULL,
+  dimensions INTEGER NOT NULL,
+  distance_metric TEXT NOT NULL CHECK (distance_metric IN ('cosine')),
+  updated_at TEXT NOT NULL,
+  last_successful_index_at TEXT,
+  last_error_at TEXT,
+  last_error TEXT
+);
+
+CREATE TABLE voice_post_embedding (
+  post_id TEXT PRIMARY KEY REFERENCES post(id) ON DELETE CASCADE,
+  platform_post_id TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  post_updated_at TEXT NOT NULL,
+  embedder_id TEXT NOT NULL,
+  embedder_version TEXT NOT NULL,
+  dimensions INTEGER NOT NULL,
+  vector_blob BLOB NOT NULL,
+  indexed_at TEXT NOT NULL
+);
+CREATE INDEX idx_voice_post_embedding_model
+  ON voice_post_embedding(embedder_id, embedder_version);
+CREATE INDEX idx_voice_post_embedding_content
+  ON voice_post_embedding(content_hash, post_updated_at);
+`;
+
 export type Migration = {
   version: number;
   up(db: DatabaseHandle): void;
@@ -238,6 +268,12 @@ export const migrations: Migration[] = [
     version: 3,
     up(db) {
       db.exec(migration3Ddl);
+    },
+  },
+  {
+    version: 4,
+    up(db) {
+      db.exec(migration4Ddl);
     },
   },
 ];

@@ -44,6 +44,7 @@ arch-recon
 - [`local-persistence-foundation`](./local-persistence-foundation/) — local SQLite corpus store + one-time JSON migration
 - [`my-feedback-loop`](./my-feedback-loop/) — local predicted-vs-actual feedback over captured post performance
 - [`llm-chain-budget-rate-guard`](./llm-chain-budget-rate-guard/) — chain budgets for multi-call LLM flows plus runner-side LLM binding protection
+- [`voice-rag-generation`](./voice-rag-generation/) — local voice retrieval projection on the SQLite corpus for generation grounding
 
 **Next build queue:**
 
@@ -56,6 +57,5 @@ arch-recon
 - [`agent-operator-skill`](./agent-operator-skill/) - agent-run setup and operating skill so users do not manually bootstrap, launch, inspect, and explain the local system
 - [`external-feedback-loop`](./external-feedback-loop/) — external or hosted feedback-signal expansion beyond the local My Feedback Loop
 - [`external-x-import-signals`](./external-x-import-signals/) — external reach signals
-- `voice-rag-generation` — future vector index / voice retrieval on top of the SQLite store
 
 > Folders removed in the overlay pivot (the SPA writer studio era): `be-ui-shell`, `voice-profile`, `writer-logic`, `my-x-data-import`, `my-x-api-sync`, `post-library-manual-import`, `publish-export`. Voice is now corpus-derived (no standalone voice-profile builder); capture replaces API sync. Ticket files under those older feature trees are historical and should not be used as current product truth without checking the feature README and code.

@@ -6,7 +6,7 @@ status: done
 
 Purpose: replace the flat-file JSON corpus store (`post-library.json`) with a single local SQLite database, migrate any existing data into it once, and move all corpus / metric data out of flat files — without changing what the rest of the product sees.
 
-This is the **first** of the four-feature epic that turns x-builder's local data layer from a JSON blob into a real embedded database. It lays the base store (migration 1) and the migration runner that `voice-rag-generation` will extend with the vector index (migrations 2–3). The defining constraint: the `PostLibraryRepository` interface, the `PostLibraryStore` / `PostLibraryWriteResult` shapes, and the `EngineTransport` seam are all **unchanged**. Callers do not know the store moved from JSON to SQLite.
+This is the **first** of the four-feature epic that turns x-builder's local data layer from a JSON blob into a real embedded database. It lays the base store (migration 1) and the migration runner that later local-data features extend. `my-feedback-loop` and `external-x-import-signals` now occupy migrations 2 and 3; `voice-rag-generation` appends the rebuildable voice projection as migration 4. The defining constraint: the `PostLibraryRepository` interface, the `PostLibraryStore` / `PostLibraryWriteResult` shapes, and the `EngineTransport` seam are all **unchanged**. Callers do not know the store moved from JSON to SQLite.
 
 ## Architecture Context
 
@@ -14,7 +14,7 @@ Today the canonical corpus lives in `post-library.json` under the engine storage
 
 This feature swaps the **implementation** behind that interface. A new `SqlitePostLibraryRepository` backs the same 6 methods with prepared-statement transactions against `x-builder.db`. The single database handle is owned by `openEngineDatabase(dbPath)`, which sets the PRAGMAs, runs the ordered `migrations[]`, and is constructed once per host. `loadStore()` reassembles `CanonicalOwnPost[]` from rows and re-parses the whole store through `postLibraryStoreSchema`, so the wire contract literally cannot drift from the JSON era.
 
-The source-of-truth principle: the relational tables (`post`, `metric_obs`, `source_ref`, `profile_snapshot`) are the **canonical, normalized** store of corpus + metric data. The three rows that already carry their own validated Zod payloads (`import_run`, `derived_insight`, `active_context`) keep those payloads verbatim as JSON columns — they are opaque blobs to SQL, owned by their existing schemas. No derived index (vectors, embeddings) lives here; that is migration 2–3 in `voice-rag-generation`.
+The source-of-truth principle: the relational tables (`post`, `metric_obs`, `source_ref`, `profile_snapshot`) are the **canonical, normalized** store of corpus + metric data. The three rows that already carry their own validated Zod payloads (`import_run`, `derived_insight`, `active_context`) keep those payloads verbatim as JSON columns — they are opaque blobs to SQL, owned by their existing schemas. The voice index is a derived projection added later by `voice-rag-generation`; it does not replace these canonical tables.
 
 ## API Endpoints
 
@@ -24,7 +24,7 @@ The one new surface is at **host construction**, not transport: each host (`crea
 
 ## Component Breakdown
 
-- `openEngineDatabase(dbPath)` — owns the `better-sqlite3` `Database` handle. Sets `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`; runs the ordered `migrations[]` against `PRAGMA user_version`; `chmod 0600` on the DB file; throws `PostLibraryStorageError` on any open or migration failure. Defines the `Migration` type and the `migrations[]` array (this feature ships `{ version: 1, up(db) }` only; `voice-rag-generation` appends 2 and 3).
+- `openEngineDatabase(dbPath)` — owns the `better-sqlite3` `Database` handle. Sets `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`; runs the ordered `migrations[]` against `PRAGMA user_version`; `chmod 0600` on the DB file; throws `PostLibraryStorageError` on any open or migration failure. Defines the `Migration` type and the `migrations[]` array. This feature originally shipped migration 1; later features append without editing existing entries.
 - `SqlitePostLibraryRepository` — `implements PostLibraryRepository`. The same 6 methods (`loadStore`, `upsertPosts`, `saveImportRun`, `saveDerivedInsights`, `setActiveContext`, `pushProfileSnapshot`), backed by prepared statements wrapped in `db.transaction(...)`. Ports the merge semantics (`mergePost` / `uniqueBy` / `snapshotKey` / `sourceRefKey` / `postKey`) from the JSON repo verbatim — those semantics are test-enforced.
 - Row↔Zod mappers (`post-row-mapping`) — reconstruct a `CanonicalOwnPost` exactly: `metricSnapshots` discriminated on `source`, `replyReferences` from the `in_reply_to_*` columns, `entityFlags` from the `has_*` columns. The inverse direction shreds a `CanonicalOwnPostInput` into `post` + `metric_obs` + `source_ref` rows.
 - `importPostLibraryJsonToSqlite(jsonRoot, db)` — one-time, idempotent importer. Reads `post-library.json`, parses with `postLibraryStoreSchema` (reusing the shared `upgradePostLibraryStoreToV2` extracted in LPF-003), expands `metricSnapshots`→`metric_obs`, `sourceRefs`→`source_ref`, `profileSnapshots`→`profile_snapshot`, `INSERT OR IGNORE` for idempotency, computes `content_hash` and sets `logical_post_id = platform_post_id`, then renames `post-library.json` → `post-library.json.migrated`. Re-running is a no-op (rename guard + non-empty-table check + `INSERT OR IGNORE`).
@@ -35,7 +35,7 @@ The one new surface is at **host construction**, not transport: each host (`crea
 - `better-sqlite3` — already **declared** in `engine/package.json` at `^11.8.0` (with `@types/better-sqlite3 ^7.6.12`). LPF-001 is a verify-and-document step (confirm the native binding loads on Node 20 + capture rebuild notes), not a fresh dependency add.
 - `@x-builder/shared` — `postLibraryStoreSchema`, `canonicalOwnPostSchema`, `archiveImportRunSchema`, `archiveDerivedInsightsSchema`, `activeArchiveContextSchema`, `archivePostKindSchema`.
 - Existing engine code reused unchanged: the `PostLibraryRepository` interface, `PostLibraryStore`, `PostLibraryWriteResult`, `PostLibraryStorageError`, and the merge helpers (ported, not re-derived).
-- **Not** in this feature: `sqlite-vec`, `@huggingface/transformers`, the embedder, and the `post_vec` table / migrations 2–3 — all belong to `voice-rag-generation`. Zero vector code lands here.
+- **Not** in this feature: voice retrieval, local embeddings, or the voice projection tables — those belong to `voice-rag-generation`. Zero vector code lands here.
 
 ## Sub-Tickets Overview
 

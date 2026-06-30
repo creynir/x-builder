@@ -37,11 +37,18 @@ The database holds the local data x-builder works with:
 | Import-run records | A record of each import that has run |
 | Derived insights | Conclusions x-builder works out from the data above |
 | Active scoring context | The settings currently used to score your drafts |
+| Voice retrieval index | Rebuildable local embeddings used to choose better own-post voice samples for generation |
 
 What it does **not** hold:
 
 - **Raw archive file contents.** When you import an X data export, the database stores the posts that came out of it — not the original archive file itself.
-- **The voice/vector search index.** This is added by a later feature and is not part of this database yet. (Noted here so you're not surprised when it shows up elsewhere later.)
+- **Raw cloud/model data.** The voice retrieval index is local derived data. x-builder does not upload it or store hosted embedding responses.
+
+### Canonical corpus vs. voice index
+
+The post corpus and metric observations are the source of truth. The voice retrieval index is different: it is a rebuildable projection of your own original posts, used only to pick better examples for generation prompts. If the index is missing, stale, or cannot be read, x-builder falls back to recent original posts and keeps generation working.
+
+You should treat both as internal storage. Do not hand-edit the database.
 
 ## The one-time migration
 
@@ -67,4 +74,4 @@ Don't confuse the automatic migration above with **archive import**, which is a 
 
 They are different things. The migration happens on its own once; archive import is a deliberate action you take.
 
-<!-- Tickets: LPF-001..LPF-006 — local SQLite store; verified 2026-06-26 -->
+<!-- Tickets: LPF-001..LPF-006, VRG-001..VRG-006 — local SQLite store + local voice index; verified 2026-06-29 -->

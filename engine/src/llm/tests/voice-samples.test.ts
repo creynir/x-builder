@@ -11,6 +11,7 @@ import {
   type RenderedVoiceSamples,
   type SelectVoiceSamplesInput,
   type VoiceSamplePost,
+  type VoiceRetrievalSample,
 } from "../generation-guidance";
 
 const BASE_DATE = "2026-06-01T00:00:00.000Z";
@@ -99,6 +100,13 @@ describe("voice sample selection", () => {
       charCount: number;
       truncated: boolean;
     }>();
+
+    expectTypeOf<VoiceSamplePost["source"]>().toEqualTypeOf<
+      "known_post_id" | "profile_sample" | "voice_rag" | "recent_original"
+    >();
+    expectTypeOf<VoiceRetrievalSample["source"]>().toEqualTypeOf<
+      "known_post_id" | "voice_rag" | "recent_original"
+    >();
   });
 
   it("selects newest originals by createdAt descending when no known ids are supplied", async () => {

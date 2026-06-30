@@ -52,6 +52,7 @@ import {
   type PostLibraryRepository,
   type ReadinessService,
   type StructuredLlmService,
+  type VoiceSampleProvider,
 } from "@x-builder/engine";
 import type {
   AnalyzePostsRequest,
@@ -80,6 +81,7 @@ export interface CreateBoundEngineServicesOptions {
   externalXSignalsService?: ExternalXSignalsService;
   externalPatternGuidanceProvider?: ExternalPatternGuidanceProvider;
   externalPatternSnapshotReader?: ExternalPatternSnapshotReader;
+  voiceSampleProvider?: VoiceSampleProvider;
   /** Structured-LLM gateway for generate / apply-suggestions / suggest. */
   llm: StructuredLlmGateway;
   /** Judge gateway for judgeDraft and the generate/apply judge passes. */
@@ -235,6 +237,9 @@ export function createBoundEngineServices(
       ...(externalPatternGuidanceProvider === undefined
         ? {}
         : { externalPatternGuidanceProvider }),
+      ...(options.voiceSampleProvider === undefined
+        ? {}
+        : { voiceSampleProvider: options.voiceSampleProvider }),
     }),
   );
   const applyJudgeSuggestionsService = new ApplyJudgeSuggestionsService(
