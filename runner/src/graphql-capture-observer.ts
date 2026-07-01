@@ -39,6 +39,7 @@ export type GraphQlCaptureObservation = {
   body: unknown;
   capturedAt: string;
   posts: CaptureIngestRequest["posts"];
+  observedThreadPosts: CaptureIngestRequest["observedThreadPosts"];
   profile?: CaptureIngestRequest["profile"];
 };
 
@@ -113,6 +114,10 @@ export class GraphQlCaptureObserver {
       }
 
       const posts = XGraphQlNormalizer.normalizeUserTweets(body, capturedAt);
+      const observedThreadPosts =
+        opName === PROFILE_OPERATION
+          ? []
+          : XGraphQlNormalizer.normalizeObservedThreadPosts(body, capturedAt);
       const profile =
         opName === PROFILE_OPERATION
           ? XGraphQlNormalizer.normalizeUserProfile(body, capturedAt)
@@ -124,6 +129,7 @@ export class GraphQlCaptureObserver {
           body,
           capturedAt,
           posts,
+          observedThreadPosts,
           ...(profile ? { profile } : {}),
         })
       ) {
@@ -143,10 +149,11 @@ export class GraphQlCaptureObserver {
 
       const batch: CaptureIngestRequest = {
         posts,
+        observedThreadPosts,
         ...(profile ? { profile } : {}),
       };
 
-      if (posts.length === 0 && !profile) {
+      if (posts.length === 0 && observedThreadPosts.length === 0 && !profile) {
         // Nothing to ingest.
         return;
       }

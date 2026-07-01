@@ -212,7 +212,22 @@ describe("POST /drafts/apply-suggestions", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(seenRequests).toEqual([{ text: "good point", replyContext }]);
+      expect(seenRequests).toHaveLength(1);
+      expect(seenRequests[0]).toMatchObject({
+        text: "good point",
+        replyContext: {
+          ...replyContext,
+          replyThreadContext: {
+            currentTarget: {
+              statusId: replyContext.targetStatusId,
+              text: replyContext.targetText,
+            },
+            replyThreadContextDiagnostics: {
+              status: "same_dialog_only",
+            },
+          },
+        },
+      });
 
       const body = applyJudgeSuggestionsResponseSchema.parse(parseJson(response.body));
       expect(body.text).toBe(rewrittenText);

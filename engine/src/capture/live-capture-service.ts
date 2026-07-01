@@ -2,6 +2,7 @@ import {
   captureSummarySchema,
   liveCapturedPostSchema,
   liveCapturedProfileSchema,
+  replyThreadPostSchema,
   type CaptureIngestRequest,
   type CaptureIngestResponse,
   type CaptureSummary,
@@ -14,6 +15,7 @@ import {
   type LiveMetricSnapshot,
   type PostLibraryRepository,
 } from "../server/post-library-repository.js";
+import type { ObservedThreadRepository } from "../reply-thread-context-repository.js";
 
 // Validate the request envelope (post-count ceiling, optional profile) without
 // rejecting the whole batch when a single post is malformed. Individual posts are
@@ -22,6 +24,7 @@ import {
 const captureIngestEnvelopeSchema = z.object({
   posts: z.array(z.unknown()).max(200).default([]),
   profile: liveCapturedProfileSchema.optional(),
+  observedThreadPosts: z.array(z.unknown()).max(400).default([]),
 });
 
 const buildLiveMetricSnapshot = (post: LiveCapturedPost): LiveMetricSnapshot => {
@@ -43,6 +46,7 @@ const buildLiveMetricSnapshot = (post: LiveCapturedPost): LiveMetricSnapshot => 
 export class LiveCaptureService {
   constructor(
     private readonly repo: PostLibraryRepository,
+    private readonly observedThreadRepository?: ObservedThreadRepository,
     private readonly now: () => string = () => new Date().toISOString(),
   ) {}
 
@@ -50,6 +54,7 @@ export class LiveCaptureService {
     const parsed = captureIngestEnvelopeSchema.parse(request);
     const captureSessionId = crypto.randomUUID();
     const inputs: CanonicalOwnPostInput[] = [];
+    const observedThreadPosts: CaptureIngestRequest["observedThreadPosts"] = [];
     const seenPlatformPostIds = new Set<string>();
     let inBatchDuplicateCount = 0;
 
@@ -66,7 +71,6 @@ export class LiveCaptureService {
       }
 
       const post = result.data;
-
       // In-batch duplicates resolve to the first occurrence (the live merge logic in
       // the repository is last-write-wins for cross-call updates; an intra-batch repeat
       // must not let a later item clobber the earlier one). Drop the repeat and count it.
@@ -75,6 +79,30 @@ export class LiveCaptureService {
         continue;
       }
       seenPlatformPostIds.add(post.platformPostId);
+
+      const observedResult = replyThreadPostSchema.safeParse({
+        source: "x_live_capture",
+        statusId: post.platformPostId,
+        text: post.text,
+        createdAt: post.createdAt,
+        ...(post.replyReferences.inReplyToPostId === undefined
+          ? {}
+          : { inReplyToStatusId: post.replyReferences.inReplyToPostId }),
+        ...(post.replyReferences.inReplyToUserId === undefined
+          ? {}
+          : { inReplyToUserId: post.replyReferences.inReplyToUserId }),
+        weakMetrics: post.liveMetrics,
+        observedAt: post.capturedAt,
+      });
+
+      if (observedResult.success) {
+        observedThreadPosts.push(observedResult.data);
+      } else {
+        console.warn(
+          "[live-capture] skipping malformed own observed thread projection",
+          observedResult.error.flatten(),
+        );
+      }
 
       inputs.push({
         id: crypto.randomUUID(),
@@ -98,7 +126,25 @@ export class LiveCaptureService {
       });
     }
 
+    for (const rawPost of parsed.observedThreadPosts) {
+      const result = replyThreadPostSchema.safeParse(rawPost);
+
+      if (!result.success) {
+        console.warn(
+          "[live-capture] skipping malformed observed thread post",
+          result.error.flatten(),
+        );
+        continue;
+      }
+
+      observedThreadPosts.push(result.data);
+    }
+
     const writeResult = await this.repo.upsertPosts(inputs);
+
+    if (this.observedThreadRepository !== undefined && observedThreadPosts.length > 0) {
+      await this.observedThreadRepository.upsertThreadPosts(observedThreadPosts);
+    }
 
     if (parsed.profile !== undefined) {
       await this.repo.pushProfileSnapshot(parsed.profile);

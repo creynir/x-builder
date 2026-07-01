@@ -28,6 +28,7 @@ import {
   judgeDraftRequestSchema,
   judgeVerdictSchema,
   replyComposerContextSchema,
+  replyThreadPostSchema,
   type ReplyComposerContext,
 } from "../../index.js";
 
@@ -393,7 +394,9 @@ describe("reply composer context schema", () => {
     }
 
     for (const targetUrl of [
+      "ftp://x.com/context_builder/status/1930000000000000000",
       "https://example.com/context_builder/status/1930000000000000000",
+      "https://x.com/context-builder/status/1930000000000000000",
       "https://x.com/context_builder",
       "not a url",
     ]) {
@@ -409,6 +412,18 @@ describe("reply composer context schema", () => {
       replyComposerContextSchema.safeParse({
         ...validReplyComposerContext,
         targetUrl: "https://x.com/context_builder/status/" + "1".repeat(4_100),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects thread post urls that contradict the status id", () => {
+    expect(
+      replyThreadPostSchema.safeParse({
+        source: "x_graphql_observed",
+        statusId: "1930000000000000000",
+        url: "https://x.com/context_builder/status/1930000000000000001",
+        text: "A thread post.",
+        observedAt: "2026-07-01T08:00:00.000Z",
       }).success,
     ).toBe(false);
   });

@@ -23,6 +23,11 @@ export {
   type Migration,
 } from "./server/open-engine-database.js";
 export { SqlitePostLibraryRepository } from "./server/sqlite-post-library-repository.js";
+export { SqliteObservedThreadRepository } from "./server/sqlite-observed-thread-repository.js";
+export type {
+  ObservedThreadRepository,
+  ObservedThreadWriteResult,
+} from "./reply-thread-context-repository.js";
 export { makeTempEngineDb, seedPosts } from "./server/sqlite-test-helpers.js";
 export { normalizeFeedbackContent, normalizeFeedbackContentHash } from "./feedback/normalize-feedback-content-hash.js";
 export type { FeedbackLoopRepository } from "./feedback/feedback-loop-repository.js";

@@ -244,6 +244,34 @@ function RecommendationsList({ result }: { result: ScoredPostItem }): ReactEleme
   );
 }
 
+function ReplyThreadDiagnostics({ result }: { result: ScoredPostItem }): ReactElement | null {
+  const diagnostics = result.replyThreadContextDiagnostics;
+  if (diagnostics === undefined || diagnostics.status === "thread_ready") {
+    return null;
+  }
+
+  const messages =
+    diagnostics.uiMessages.length > 0
+      ? diagnostics.uiMessages
+      : diagnostics.missing.map((entry) => {
+          const target = entry.statusId === undefined ? "" : ` (${entry.statusId})`;
+          return `Missing ${entry.field.replaceAll("_", " ")}${target}.`;
+        });
+
+  if (messages.length === 0) return null;
+
+  return (
+    <Alert variant={diagnostics.status === "blocked_missing_required_parent" ? "danger" : "warning"}>
+      <span>Reply context incomplete</span>
+      <ul style={{ ...LIST_STYLE, marginTop: "var(--space-1)" }}>
+        {messages.map((message, index) => (
+          <li key={`${index}:${message}`}>{message}</li>
+        ))}
+      </ul>
+    </Alert>
+  );
+}
+
 /** The ready-state body: headline ScoreBar, cooldown, Post Coach, reach, recs. */
 function ReadyBody({
   result,
@@ -263,6 +291,7 @@ function ReadyBody({
           <Badge variant="warning">{cooldown.message}</Badge>
         </div>
       ) : null}
+      <ReplyThreadDiagnostics result={result} />
       <ReachPredictionBlock result={result} />
       <PostCoachStrip result={result} source={source} />
       <RecommendationsList result={result} />

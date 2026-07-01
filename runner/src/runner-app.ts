@@ -33,6 +33,7 @@ import {
   NodeProcessRunner,
   SqliteFeedbackLoopRepository,
   SqliteExternalXSignalsRepository,
+  SqliteObservedThreadRepository,
   SqlitePostLibraryRepository,
   StructuredLlmService,
   ArchiveVoiceProfileService,
@@ -220,7 +221,8 @@ const defaultCreateServices = (opts: { engineSettingsDir: string }): EngineServi
   const externalXSignalsService = new ExternalXSignalsService({
     repository: externalXSignalsRepository,
   });
-  const liveCapture = new LiveCaptureService(postLibraryRepository);
+  const observedThreadRepository = new SqliteObservedThreadRepository(db);
+  const liveCapture = new LiveCaptureService(postLibraryRepository, observedThreadRepository);
 
   return {
     liveCapture,

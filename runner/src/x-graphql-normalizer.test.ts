@@ -17,8 +17,10 @@ import { describe, expect, it } from "vitest";
 import {
   liveCapturedPostSchema,
   liveCapturedProfileSchema,
+  replyThreadPostSchema,
   type LiveCapturedPost,
   type LiveCapturedProfile,
+  type ReplyThreadPost,
 } from "@x-builder/shared";
 
 import { XGraphQlNormalizer } from "./x-graphql-normalizer";
@@ -56,6 +58,30 @@ describe("normalizeUserTweets — well-formed UserTweets timeline", () => {
       expect(liveCapturedPostSchema.safeParse(post).success).toBe(true);
       expect(post.capturedAt).toBe(CAPTURED_AT);
     }
+  });
+
+  it("also emits observed thread posts without requiring unavailable author fields", () => {
+    const posts: ReplyThreadPost[] = XGraphQlNormalizer.normalizeObservedThreadPosts(
+      userTweetsValid,
+      CAPTURED_AT,
+    );
+
+    expect(posts).toHaveLength(3);
+    for (const post of posts) {
+      expect(replyThreadPostSchema.safeParse(post).success).toBe(true);
+      expect(post.source).toBe("x_graphql_observed");
+      expect(post.observedAt).toBe(CAPTURED_AT);
+    }
+    expect(posts[1]).toMatchObject({
+      statusId: "1700000000000000002",
+      inReplyToStatusId: "1699999999999999999",
+      weakMetrics: {
+        impressions: 3120,
+        likes: 7,
+      },
+    });
+    expect(posts[1]?.authorHandle).toBeUndefined();
+    expect(posts[1]?.url).toBeUndefined();
   });
 
   it("classifies kinds as original, reply, and repost_reference in timeline order", () => {

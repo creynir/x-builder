@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { replyThreadPostSchema } from "./reply-thread-context.js";
 
 export const liveCapturedPostSchema = z.object({
   platformPostId: z.string().max(160),
@@ -41,6 +42,7 @@ export const liveCapturedProfileSchema = z.object({
 export const captureIngestRequestSchema = z.object({
   posts: z.array(liveCapturedPostSchema).max(200).default([]),
   profile: liveCapturedProfileSchema.optional(),
+  observedThreadPosts: z.array(replyThreadPostSchema).max(400).optional(),
 });
 
 export const captureIngestResponseSchema = z.object({
