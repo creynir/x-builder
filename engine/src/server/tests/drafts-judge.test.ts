@@ -127,8 +127,23 @@ describe("POST /drafts/judge", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(judge).toHaveBeenCalledWith("good point", undefined, {
-        replyContext,
+      expect(judge).toHaveBeenCalledTimes(1);
+      const [, , options] = judge.mock.calls[0] as unknown as [
+        string,
+        string | undefined,
+        { replyContext?: ReplyComposerContext },
+      ];
+      expect(options?.replyContext).toMatchObject({
+        ...replyContext,
+        replyThreadContext: {
+          currentTarget: {
+            statusId: replyContext.targetStatusId,
+            text: replyContext.targetText,
+          },
+          replyThreadContextDiagnostics: {
+            status: "same_dialog_only",
+          },
+        },
       });
 
       const body = judgeDraftResponseSchema.parse(parseJson(response.body));

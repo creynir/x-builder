@@ -315,7 +315,21 @@ describe("POST /ideas/generate", () => {
 
       expect(response.statusCode).toBe(200);
       expect(generateCandidates).toHaveBeenCalledTimes(1);
-      expect(generateCandidates).toHaveBeenCalledWith(body);
+      expect(generateCandidates.mock.calls[0]?.[0]).toMatchObject({
+        ...body,
+        replyContext: {
+          ...replyContext,
+          replyThreadContext: {
+            currentTarget: {
+              statusId: replyContext.targetStatusId,
+              text: replyContext.targetText,
+            },
+            replyThreadContextDiagnostics: {
+              status: "same_dialog_only",
+            },
+          },
+        },
+      });
 
       const result = generateIdeaResponseSchema.parse(parseJson(response.body));
       expect(result.candidates).toHaveLength(3);
