@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { makeTempEngineDb, seedPosts } from "../../server/sqlite-test-helpers.js";
+import { SqliteGeneratedReplyLedgerRepository } from "../../generated-replies/sqlite-generated-reply-ledger-repository.js";
 import type { CanonicalOwnPost } from "../../server/post-library-repository.js";
 import { createLocalHashingVoiceEmbedder } from "../voice-embedder.js";
 import { VoiceIndexService } from "../voice-index-service.js";
@@ -82,6 +83,40 @@ describe("SqliteVoiceSampleProvider", () => {
 
     expect(samples.map((sample) => sample.id)).toEqual(["original"]);
     expect(samples[0]?.source).toBe("voice_rag");
+  });
+
+  it("excludes exact generated reply hashes from known, vector, and recent samples", async () => {
+    const db = makeTempEngineDb();
+    const embedder = createLocalHashingVoiceEmbedder();
+    await seedPosts(db, [
+      canonicalPost({
+        id: "generated-known",
+        platformPostId: "generated-known-platform",
+        text: "Generated reply text.",
+        createdAt: "2026-06-03T00:00:00.000Z",
+      }),
+      canonicalPost({
+        id: "original",
+        platformPostId: "original-platform",
+        text: "Original voice sample.",
+        createdAt: "2026-06-02T00:00:00.000Z",
+      }),
+    ]);
+    await new SqliteGeneratedReplyLedgerRepository(db).recordGeneratedReply({
+      clientEventId: "event-1",
+      bodyText: "Generated reply text.",
+      writtenText: "@alice Generated reply text.",
+    });
+    new VoiceIndexService({ db, embedder, now: () => ISO }).ensureVoiceIndex();
+
+    const provider = new SqliteVoiceSampleProvider({ db, embedder });
+    const samples = await provider.provide({
+      format: "insight_share",
+      idea: "generated reply text",
+      useKnownPostIds: ["generated-known-platform"],
+    });
+
+    expect(samples.map((sample) => sample.id)).toEqual(["original"]);
   });
 
   it("falls back to newest originals when indexing is unavailable", async () => {

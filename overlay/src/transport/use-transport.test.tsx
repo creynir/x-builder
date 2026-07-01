@@ -44,7 +44,7 @@ afterEach(() => {
 });
 
 describe("FakeEngineTransport — shape", () => {
-  it("implements exactly the 24 real EngineTransport methods", () => {
+  it("implements exactly the 26 real EngineTransport methods", () => {
     const fake = new FakeEngineTransport();
     const ownMethods = METHOD_NAMES.filter(
       (name) =>
@@ -52,9 +52,9 @@ describe("FakeEngineTransport — shape", () => {
         "function",
     );
 
-    expect(METHOD_NAMES).toHaveLength(24);
+    expect(METHOD_NAMES).toHaveLength(26);
     expect(new Set(ownMethods)).toEqual(new Set(METHOD_NAMES));
-    expect(ownMethods).toHaveLength(24);
+    expect(ownMethods).toHaveLength(26);
   });
 
   it("is assignable to the real EngineTransport type (TS-enforced)", () => {
@@ -139,7 +139,7 @@ describe("useTransport inside OverlayTransportProvider", () => {
 
     await vi.waitFor(() => {
       expect(failure).toBeNull();
-      expect(results).toHaveLength(24);
+      expect(results).toHaveLength(26);
     });
   });
 });

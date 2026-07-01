@@ -11,6 +11,7 @@ import type {
   PostLibraryStore,
 } from "../../server/post-library-repository.js";
 import type { AppSettingsRepository } from "../../server/settings-repository.js";
+import type { GeneratedReplyLedgerRepository } from "../../generated-replies/generated-reply-ledger-repository.js";
 import type {
   ArchiveVoiceProfile,
   CreateGenerationGuidanceResolverInput,
@@ -434,6 +435,10 @@ describe("generation guidance resolver", () => {
     expectTypeOf<CreateGenerationGuidanceResolverInput>().toEqualTypeOf<{
       settingsRepository: Pick<AppSettingsRepository, "load">;
       postLibraryRepository: Pick<PostLibraryRepository, "loadStore">;
+      generatedReplyLedgerRepository?: Pick<
+        GeneratedReplyLedgerRepository,
+        "isGeneratedReplyText"
+      >;
       externalPatternGuidanceProvider?: ExternalPatternGuidanceProvider;
       archiveVoiceProfileProvider?: ArchiveVoiceProfileProvider;
       voiceSampleProvider?: VoiceSampleProvider;

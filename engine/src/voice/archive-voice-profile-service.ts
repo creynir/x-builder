@@ -218,6 +218,11 @@ export class ArchiveVoiceProfileService {
         FROM post
         WHERE kind IN ('original', 'reply')
           AND length(trim(text)) > 0
+          AND NOT EXISTS (
+            SELECT 1
+            FROM generated_reply gr
+            WHERE post.normalized_text_hash IN (gr.body_text_hash, gr.written_text_hash)
+          )
         ORDER BY created_at DESC, id ASC
       `,
       )

@@ -2,6 +2,7 @@ import { chmodSync } from "node:fs";
 
 import Database from "better-sqlite3";
 
+import { generatedReplyContentHash } from "../generated-replies/normalize-generated-reply.js";
 import { PostLibraryStorageError } from "./post-library-repository.js";
 
 type DatabaseHandle = Database.Database;
@@ -314,6 +315,30 @@ SELECT status_id, source, observed_at, observed_at, updated_at
 FROM observed_thread_post;
 `;
 
+const migration8Ddl = `
+CREATE TABLE generated_reply (
+  id TEXT PRIMARY KEY,
+  client_event_id TEXT UNIQUE NOT NULL,
+  body_text TEXT NOT NULL,
+  written_text TEXT NOT NULL,
+  body_text_hash TEXT NOT NULL,
+  written_text_hash TEXT NOT NULL,
+  target_status_id TEXT,
+  chosen_variant_id TEXT,
+  reply_move TEXT,
+  generated_at TEXT NOT NULL,
+  recorded_at TEXT NOT NULL
+);
+CREATE INDEX idx_generated_reply_body_text_hash ON generated_reply(body_text_hash);
+CREATE INDEX idx_generated_reply_written_text_hash ON generated_reply(written_text_hash);
+CREATE INDEX idx_generated_reply_target_status_id ON generated_reply(target_status_id);
+`;
+
+const migration8PostDdl = `
+ALTER TABLE post ADD COLUMN normalized_text_hash TEXT;
+CREATE INDEX idx_post_normalized_text_hash ON post(normalized_text_hash);
+`;
+
 export type Migration = {
   version: number;
   up(db: DatabaseHandle): void;
@@ -363,6 +388,31 @@ export const migrations: Migration[] = [
     version: 7,
     up(db) {
       db.exec(migration7Ddl);
+    },
+  },
+  {
+    version: 8,
+    up(db) {
+      db.exec(migration8Ddl);
+
+      const hasPostTable = db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+        .get("post");
+      if (!hasPostTable) {
+        return;
+      }
+
+      db.exec(migration8PostDdl);
+
+      const rows = db.prepare("SELECT id, text FROM post").all() as Array<{
+        id: string;
+        text: string;
+      }>;
+      const update = db.prepare("UPDATE post SET normalized_text_hash = ? WHERE id = ?");
+
+      for (const row of rows) {
+        update.run(generatedReplyContentHash(row.text), row.id);
+      }
     },
   },
 ];

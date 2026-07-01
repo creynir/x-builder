@@ -9,13 +9,13 @@
  *
  * WHAT THIS SUITE DRIVES (the build XOB hands the Green agent):
  *   1. A real `BoundEngineServices` adapter bundle — a constructed object that
- *      wires every engine service the 24 bindings map to, consumed by
+ *      wires every engine service the 26 bindings map to, consumed by
  *      `ExposeFunctionTransport.bindAll`. Exposed as a factory from the runner
  *      package (imported below as `createBoundEngineServices`). It does NOT
  *      exist yet, so the import fails to resolve — the intended Red state
  *      (missing implementation, not a broken test).
  *   2. `RunnerApp` default wiring: with NO `bindTransport`/`attachObserver`
- *      injected, `start()` must register exactly the 24 `__xbuilder_*` bindings
+ *      injected, `start()` must register exactly the 26 `__xbuilder_*` bindings
  *      on the page and register a single response listener on the context.
  *   3. Arg-shape adapters: `judgeDraft` maps `req → judge(req.text,
  *      req.accountProfile)` and unwraps `JudgeDraftOutcome → JudgeDraftResponse`;
@@ -409,11 +409,11 @@ function llmBusyErrorFor(method: string) {
 }
 
 // ===========================================================================
-// Invariant #1 — bindings are 1:1 with EngineTransport (exactly the 24 names).
+// Invariant #1 — bindings are 1:1 with EngineTransport (exactly the 26 names).
 // ===========================================================================
 
 describe("real engine bundle — binding registration (invariant #1)", () => {
-  it("binds exactly the 24 __xbuilder_* names enumerated from EngineTransport", async () => {
+  it("binds exactly the 26 __xbuilder_* names enumerated from EngineTransport", async () => {
     const { services } = buildBundle();
     const mockPage = createMockPage();
 
@@ -422,9 +422,9 @@ describe("real engine bundle — binding registration (invariant #1)", () => {
     const expected = Object.values(ENGINE_TRANSPORT_BINDINGS).slice().sort();
     const registered = [...mockPage.handlers.keys()].sort();
 
-    expect(expected).toHaveLength(24);
+    expect(expected).toHaveLength(26);
     expect(registered).toEqual(expected);
-    expect(registered).toHaveLength(24);
+    expect(registered).toHaveLength(26);
   });
 
   it("does not add an external-feedback generate method beyond the existing transport surface", async () => {
@@ -436,8 +436,10 @@ describe("real engine bundle — binding registration (invariant #1)", () => {
     const methods = Object.keys(ENGINE_TRANSPORT_BINDINGS);
     const registered = [...mockPage.handlers.keys()];
 
-    expect(methods).toHaveLength(24);
+    expect(methods).toHaveLength(26);
     expect(methods).toContain("generateIdeas");
+    expect(methods).toContain("generateReplyVariants");
+    expect(methods).toContain("recordGeneratedReply");
     expect(methods).not.toContain("generateExternalFeedback");
     expect(methods).not.toContain("generateWithExternalFeedback");
     expect(methods).not.toContain("getExternalPatternGuidance");
@@ -982,7 +984,7 @@ describe("RunnerApp default wiring — transport + observer", () => {
     return path;
   }
 
-  it("registers all 24 __xbuilder_* bindings on the page with NO bindTransport override", async () => {
+  it("registers all 26 __xbuilder_* bindings on the page with NO bindTransport override", async () => {
     const fake = createFakeContext();
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -1000,7 +1002,7 @@ describe("RunnerApp default wiring — transport + observer", () => {
 
     const expected = Object.values(ENGINE_TRANSPORT_BINDINGS).slice().sort();
     expect([...fake.exposed.keys()].sort()).toEqual(expected);
-    expect(fake.exposed.size).toBe(24);
+    expect(fake.exposed.size).toBe(26);
   });
 
   it("attaches external and own response listeners on the context with NO attachObserver override", async () => {

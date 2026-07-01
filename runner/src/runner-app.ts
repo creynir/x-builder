@@ -333,7 +333,7 @@ export class RunnerApp {
     this.launchBrowser = options.launchBrowser ?? ((opts) => BrowserController.launch(opts));
     this.connectBrowser =
       options.connectBrowser ?? ((endpoint) => chromium.connectOverCDP(endpoint));
-    // The real (XOB-030) defaults: bind the 24 engine bindings through
+    // The real (XOB-030) defaults: bind the 26 engine bindings through
     // ExposeFunctionTransport, and observe X GraphQL responses for live capture.
     // An injected override still wins, keeping every seam testable.
     this.bindTransport = options.bindTransport ?? ((page, services) => this.defaultBindTransport(page, services));
@@ -586,7 +586,7 @@ export class RunnerApp {
       await page.evaluate(overlayBundle);
     }
 
-    // Same order as launch mode: bind the 24 bindings (exposeFunction works over
+    // Same order as launch mode: bind the 26 bindings (exposeFunction works over
     // connectOverCDP), attach the capture observer, then bootstrap the overlay.
     await this.bindTransport(page, services);
     await this.attachObserver(context, (batch) => services.liveCapture.ingest(batch), services);

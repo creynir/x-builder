@@ -41,6 +41,12 @@ import type {
   GenerateIdeaRequest,
   GenerateIdeaResponse,
 } from "./shell.js";
+import type {
+  GenerateReplyVariantsRequest,
+  GenerateReplyVariantsResponse,
+  RecordGeneratedReplyRequest,
+  RecordGeneratedReplyResponse,
+} from "./reply-variant-assistant.js";
 import type { SuggestPostRequest, SuggestPostResponse } from "./suggest-post.js";
 
 // ---------------------------------------------------------------------------
@@ -59,6 +65,8 @@ export const __xbuilder_deactivateContext = "__xbuilder_deactivateContext" as co
 export const __xbuilder_analyzePosts = "__xbuilder_analyzePosts" as const;
 export const __xbuilder_judgeDraft = "__xbuilder_judgeDraft" as const;
 export const __xbuilder_generateIdeas = "__xbuilder_generateIdeas" as const;
+export const __xbuilder_generateReplyVariants = "__xbuilder_generateReplyVariants" as const;
+export const __xbuilder_recordGeneratedReply = "__xbuilder_recordGeneratedReply" as const;
 export const __xbuilder_suggestPost = "__xbuilder_suggestPost" as const;
 export const __xbuilder_getCooldown = "__xbuilder_getCooldown" as const;
 export const __xbuilder_getCaptureSummary = "__xbuilder_getCaptureSummary" as const;
@@ -97,6 +105,8 @@ export const ENGINE_TRANSPORT_BINDINGS: EngineTransportBindings &
   analyzePosts: __xbuilder_analyzePosts,
   judgeDraft: __xbuilder_judgeDraft,
   generateIdeas: __xbuilder_generateIdeas,
+  generateReplyVariants: __xbuilder_generateReplyVariants,
+  recordGeneratedReply: __xbuilder_recordGeneratedReply,
   suggestPost: __xbuilder_suggestPost,
   getCooldown: __xbuilder_getCooldown,
   getCaptureSummary: __xbuilder_getCaptureSummary,
@@ -112,7 +122,7 @@ export const ENGINE_TRANSPORT_BINDINGS: EngineTransportBindings &
 });
 
 // ---------------------------------------------------------------------------
-// EngineTransport interface — 24 methods, structured-clone-safe JSON payloads
+// EngineTransport interface — 26 methods, structured-clone-safe JSON payloads
 // ---------------------------------------------------------------------------
 
 export interface EngineTransport {
@@ -128,6 +138,8 @@ export interface EngineTransport {
   analyzePosts(request: AnalyzePostsRequest): Promise<AnalyzePostsResponse>;
   judgeDraft(request: JudgeDraftRequest): Promise<JudgeDraftResponse>;
   generateIdeas(request: GenerateIdeaRequest): Promise<GenerateIdeaResponse>;
+  generateReplyVariants(request: GenerateReplyVariantsRequest): Promise<GenerateReplyVariantsResponse>;
+  recordGeneratedReply(request: RecordGeneratedReplyRequest): Promise<RecordGeneratedReplyResponse>;
   suggestPost(request: SuggestPostRequest): Promise<SuggestPostResponse>;
   getCooldown(windowDays?: number): Promise<CooldownReport>;
   getCaptureSummary(): Promise<CaptureSummary>;

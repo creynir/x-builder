@@ -1,6 +1,6 @@
 /**
  * BoundEngineServices adapter bundle (XOB-030) — constructs every in-process
- * engine service the 24 `__xbuilder_*` transport bindings map to and adapts each
+ * engine service the 26 `__xbuilder_*` transport bindings map to and adapts each
  * to the structural {@link BoundEngineServices} surface `ExposeFunctionTransport`
  * routes through.
  *
@@ -34,10 +34,12 @@ import {
   ExternalXSignalsService,
   GenerateCategoryService,
   GenerateIdeasService,
+  GenerateReplyVariantsService,
   JsonFileAppSettingsRepository,
   JudgeDraftService,
   SqliteFeedbackLoopRepository,
   SqliteExternalXSignalsRepository,
+  SqliteGeneratedReplyLedgerRepository,
   LiveCaptureService,
   LiveContextResolver,
   RepetitionWindowService,
@@ -50,6 +52,7 @@ import {
   createSettingsJudgeProviderResolver,
   type ExternalPatternGuidanceProvider,
   type ExternalPatternSnapshotReader,
+  type GeneratedReplyLedgerRepository,
   type ArchiveVoiceProfileProvider,
   type JudgeLlmGateway,
   type PostLibraryRepository,
@@ -84,6 +87,7 @@ export interface CreateBoundEngineServicesOptions {
   externalXSignalsService?: ExternalXSignalsService;
   externalPatternGuidanceProvider?: ExternalPatternGuidanceProvider;
   externalPatternSnapshotReader?: ExternalPatternSnapshotReader;
+  generatedReplyLedgerRepository?: GeneratedReplyLedgerRepository;
   archiveVoiceProfileProvider?: ArchiveVoiceProfileProvider;
   voiceSampleProvider?: VoiceSampleProvider;
   /** Structured-LLM gateway for generate / apply-suggestions / suggest. */
@@ -205,6 +209,9 @@ export function createBoundEngineServices(
   const defaultKnowledgeBasePath = resolveDefaultKnowledgeBasePath(runnerPackageRoot);
 
   const judgeDraftService = new JudgeDraftService(judgeLlm, resolveProvider);
+  const generatedReplyLedgerRepository =
+    options.generatedReplyLedgerRepository ??
+    new SqliteGeneratedReplyLedgerRepository(openEngineDatabase(":memory:"));
   const generateIdeasService = new GenerateIdeasService(
     structuredLlm,
     judgeDraftService,
@@ -214,6 +221,7 @@ export function createBoundEngineServices(
     createGenerationGuidanceResolver({
       settingsRepository,
       postLibraryRepository,
+      generatedReplyLedgerRepository,
       ...(externalPatternGuidanceProvider === undefined
         ? {}
         : { externalPatternGuidanceProvider }),
@@ -227,6 +235,10 @@ export function createBoundEngineServices(
         ? {}
         : { defaultKnowledgeBasePath }),
     }),
+  );
+  const replyVariantGenerationService = new GenerateReplyVariantsService(
+    structuredLlm,
+    resolveProvider,
   );
   const applyJudgeSuggestionsService = new ApplyJudgeSuggestionsService(
     judgeDraftService,
@@ -324,6 +336,15 @@ export function createBoundEngineServices(
 
     generateIdeasService: {
       generate: (request) => generateIdeasService.generate(request),
+    },
+
+    replyVariantGenerationService: {
+      generate: (request) => replyVariantGenerationService.generate(request),
+    },
+
+    generatedReplyLedgerService: {
+      recordGeneratedReply: (request) =>
+        generatedReplyLedgerRepository.recordGeneratedReply(request),
     },
 
     suggestPostService: {

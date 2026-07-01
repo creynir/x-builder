@@ -20,9 +20,11 @@ import {
   type FeedbackPredictionAction,
   type GenerateCategory,
   type GeneratedIdeaCandidate,
+  type GenerateReplyVariantsResponse,
   type JudgeVerdict,
   type OverlayReadiness,
   type ReplyComposerContext,
+  type ReplyVariant,
 } from "@x-builder/shared";
 import {
   useCallback,
@@ -31,6 +33,7 @@ import {
   useReducer,
   useRef,
   useState,
+  type CSSProperties,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -74,6 +77,44 @@ const STACK_BREAKPOINT_PX = 1180;
 
 /** The composer-text → analyze debounce window (matches the ticket's 350 ms). */
 const ANALYZE_DEBOUNCE_MS = 350;
+
+const REPLY_ASSISTANT_ROOT_STYLE: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  overflowX: "hidden",
+  pointerEvents: "none",
+  zIndex: "var(--xb-z-pin)",
+};
+
+const REPLY_ASSISTANT_STACKED_STYLE: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "var(--space-4)",
+  padding: "var(--space-4)",
+  overflowY: "auto",
+};
+
+const REPLY_ASSISTANT_PIN_BASE: CSSProperties = {
+  position: "absolute",
+  overflow: "auto",
+  overscrollBehavior: "contain",
+  maxHeight: "80vh",
+  width: "360px",
+  pointerEvents: "auto",
+  background: "var(--xb-surface-panel)",
+  color: "var(--xb-text)",
+  border: "var(--border-width-thin) solid var(--xb-border-edge)",
+  borderRadius: "var(--radius-md)",
+  padding: "var(--space-3)",
+  boxShadow: "var(--xb-shadow-lg)",
+};
+
+const REPLY_ASSISTANT_STACKED_PIN: CSSProperties = {
+  ...REPLY_ASSISTANT_PIN_BASE,
+  position: "relative",
+  width: "auto",
+  maxHeight: "70vh",
+};
 
 /** Read whether the viewport is at/below the stack breakpoint right now. */
 function isStackedWidth(): boolean {
@@ -130,7 +171,7 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function stripLeadingReplyTargetHandle(
+export function stripLeadingReplyTargetHandle(
   text: string,
   replyContext: ReplyComposerContext | undefined,
 ): string {
@@ -153,7 +194,7 @@ function structuralPrefixForReplyText(text: string, targetHandle: string): strin
   return text.match(/^((?:@[A-Za-z0-9_]{1,15}(?:\s+|$))+)/)?.[1] ?? firstMention[0];
 }
 
-function splitComposerText(
+export function splitComposerText(
   composerText: string,
   replyContext: ReplyComposerContext | undefined,
 ): ReplyDraftSplit {
@@ -187,7 +228,7 @@ function splitComposerText(
   };
 }
 
-function bodyTextForCompose(
+export function bodyTextForCompose(
   composerText: string,
   draftSplit: ReplyDraftSplit,
   replyContext: ReplyComposerContext | undefined,
@@ -202,7 +243,7 @@ function bodyTextForCompose(
   return composerText;
 }
 
-function mergeReplyBody(
+export function mergeReplyBody(
   body: string,
   draftSplit: ReplyDraftSplit,
   replyContext: ReplyComposerContext | undefined,
@@ -328,6 +369,266 @@ function FeedbackRecordControl({
       ) : copy !== null ? (
         <Badge variant="info">{copy}</Badge>
       ) : null}
+    </div>
+  );
+}
+
+type ReplyAssistantState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; response: GenerateReplyVariantsResponse; generatedAt: string }
+  | { status: "failed"; error: string };
+
+type ReplyLedgerState =
+  | { status: "idle" }
+  | { status: "recording" }
+  | { status: "recorded"; duplicate: boolean }
+  | { status: "failed"; error: string };
+
+const replyAssistantPinStyle = (
+  modal: ReturnType<typeof useComposeSnapshot>["modal"],
+  stacked: boolean,
+): CSSProperties => {
+  if (stacked) {
+    return REPLY_ASSISTANT_STACKED_PIN;
+  }
+  if (modal === null) {
+    return {
+      ...REPLY_ASSISTANT_PIN_BASE,
+      top: "var(--space-4)",
+      right: "var(--space-4)",
+    };
+  }
+
+  return {
+    ...REPLY_ASSISTANT_PIN_BASE,
+    top: `${modal.top}px`,
+    left: `${modal.left + modal.width + 20}px`,
+  };
+};
+
+function VariantRow({
+  variant,
+  onUse,
+  disabled,
+}: {
+  variant: ReplyVariant;
+  onUse: (variant: ReplyVariant) => void;
+  disabled: boolean;
+}): ReactElement {
+  return (
+    <div
+      data-reply-variant
+      style={{
+        display: "grid",
+        gap: "var(--space-2)",
+        padding: "var(--space-2)",
+        border: "var(--border-width-thin) solid var(--xb-border-subtle)",
+        borderRadius: "var(--radius-sm)",
+        background: "var(--xb-surface)",
+      }}
+    >
+      <div style={{ font: "var(--type-body-small)", whiteSpace: "pre-wrap" }}>
+        {variant.body}
+      </div>
+      {variant.replyMove !== undefined ? (
+        <Badge variant="info">{variant.replyMove}</Badge>
+      ) : null}
+      {variant.warnings.length > 0 ? (
+        <Alert variant="warning">{variant.warnings.join(" ")}</Alert>
+      ) : null}
+      <Button
+        variant="primary"
+        size="sm"
+        flat
+        disabled={disabled}
+        onClick={() => onUse(variant)}
+      >
+        Use this
+      </Button>
+    </div>
+  );
+}
+
+function ActiveReplyCockpit({
+  composerEl,
+  replyContext,
+}: {
+  composerEl: HTMLElement;
+  replyContext: ReplyComposerContext;
+}): ReactElement {
+  const transport = useTransport();
+  const stacked = useStackedMode();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const dialogEl = composerEl.closest<HTMLElement>('[role="dialog"]');
+  const snapshot = useComposeSnapshot(rootRef.current, dialogEl, composerEl);
+  const [assistant, setAssistant] = useState<ReplyAssistantState>({ status: "idle" });
+  const [ledger, setLedger] = useState<ReplyLedgerState>({ status: "idle" });
+  const requestSeq = useRef(0);
+  const eventSeq = useRef(0);
+
+  const readLiveCompose = useCallback(() => {
+    const text = readComposerText(composerEl);
+    const split = splitComposerText(text, replyContext);
+    const context = contextForSplit(replyContext, split) ?? replyContext;
+    return {
+      text,
+      split,
+      replyContext: context,
+      bodyText: bodyTextForCompose(text, split, context),
+    };
+  }, [composerEl, replyContext]);
+
+  useEffect(() => {
+    const onInput = (): void => {
+      requestSeq.current += 1;
+      setLedger((current) => (current.status === "recording" ? current : { status: "idle" }));
+    };
+    composerEl.addEventListener("input", onInput);
+    return () => composerEl.removeEventListener("input", onInput);
+  }, [composerEl]);
+
+  const onGenerateReplies = useCallback((): void => {
+    const live = readLiveCompose();
+    const token = ++requestSeq.current;
+    setLedger({ status: "idle" });
+    setAssistant({ status: "loading" });
+
+    void (async () => {
+      try {
+        const response = await transport.generateReplyVariants({
+          replyContext: live.replyContext,
+          currentAuthoredBody: live.bodyText,
+        });
+        if (requestSeq.current !== token) return;
+        setAssistant({
+          status: "ready",
+          response,
+          generatedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        if (requestSeq.current !== token) return;
+        setAssistant({
+          status: "failed",
+          error: error instanceof Error ? error.message : "Reply generation failed",
+        });
+      }
+    })();
+  }, [readLiveCompose, transport]);
+
+  const onUseVariant = useCallback(
+    (variant: ReplyVariant): void => {
+      const latest = readLiveCompose();
+      const body = stripLeadingReplyTargetHandle(variant.body, latest.replyContext);
+      const written = mergeReplyBody(body, latest.split, latest.replyContext);
+      writeIntoComposer(composerEl, written);
+      composerEl.focus();
+      setLedger({ status: "recording" });
+
+      const generatedAt =
+        assistant.status === "ready" ? assistant.generatedAt : new Date().toISOString();
+
+      void (async () => {
+        try {
+          const response = await transport.recordGeneratedReply({
+            clientEventId: `reply-variant-${Date.now()}-${++eventSeq.current}`,
+            bodyText: body,
+            writtenText: written,
+            ...(latest.replyContext.targetStatusId === undefined
+              ? {}
+              : { targetStatusId: latest.replyContext.targetStatusId }),
+            chosenVariantId: variant.id,
+            ...(variant.replyMove === undefined ? {} : { replyMove: variant.replyMove }),
+            generatedAt,
+          });
+          setLedger({ status: "recorded", duplicate: response.duplicate });
+        } catch (error) {
+          setLedger({
+            status: "failed",
+            error: error instanceof Error ? error.message : "Generated reply record failed",
+          });
+        }
+      })();
+    },
+    [assistant, composerEl, readLiveCompose, transport],
+  );
+
+  const targetLabel =
+    replyContext.targetDisplayName === undefined
+      ? `@${replyContext.targetAuthorHandle}`
+      : `${replyContext.targetDisplayName} @${replyContext.targetAuthorHandle}`;
+  const rootStyle = stacked
+    ? { ...REPLY_ASSISTANT_ROOT_STYLE, ...REPLY_ASSISTANT_STACKED_STYLE }
+    : REPLY_ASSISTANT_ROOT_STYLE;
+
+  return (
+    <div
+      ref={rootRef}
+      data-cockpit={stacked ? "stacked" : "wide"}
+      data-reply-assistant
+      style={rootStyle}
+    >
+      <div data-cockpit-pin data-reply-assistant-pin style={replyAssistantPinStyle(snapshot.modal, stacked)}>
+        <section
+          aria-label="Reply assistant"
+          style={{ display: "grid", gap: "var(--space-3)" }}
+        >
+          <header style={{ display: "grid", gap: "var(--space-1)" }}>
+            <Badge variant="info">Reply assistant</Badge>
+            <div style={{ font: "var(--type-label)", color: "var(--xb-text-muted)" }}>
+              {targetLabel}
+            </div>
+            <div
+              data-reply-parent-context
+              style={{
+                font: "var(--type-body-small)",
+                whiteSpace: "pre-wrap",
+                maxHeight: "8rem",
+                overflow: "auto",
+              }}
+            >
+              {replyContext.targetText}
+            </div>
+          </header>
+
+          <Button
+            variant="primary"
+            flat
+            loading={assistant.status === "loading"}
+            disabled={assistant.status === "loading"}
+            onClick={onGenerateReplies}
+          >
+            Generate replies
+          </Button>
+
+          {assistant.status === "failed" ? (
+            <Alert variant="warning">{assistant.error}</Alert>
+          ) : assistant.status === "ready" ? (
+            <div style={{ display: "grid", gap: "var(--space-2)" }}>
+              {assistant.response.variants.map((variant) => (
+                <VariantRow
+                  key={variant.id}
+                  variant={variant}
+                  onUse={onUseVariant}
+                  disabled={ledger.status === "recording"}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          <div aria-live="polite">
+            {ledger.status === "recording" ? (
+              <Badge variant="info">Recording generated reply</Badge>
+            ) : ledger.status === "recorded" ? (
+              <Badge variant="success">
+                {ledger.duplicate ? "Generated reply already recorded" : "Generated reply recorded"}
+              </Badge>
+            ) : ledger.status === "failed" ? (
+              <Alert variant="warning">{ledger.error}</Alert>
+            ) : null}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
@@ -882,6 +1183,14 @@ export function ComposeCockpit({ explainer }: ComposeCockpitProps): ReactNode {
   // so the whole cockpit stands down until the sheet is dismissed.
   if (!compose.isActive || compose.composerEl === null || compose.confirmationActive) {
     return null;
+  }
+  if (compose.replyContext !== undefined) {
+    return (
+      <ActiveReplyCockpit
+        composerEl={compose.composerEl}
+        replyContext={compose.replyContext}
+      />
+    );
   }
   return (
     <ActiveCockpit

@@ -175,6 +175,11 @@ export class SqliteVoiceSampleProvider {
       FROM post
       WHERE kind = 'original'
         AND length(trim(text)) > 0
+        AND NOT EXISTS (
+          SELECT 1
+          FROM generated_reply gr
+          WHERE post.normalized_text_hash IN (gr.body_text_hash, gr.written_text_hash)
+        )
         AND (id = ? OR platform_post_id = ?)
       LIMIT 1
     `,
@@ -210,6 +215,11 @@ export class SqliteVoiceSampleProvider {
         JOIN post p ON p.id = v.post_id
         WHERE p.kind = 'original'
           AND length(trim(p.text)) > 0
+          AND NOT EXISTS (
+            SELECT 1
+            FROM generated_reply gr
+            WHERE p.normalized_text_hash IN (gr.body_text_hash, gr.written_text_hash)
+          )
           AND v.embedder_id = ?
           AND v.embedder_version = ?
           AND v.dimensions = ?
@@ -279,6 +289,11 @@ export class SqliteVoiceSampleProvider {
         FROM post
         WHERE kind = 'original'
           AND length(trim(text)) > 0
+          AND NOT EXISTS (
+            SELECT 1
+            FROM generated_reply gr
+            WHERE post.normalized_text_hash IN (gr.body_text_hash, gr.written_text_hash)
+          )
       `,
       )
       .all() as CanonicalVoiceRow[];

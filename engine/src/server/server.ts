@@ -26,6 +26,8 @@ import {
   type AnalyzePosts,
   type BuildServerOptions,
   type GenerateCandidates,
+  type GenerateReplyVariants,
+  type RecordGeneratedReply,
 } from "./default-services.js";
 import { registerEngineRoutes } from "./routes.js";
 
@@ -39,7 +41,13 @@ export {
 } from "./readiness.js";
 export { defaultCorsAllowedOrigins } from "./constants.js";
 
-export type { AnalyzePosts, BuildServerOptions, GenerateCandidates } from "./default-services.js";
+export type {
+  AnalyzePosts,
+  BuildServerOptions,
+  GenerateCandidates,
+  GenerateReplyVariants,
+  RecordGeneratedReply,
+} from "./default-services.js";
 export { createDefaultJudgeDraftService } from "./default-services.js";
 
 export type EngineRuntimeConfig = {
@@ -136,6 +144,15 @@ const feedbackRecordFailedError = (): ApiError =>
     code: "feedback_record_failed",
     message: "The feedback prediction could not be recorded. Try again.",
     scope: "feedback",
+    retryable: true,
+    status: 500,
+  });
+
+const generatedReplyRecordFailedError = (): ApiError =>
+  normalize({
+    code: "generated_reply_record_failed",
+    message: "The generated reply could not be recorded. You can keep editing the draft.",
+    scope: "reply-assistant",
     retryable: true,
     status: 500,
   });
@@ -363,6 +380,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     archiveStorageFailedError,
     libraryStorageFailedError,
     feedbackRecordFailedError,
+    generatedReplyRecordFailedError,
     feedbackLinkFailedError,
     feedbackSummaryFailedError,
     externalXSignalsAddFailedError,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { makeTempEngineDb, seedPosts } from "../../server/sqlite-test-helpers.js";
+import { SqliteGeneratedReplyLedgerRepository } from "../../generated-replies/sqlite-generated-reply-ledger-repository.js";
 import type { CanonicalOwnPost } from "../../server/post-library-repository.js";
 import { createLocalHashingVoiceEmbedder, type VoiceEmbedder } from "../voice-embedder.js";
 import { VoiceIndexService } from "../voice-index-service.js";
@@ -71,6 +72,63 @@ describe("VoiceIndexService", () => {
         indexed_at: ISO,
       },
     ]);
+  });
+
+  it("excludes exact generated reply hashes and deletes existing generated embeddings", async () => {
+    const db = makeTempEngineDb();
+    await seedPosts(db, [
+      canonicalPost({
+        id: "generated",
+        platformPostId: "generated-platform",
+        text: "Generated reply text.",
+      }),
+      canonicalPost({
+        id: "original",
+        platformPostId: "original-platform",
+        text: "Original voice sample.",
+      }),
+    ]);
+    await new SqliteGeneratedReplyLedgerRepository(db).recordGeneratedReply({
+      clientEventId: "event-1",
+      bodyText: "Generated reply text.",
+      writtenText: "@alice Generated reply text.",
+    });
+
+    const service = new VoiceIndexService({
+      db,
+      embedder: createLocalHashingVoiceEmbedder(),
+      now: () => ISO,
+    });
+
+    expect(service.ensureVoiceIndex()).toMatchObject({
+      indexedCount: 1,
+      remainingStaleCount: 0,
+    });
+    expect(
+      db.prepare("SELECT post_id FROM voice_post_embedding ORDER BY post_id").all(),
+    ).toEqual([{ post_id: "original" }]);
+
+    db.prepare(
+      `INSERT INTO voice_post_embedding (
+        post_id, platform_post_id, content_hash, post_updated_at, embedder_id,
+        embedder_version, dimensions, vector_blob, indexed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "generated",
+      "generated-platform",
+      "stale",
+      ISO,
+      "local-hashing-voice-embedder",
+      "v1",
+      384,
+      Buffer.alloc(1536),
+      ISO,
+    );
+
+    expect(service.ensureVoiceIndex()).toMatchObject({ deletedOrphanCount: 1 });
+    expect(
+      db.prepare("SELECT post_id FROM voice_post_embedding ORDER BY post_id").all(),
+    ).toEqual([{ post_id: "original" }]);
   });
 
   it("refreshes stale rows when canonical content metadata changes", async () => {

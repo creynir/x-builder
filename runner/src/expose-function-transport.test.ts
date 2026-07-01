@@ -11,7 +11,7 @@
  *     static bindAll(page: PageLike, services: BoundEngineServices): Promise<void>
  *   }
  *
- * `bindAll` registers all 24 `__xbuilder_<method>` bindings on the page via
+ * `bindAll` registers all 26 `__xbuilder_<method>` bindings on the page via
  * `page.exposeFunction`. Each handler: parse the raw arg with the method's
  * request schema, call the bound service/handler, parse the result with the
  * method's response schema, return it. Zod errors propagate — never swallowed.
@@ -27,6 +27,8 @@
  *   - deterministicAnalysisService: { analyzePosts }
  *   - judgeDraftService:            { judge }
  *   - generateIdeasService:         { generate }
+ *   - replyVariantGenerationService:{ generate }
+ *   - generatedReplyLedgerService:  { recordGeneratedReply }
  *   - suggestPostService:           { suggest }
  *   - repetitionWindowService:      { compute }
  *   - liveCaptureService:           { summary }
@@ -50,12 +52,14 @@ import {
   cooldownReportSchema,
   generateCategorySchema,
   generateIdeaResponseSchema,
+  generateReplyVariantsResponseSchema,
   getExternalXSignalsOverviewResponseSchema,
   getFeedbackLoopSummaryResponseSchema,
   judgeDraftRequestSchema,
   judgeDraftResponseSchema,
   linkFeedbackPredictionResponseSchema,
   overlayReadinessSchema,
+  recordGeneratedReplyResponseSchema,
   recordFeedbackPredictionResponseSchema,
   addExternalXSignalSourceResponseSchema,
   refreshExternalXSignalSourceResponseSchema,
@@ -225,6 +229,43 @@ const candidate = (id: string) => ({
 
 const generateIdeasResponse = {
   candidates: [candidate("c1"), candidate("c2"), candidate("c3")],
+};
+
+const replyContext = {
+  source: "same_dialog_dom" as const,
+  targetAuthorHandle: "alice",
+  targetText: "The boring version is usually the one people can ship.",
+  targetStatusId: "1234567890",
+  leadingTargetHandle: { handle: "alice", state: "present" as const },
+};
+
+const replyVariant = (id: string) => ({
+  id,
+  body: `Reply variant ${id}.`,
+  replyMove: "answer",
+  groundingNotes: [],
+  warnings: [],
+});
+
+const generateReplyVariantsResponse = {
+  variants: [replyVariant("r1"), replyVariant("r2"), replyVariant("r3")],
+};
+
+const recordGeneratedReplyResponse = {
+  duplicate: false,
+  record: {
+    id: "generated-reply-1",
+    clientEventId: "event-1",
+    bodyText: "Reply variant r1.",
+    writtenText: "@alice Reply variant r1.",
+    bodyTextHash: "sha256:rva-generated-reply:v1:body",
+    writtenTextHash: "sha256:rva-generated-reply:v1:written",
+    targetStatusId: "1234567890",
+    chosenVariantId: "r1",
+    replyMove: "answer",
+    generatedAt: NOW_ISO,
+    recordedAt: NOW_ISO,
+  },
 };
 
 const cooldownReport = (windowDays: number) => ({
@@ -465,6 +506,12 @@ function createMockServices() {
   const generateIdeasService = {
     generate: vi.fn(async () => generateIdeasResponse),
   };
+  const replyVariantGenerationService = {
+    generate: vi.fn(async () => generateReplyVariantsResponse),
+  };
+  const generatedReplyLedgerService = {
+    recordGeneratedReply: vi.fn(async () => recordGeneratedReplyResponse),
+  };
   const suggestPostService = {
     suggest: vi.fn(async () => suggestPostResponse),
   };
@@ -503,6 +550,8 @@ function createMockServices() {
     deterministicAnalysisService,
     judgeDraftService,
     generateIdeasService,
+    replyVariantGenerationService,
+    generatedReplyLedgerService,
     suggestPostService,
     repetitionWindowService,
     liveCaptureService,
@@ -540,6 +589,8 @@ const B = {
   analyzePosts: binding("analyzePosts"),
   judgeDraft: binding("judgeDraft"),
   generateIdeas: binding("generateIdeas"),
+  generateReplyVariants: binding("generateReplyVariants"),
+  recordGeneratedReply: binding("recordGeneratedReply"),
   suggestPost: binding("suggestPost"),
   getCooldown: binding("getCooldown"),
   getCaptureSummary: binding("getCaptureSummary"),
@@ -567,20 +618,20 @@ afterEach(() => {
 });
 
 describe("ExposeFunctionTransport.bindAll — registration", () => {
-  it("registers exactly the 24 binding names from ENGINE_TRANSPORT_BINDINGS", async () => {
+  it("registers exactly the 26 binding names from ENGINE_TRANSPORT_BINDINGS", async () => {
     await ExposeFunctionTransport.bindAll(mockPage.page, services);
 
     const expected = Object.values(B).slice().sort();
     const registered = [...mockPage.handlers.keys()].sort();
 
     expect(registered).toEqual(expected);
-    expect(registered).toHaveLength(24);
+    expect(registered).toHaveLength(26);
   });
 
   it("calls page.exposeFunction once per binding with a function handler", async () => {
     await ExposeFunctionTransport.bindAll(mockPage.page, services);
 
-    expect(mockPage.exposeFunction).toHaveBeenCalledTimes(24);
+    expect(mockPage.exposeFunction).toHaveBeenCalledTimes(26);
     for (const name of Object.values(B)) {
       expect(mockPage.handlers.get(name)).toBeTypeOf("function");
     }
@@ -760,6 +811,36 @@ describe("ExposeFunctionTransport — remaining bindings round-trip their respon
     const result = await mockPage.handlers.get(B.generateIdeas)!({ idea: "ship faster" });
     expect(services.generateIdeasService.generate).toHaveBeenCalledTimes(1);
     expect(() => generateIdeaResponseSchema.parse(result)).not.toThrow();
+  });
+
+  it("generateReplyVariants parses its request and returns a valid GenerateReplyVariantsResponse", async () => {
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+    const result = await mockPage.handlers.get(B.generateReplyVariants)!({
+      replyContext,
+      currentAuthoredBody: "current reply draft",
+    });
+
+    expect(services.replyVariantGenerationService.generate).toHaveBeenCalledWith({
+      replyContext,
+      currentAuthoredBody: "current reply draft",
+    });
+    expect(() => generateReplyVariantsResponseSchema.parse(result)).not.toThrow();
+  });
+
+  it("recordGeneratedReply parses its request and returns a valid RecordGeneratedReplyResponse", async () => {
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+    const result = await mockPage.handlers.get(B.recordGeneratedReply)!({
+      clientEventId: "event-1",
+      bodyText: "Reply variant r1.",
+      writtenText: "@alice Reply variant r1.",
+      targetStatusId: "1234567890",
+      chosenVariantId: "r1",
+      replyMove: "answer",
+      generatedAt: NOW_ISO,
+    });
+
+    expect(services.generatedReplyLedgerService.recordGeneratedReply).toHaveBeenCalledTimes(1);
+    expect(() => recordGeneratedReplyResponseSchema.parse(result)).not.toThrow();
   });
 
   it("suggestPost returns a valid SuggestPostResponse", async () => {
@@ -949,6 +1030,31 @@ describe("ExposeFunctionTransport — LLM binding guard", () => {
     }
   });
 
+  it("guards generateReplyVariants while another guarded call is in flight", async () => {
+    const heldJudge = deferred<typeof judgeResponse>();
+    (services.judgeDraftService.judge as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      heldJudge.promise,
+    );
+
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+
+    const judgeDraft = mockPage.handlers.get(B.judgeDraft)!;
+    const generateReplyVariants = mockPage.handlers.get(B.generateReplyVariants)!;
+    const inFlight = Promise.resolve(judgeDraft({ text: "A draft worth judging." }));
+
+    expect(services.judgeDraftService.judge).toHaveBeenCalledTimes(1);
+
+    try {
+      await expect(
+        generateReplyVariants({ replyContext, currentAuthoredBody: "current reply" }),
+      ).rejects.toMatchObject(busyGuardErrorFor("generateReplyVariants"));
+      expect(services.replyVariantGenerationService.generate).not.toHaveBeenCalled();
+    } finally {
+      heldJudge.resolve(judgeResponse);
+      await inFlight;
+    }
+  });
+
   it("releases guarded capacity when a guarded service rejects", async () => {
     (services.judgeDraftService.judge as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new Error("judge failed"),
@@ -1072,6 +1178,38 @@ describe("ExposeFunctionTransport — LLM binding guard", () => {
       expect(recorded).toEqual(recordFeedbackPredictionResponse);
       expect(linked).toEqual(linkFeedbackPredictionResponse);
       expect(summary).toEqual(getFeedbackLoopSummaryResponse);
+    } finally {
+      heldJudge.resolve(judgeResponse);
+      await inFlight;
+    }
+  });
+
+  it("lets generated reply ledger recording bypass the guard while a guarded call is in flight", async () => {
+    const heldJudge = deferred<typeof judgeResponse>();
+    (services.judgeDraftService.judge as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      heldJudge.promise,
+    );
+
+    await ExposeFunctionTransport.bindAll(mockPage.page, services);
+
+    const judgeDraft = mockPage.handlers.get(B.judgeDraft)!;
+    const recordGeneratedReply = mockPage.handlers.get(B.recordGeneratedReply)!;
+    const inFlight = Promise.resolve(judgeDraft({ text: "A draft worth judging." }));
+
+    expect(services.judgeDraftService.judge).toHaveBeenCalledTimes(1);
+
+    try {
+      const result = await recordGeneratedReply({
+        clientEventId: "event-1",
+        bodyText: "Reply variant r1.",
+        writtenText: "@alice Reply variant r1.",
+        targetStatusId: "1234567890",
+        chosenVariantId: "r1",
+        replyMove: "answer",
+        generatedAt: NOW_ISO,
+      });
+      expect(services.generatedReplyLedgerService.recordGeneratedReply).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(recordGeneratedReplyResponse);
     } finally {
       heldJudge.resolve(judgeResponse);
       await inFlight;

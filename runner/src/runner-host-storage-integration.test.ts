@@ -210,7 +210,7 @@ const tableCountsAt = (dbPath: string): Record<string, number> => {
 };
 
 describe("runner host construction: the migrated artifact is a real on-disk SQLite db", () => {
-  it("produces an x-builder.db that re-opens with user_version 7 and the migration tables, with the JSON renamed", async () => {
+  it("produces an x-builder.db that re-opens with user_version 8 and the migration tables, with the JSON renamed", async () => {
     writeFileSync(join(storageDir, POST_LIBRARY_FILE), v2StoreJson(), "utf-8");
 
     await startCapturingServices();
@@ -222,7 +222,7 @@ describe("runner host construction: the migrated artifact is a real on-disk SQLi
     const db = openEngineDatabase(dbPath);
     try {
       const userVersion = Number(db.pragma("user_version", { simple: true }));
-      expect(userVersion).toBe(7);
+      expect(userVersion).toBe(8);
 
       const tableRows = db
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")

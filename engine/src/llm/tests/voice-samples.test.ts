@@ -5,6 +5,7 @@ import type {
   PostLibraryRepository,
   PostLibraryStore,
 } from "../../server/post-library-repository";
+import type { GeneratedReplyLedgerRepository } from "../../generated-replies/generated-reply-ledger-repository";
 import {
   renderVoiceSampleGuidance,
   selectVoiceSamples,
@@ -91,6 +92,10 @@ describe("voice sample selection", () => {
   it("exports the documented voice sample contracts", () => {
     expectTypeOf<SelectVoiceSamplesInput>().toEqualTypeOf<{
       postLibraryRepository: Pick<PostLibraryRepository, "loadStore">;
+      generatedReplyLedgerRepository?: Pick<
+        GeneratedReplyLedgerRepository,
+        "isGeneratedReplyText"
+      >;
       useKnownPostIds?: string[];
       voiceProfileId?: string;
     }>();
@@ -189,6 +194,33 @@ describe("voice sample selection", () => {
       "recent_original",
       "recent_original",
     ]);
+  });
+
+  it("excludes exact generated replies when a ledger is provided", async () => {
+    const selected = await selectFrom(
+      [
+        canonicalPost({
+          id: "generated",
+          platformPostId: "generated-platform",
+          text: "Generated reply text.",
+          createdAt: isoDay(10),
+        }),
+        canonicalPost({
+          id: "original",
+          platformPostId: "original-platform",
+          text: "Original voice sample.",
+          createdAt: isoDay(9),
+        }),
+      ],
+      {
+        useKnownPostIds: ["generated-platform"],
+        generatedReplyLedgerRepository: {
+          isGeneratedReplyText: async (text) => text === "Generated reply text.",
+        },
+      },
+    );
+
+    expect(selected.map((sample) => sample.id)).toEqual(["original"]);
   });
 
   it("filters selection to originals with non-empty trimmed text", async () => {

@@ -75,10 +75,17 @@ import type {
   JudgeDraftResponse,
   RecordFeedbackPredictionRequest,
   RecordFeedbackPredictionResponse,
+  ReplyComposerContext,
 } from "@x-builder/shared";
 
 // Not-yet-existing module — importing it is what drives the RED state.
-import { ComposeCockpit } from "../compose-cockpit";
+import {
+  bodyTextForCompose,
+  ComposeCockpit,
+  mergeReplyBody,
+  splitComposerText,
+  stripLeadingReplyTargetHandle,
+} from "../compose-cockpit";
 
 // ---------------------------------------------------------------------------
 // Harness — synchronous rAF + fake timers, mirroring anchor-layer.test.tsx.
@@ -109,6 +116,13 @@ afterEach(() => {
 /** The 350 ms analyze debounce window the ticket specifies. */
 const ANALYZE_DEBOUNCE_MS = 350;
 
+const replyContext: ReplyComposerContext = {
+  source: "same_dialog_dom",
+  targetAuthorHandle: "alice",
+  targetText: "The boring version is usually the one people can ship.",
+  leadingTargetHandle: { handle: "alice", state: "present" },
+};
+
 /**
  * Mount the cockpit inside the production-shaped tree with the injected fake.
  * The fixture must already be in `document.body` so compose detection fires.
@@ -123,6 +137,57 @@ function mountCockpit(fake: FakeEngineTransport): HTMLElement {
   );
   return container as HTMLElement;
 }
+
+describe("ComposeCockpit — reply split/merge safety", () => {
+  it("splits a reply structural prefix from the authored body and merges it once", () => {
+    const split = splitComposerText("@alice good point", replyContext);
+
+    expect(split).toMatchObject({
+      mode: "reply",
+      authoredBody: "good point",
+      structuralPrefix: "@alice ",
+      leadingHandleState: "present",
+    });
+    expect(bodyTextForCompose("@alice good point", split, replyContext)).toBe("good point");
+    expect(mergeReplyBody("@alice generated body", split, replyContext)).toBe(
+      "@alice generated body",
+    );
+    expect(mergeReplyBody("generated body", split, replyContext)).toBe("@alice generated body");
+  });
+
+  it("preserves user-deleted reply prefixes when merging generated text", () => {
+    const split = splitComposerText("user kept no prefix", replyContext);
+
+    expect(split).toMatchObject({
+      mode: "reply",
+      authoredBody: "user kept no prefix",
+      structuralPrefix: "",
+      leadingHandleState: "user_deleted",
+    });
+    expect(bodyTextForCompose("user kept no prefix", split, replyContext)).toBe(
+      "user kept no prefix",
+    );
+    expect(mergeReplyBody("@alice generated body", split, replyContext)).toBe("generated body");
+  });
+
+  it("keeps leading handles as normal authored text outside reply mode", () => {
+    const split = splitComposerText("@alice normal post", undefined);
+
+    expect(split).toMatchObject({
+      mode: "post",
+      authoredBody: "@alice normal post",
+      structuralPrefix: "",
+      leadingHandleState: "user_deleted",
+    });
+    expect(stripLeadingReplyTargetHandle("@alice normal post", undefined)).toBe(
+      "@alice normal post",
+    );
+    expect(bodyTextForCompose("@alice normal post", split, undefined)).toBe("@alice normal post");
+    expect(mergeReplyBody("@alice generated normal post", split, undefined)).toBe(
+      "@alice generated normal post",
+    );
+  });
+});
 
 /**
  * Settle the cockpit: flush the analyze debounce + drain pending microtasks so
@@ -463,22 +528,25 @@ describe("ComposeCockpit — static⟂judge channel captions", () => {
 });
 
 // ===========================================================================
-// 6. Reply orchestration — split authored body, preserve structural prefix.
+// 6. Reply assistant — separate reply UI, explicit choose + ledger record.
 // ===========================================================================
 
-describe("ComposeCockpit — reply-aware orchestration", () => {
-  it("sends authored reply body plus replyContext to static analyze and manual judge", async () => {
-    fixture = insertXReplyComposer("@alice good point", {
-      targetText: "The boring version is usually the one people can ship.",
-    });
+describe("ComposeCockpit — reply assistant", () => {
+  it("branches reply mode away from legacy post cockpit surfaces and side effects", async () => {
+    fixture = insertXReplyComposer("@alice good point");
     const analyzeCalls: AnalyzePostsRequest[] = [];
     const judgeCalls: JudgeDraftRequest[] = [];
+    const generateCalls: GenerateIdeaRequest[] = [];
+    const applyCalls: ApplyJudgeSuggestionsRequest[] = [];
     const fake = new FakeEngineTransport({
-      getGenerateCategories: async () => makeGenerateCategories(),
-      getCaptureSummary: async () => makeCapture(),
+      getGenerateCategories: async () => {
+        throw new Error("reply mode must not load post categories");
+      },
+      getCaptureSummary: async () => {
+        throw new Error("reply mode must not load capture summary");
+      },
       getOverlayReadiness: async () => {
-        const { makeOverlayReadiness } = await import("../../testing/fixtures");
-        return makeOverlayReadiness();
+        throw new Error("reply mode must not load judge readiness");
       },
       analyzePosts: async (request) => {
         analyzeCalls.push(request);
@@ -489,396 +557,140 @@ describe("ComposeCockpit — reply-aware orchestration", () => {
         judgeCalls.push(request);
         return makeJudgeResponse(74);
       },
+      generateIdeas: async (request) => {
+        generateCalls.push(request);
+        throw new Error(`reply mode must not call generateIdeas: ${JSON.stringify(request)}`);
+      },
+      applyJudgeSuggestions: async (request) => {
+        applyCalls.push(request);
+        return makeApplyResponse({ text: "improved", improvedOverOriginal: true });
+      },
     });
 
     mountCockpit(fake);
-    await settleUntil(() => analyzeCalls.length > 0, "reply analyze request");
+    await settle();
 
-    expect(analyzeCalls[0]).toMatchObject({
-      items: [
-        {
-          text: "good point",
-          replyContext: {
-            targetAuthorHandle: "alice",
-            targetText: "The boring version is usually the one people can ship.",
-            leadingTargetHandle: { handle: "alice", state: "present" },
+    const text = cockpitText();
+    expect(text).toContain("Reply assistant");
+    expect(text).toContain("The boring version is usually the one people can ship.");
+    expect(text).not.toContain("◆ Static engine");
+    expect(text).not.toContain("✦ AI judge");
+    expect(findButton(/run judge/i)).toBeUndefined();
+    expect(findButton(/apply all suggestions/i)).toBeUndefined();
+    expect(categoryButton("Hot take")).toBeUndefined();
+    expect(analyzeCalls).toEqual([]);
+    expect(judgeCalls).toEqual([]);
+    expect(generateCalls).toEqual([]);
+    expect(applyCalls).toEqual([]);
+  });
+
+  it("generates variants without auto-writing, then writes and records only after Use this", async () => {
+    fixture = insertXReplyComposer("@alice current draft");
+    const generateCalls: Array<Parameters<FakeEngineTransport["generateReplyVariants"]>[0]> = [];
+    const recordCalls: Array<Parameters<FakeEngineTransport["recordGeneratedReply"]>[0]> = [];
+    const postClick = vi.fn();
+    fixture.postButton.addEventListener("click", postClick);
+    const fake = new FakeEngineTransport({
+      generateReplyVariants: async (request) => {
+        generateCalls.push(request);
+        return {
+          variants: [
+            { id: "direct", body: "@alice generated body", replyMove: "answer", groundingNotes: [], warnings: [] },
+            { id: "ask", body: "What changed your mind?", groundingNotes: [], warnings: [] },
+            { id: "reframe", body: "The boring path is usually the one that survives.", groundingNotes: [], warnings: [] },
+          ],
+        };
+      },
+      recordGeneratedReply: async (request) => {
+        recordCalls.push(request);
+        return {
+          duplicate: false,
+          record: {
+            id: "generated-reply-1",
+            clientEventId: request.clientEventId,
+            bodyText: request.bodyText,
+            writtenText: request.writtenText,
+            bodyTextHash: "sha256:rva-generated-reply:v1:body",
+            writtenTextHash: "sha256:rva-generated-reply:v1:written",
+            targetStatusId: request.targetStatusId,
+            chosenVariantId: request.chosenVariantId,
+            replyMove: request.replyMove,
+            generatedAt: request.generatedAt ?? "2026-07-01T12:00:00.000Z",
+            recordedAt: "2026-07-01T12:00:01.000Z",
           },
-        },
-      ],
+        };
+      },
     });
 
-    await clickWhenPresent(/run judge/i);
-    await settleUntil(() => judgeCalls.length === 1, "reply judge request");
+    mountCockpit(fake);
+    await settle();
+    await clickWhenPresent(/generate replies/i);
+    await settleUntil(() => generateCalls.length === 1, "reply variants generated");
 
-    expect(judgeCalls[0]).toMatchObject({
-      text: "good point",
+    expect(generateCalls[0]).toMatchObject({
+      currentAuthoredBody: "current draft",
       replyContext: {
         targetAuthorHandle: "alice",
-        targetText: "The boring version is usually the one people can ship.",
         leadingTargetHandle: { handle: "alice", state: "present" },
       },
     });
-  });
+    expect(composerText()).toBe("@alice current draft");
 
-  it("does not analyze or judge a prefix-only reply body", async () => {
-    fixture = insertXReplyComposer("@alice ");
-    const analyzeCalls: AnalyzePostsRequest[] = [];
-    const judgeCalls: JudgeDraftRequest[] = [];
-    const fake = new FakeEngineTransport({
-      getGenerateCategories: async () => makeGenerateCategories(),
-      getCaptureSummary: async () => makeCapture(),
-      getOverlayReadiness: async () => {
-        const { makeOverlayReadiness } = await import("../../testing/fixtures");
-        return makeOverlayReadiness();
-      },
-      analyzePosts: async (request) => {
-        analyzeCalls.push(request);
-        const { readyResult } = await import("../../testing/analyze-state");
-        return { items: [readyResult] };
-      },
-      judgeDraft: async (request) => {
-        judgeCalls.push(request);
-        return makeJudgeResponse(74);
-      },
-    });
+    await clickWhenPresent(/use this/i);
+    await settleUntil(() => recordCalls.length === 1, "generated reply recorded");
 
-    mountCockpit(fake);
-    await settle();
-    await clickWhenPresent(/run judge/i);
-    await settle();
-
-    expect(analyzeCalls).toEqual([]);
-    expect(judgeCalls).toEqual([]);
-  });
-
-  it("generates with replyContext and writes generated body with the current structural prefix", async () => {
-    fixture = insertXReplyComposer("@alice ");
-    const generateCalls: GenerateIdeaRequest[] = [];
-    const response = makeGenerateResponse([
-      { text: "@alice agree with this", overall: 88 },
-      { text: "lower option", overall: 72 },
-      { text: "weak option", overall: 40 },
-    ]);
-    const fake = new FakeEngineTransport({
-      getGenerateCategories: async () => makeGenerateCategories(),
-      getCaptureSummary: async () => makeCapture(),
-      getOverlayReadiness: async () => {
-        const { makeOverlayReadiness } = await import("../../testing/fixtures");
-        return makeOverlayReadiness();
-      },
-      generateIdeas: async (request) => {
-        generateCalls.push(request);
-        return response;
-      },
-      analyzePosts: async () => {
-        const { readyResult } = await import("../../testing/analyze-state");
-        return { items: [readyResult] };
-      },
-    });
-
-    mountCockpit(fake);
-    await settle();
-    await clickWhenPresent(/hot take/i);
-    await settle();
-
-    expect(generateCalls).toHaveLength(1);
-    expect(generateCalls[0]).toMatchObject({
-      format: "hot_take",
-      replyContext: { targetAuthorHandle: "alice" },
-    });
-    expect(composerText()).toBe("@alice agree with this");
-  });
-
-  it("applies suggestions to the authored body and writes the returned body with one prefix", async () => {
-    fixture = insertXReplyComposer("@alice original body");
-    const applyCalls: ApplyJudgeSuggestionsRequest[] = [];
-    const fake = new FakeEngineTransport({
-      getGenerateCategories: async () => makeGenerateCategories(),
-      getCaptureSummary: async () => makeCapture(),
-      getOverlayReadiness: async () => {
-        const { makeOverlayReadiness } = await import("../../testing/fixtures");
-        return makeOverlayReadiness();
-      },
-      analyzePosts: async () => {
-        const { readyResult } = await import("../../testing/analyze-state");
-        return { items: [readyResult] };
-      },
-      judgeDraft: async () => makeJudgeResponse(74),
-      applyJudgeSuggestions: async (request) => {
-        applyCalls.push(request);
-        return makeApplyResponse({ text: "@alice improved body", improvedOverOriginal: true });
-      },
-    });
-
-    mountCockpit(fake);
-    await settle();
-    await clickWhenPresent(/run judge/i);
-    await clickWhenPresent(/apply all suggestions/i);
-    await settle();
-
-    expect(applyCalls).toHaveLength(1);
-    expect(applyCalls[0]).toMatchObject({
-      text: "original body",
-      replyContext: { targetAuthorHandle: "alice" },
-    });
-    expect(composerText()).toBe("@alice improved body");
-  });
-
-  it("carries authored reply body plus replyContext through analyze, judge, generate, and apply", async () => {
-    fixture = insertXReplyComposer("@alice body");
-    const analyzeCalls: AnalyzePostsRequest[] = [];
-    const judgeCalls: JudgeDraftRequest[] = [];
-    const generateCalls: GenerateIdeaRequest[] = [];
-    const applyCalls: ApplyJudgeSuggestionsRequest[] = [];
-    const response = makeGenerateResponse([
-      { text: "@alice generated body", overall: 88 },
-      { text: "lower option", overall: 72 },
-      { text: "weak option", overall: 40 },
-    ]);
-    const fake = new FakeEngineTransport({
-      getGenerateCategories: async () => makeGenerateCategories(),
-      getCaptureSummary: async () => makeCapture(),
-      getOverlayReadiness: async () => {
-        const { makeOverlayReadiness } = await import("../../testing/fixtures");
-        return makeOverlayReadiness();
-      },
-      analyzePosts: async (request) => {
-        analyzeCalls.push(request);
-        const { readyResult } = await import("../../testing/analyze-state");
-        return { items: [readyResult] };
-      },
-      judgeDraft: async (request) => {
-        judgeCalls.push(request);
-        return makeJudgeResponse(74);
-      },
-      generateIdeas: async (request) => {
-        generateCalls.push(request);
-        return response;
-      },
-      applyJudgeSuggestions: async (request) => {
-        applyCalls.push(request);
-        return makeApplyResponse({ text: "@alice applied body", improvedOverOriginal: true });
-      },
-    });
-
-    mountCockpit(fake);
-    await settleUntil(() => analyzeCalls.length > 0, "reply analyze request");
-
-    expect(analyzeCalls[0]?.items[0]).toMatchObject({
-      text: "body",
-      replyContext: { targetAuthorHandle: "alice" },
-    });
-
-    await clickWhenPresent(/run judge/i);
-    await settleUntil(() => judgeCalls.length === 1, "reply judge request");
-    expect(judgeCalls[0]).toMatchObject({
-      text: "body",
-      replyContext: { targetAuthorHandle: "alice" },
-    });
-
-    await clickWhenPresent(/apply all suggestions/i);
-    await settleUntil(() => applyCalls.length === 1, "reply apply request");
-    expect(applyCalls[0]).toMatchObject({
-      text: "body",
-      replyContext: { targetAuthorHandle: "alice" },
-    });
-    expect(composerText()).toBe("@alice applied body");
-
-    await clickWhenPresent(/hot take/i);
-    await settleUntil(() => generateCalls.length === 1, "reply generate request");
-    expect(generateCalls[0]).toMatchObject({
-      format: "hot_take",
-      replyContext: { targetAuthorHandle: "alice" },
-    });
     expect(composerText()).toBe("@alice generated body");
+    expect(recordCalls[0]).toMatchObject({
+      bodyText: "generated body",
+      writtenText: "@alice generated body",
+      targetStatusId: "1930000000000000001",
+      chosenVariantId: "direct",
+      replyMove: "answer",
+    });
+    expect(postClick).not.toHaveBeenCalled();
   });
 
-  it("does not restore a user-deleted structural prefix when generating or applying", async () => {
-    fixture = insertXReplyComposer("original body");
-    const generateCalls: GenerateIdeaRequest[] = [];
-    const applyCalls: ApplyJudgeSuggestionsRequest[] = [];
-    const response = makeGenerateResponse([
-      { text: "@alice generated body", overall: 88 },
-      { text: "lower option", overall: 72 },
-      { text: "weak option", overall: 40 },
-    ]);
+  it("respects a user-deleted structural prefix when choosing a variant", async () => {
+    fixture = insertXReplyComposer("current draft");
+    const recordCalls: Array<Parameters<FakeEngineTransport["recordGeneratedReply"]>[0]> = [];
     const fake = new FakeEngineTransport({
-      getGenerateCategories: async () => makeGenerateCategories(),
-      getCaptureSummary: async () => makeCapture(),
-      getOverlayReadiness: async () => {
-        const { makeOverlayReadiness } = await import("../../testing/fixtures");
-        return makeOverlayReadiness();
-      },
-      analyzePosts: async () => {
-        const { readyResult } = await import("../../testing/analyze-state");
-        return { items: [readyResult] };
-      },
-      generateIdeas: async (request) => {
-        generateCalls.push(request);
-        return response;
-      },
-      judgeDraft: async () => makeJudgeResponse(74),
-      applyJudgeSuggestions: async (request) => {
-        applyCalls.push(request);
-        return makeApplyResponse({ text: "@alice applied body", improvedOverOriginal: true });
+      generateReplyVariants: async () => ({
+        variants: [
+          { id: "direct", body: "@alice generated body", groundingNotes: [], warnings: [] },
+          { id: "ask", body: "What changed your mind?", groundingNotes: [], warnings: [] },
+          { id: "reframe", body: "The boring path is usually the one that survives.", groundingNotes: [], warnings: [] },
+        ],
+      }),
+      recordGeneratedReply: async (request) => {
+        recordCalls.push(request);
+        return {
+          duplicate: true,
+          record: {
+            id: "generated-reply-1",
+            clientEventId: request.clientEventId,
+            bodyText: request.bodyText,
+            writtenText: request.writtenText,
+            bodyTextHash: "sha256:rva-generated-reply:v1:body",
+            writtenTextHash: "sha256:rva-generated-reply:v1:written",
+            generatedAt: request.generatedAt ?? "2026-07-01T12:00:00.000Z",
+            recordedAt: "2026-07-01T12:00:01.000Z",
+          },
+        };
       },
     });
 
     mountCockpit(fake);
     await settle();
-    await clickWhenPresent(/hot take/i);
-    await settle();
+    await clickWhenPresent(/generate replies/i);
+    await clickWhenPresent(/use this/i);
+    await settleUntil(() => recordCalls.length === 1, "generated reply recorded");
 
-    expect(generateCalls[0]).toMatchObject({
-      replyContext: { leadingTargetHandle: { handle: "alice", state: "user_deleted" } },
-    });
     expect(composerText()).toBe("generated body");
-
-    typeInComposer(fixture.composer, "original body");
-    await settle();
-    await clickWhenPresent(/run judge/i);
-    await clickWhenPresent(/apply all suggestions/i);
-    await settle();
-
-    expect(applyCalls[0]).toMatchObject({
-      text: "original body",
-      replyContext: { leadingTargetHandle: { handle: "alice", state: "user_deleted" } },
-    });
-    expect(composerText()).toBe("applied body");
-  });
-
-  it("keeps normal post-mode leading handles as authored text without replyContext", async () => {
-    fixture = insertXComposer("@alice good point");
-    const analyzeCalls: AnalyzePostsRequest[] = [];
-    const judgeCalls: JudgeDraftRequest[] = [];
-    const generateCalls: GenerateIdeaRequest[] = [];
-    const applyCalls: ApplyJudgeSuggestionsRequest[] = [];
-    const response = makeGenerateResponse([
-      { text: "@alice generated normal post", overall: 88 },
-      { text: "lower option", overall: 72 },
-      { text: "weak option", overall: 40 },
-    ]);
-    const fake = new FakeEngineTransport({
-      getGenerateCategories: async () => makeGenerateCategories(),
-      getCaptureSummary: async () => makeCapture(),
-      getOverlayReadiness: async () => {
-        const { makeOverlayReadiness } = await import("../../testing/fixtures");
-        return makeOverlayReadiness();
-      },
-      analyzePosts: async (request) => {
-        analyzeCalls.push(request);
-        const { readyResult } = await import("../../testing/analyze-state");
-        return { items: [readyResult] };
-      },
-      judgeDraft: async (request) => {
-        judgeCalls.push(request);
-        return makeJudgeResponse(74);
-      },
-      generateIdeas: async (request) => {
-        generateCalls.push(request);
-        return response;
-      },
-      applyJudgeSuggestions: async (request) => {
-        applyCalls.push(request);
-        return makeApplyResponse({ text: "@alice improved normal post", improvedOverOriginal: true });
-      },
-    });
-
-    mountCockpit(fake);
-    await settleUntil(() => analyzeCalls.length > 0, "normal analyze request");
-
-    expect(analyzeCalls[0]?.items[0]).toMatchObject({ text: "@alice good point" });
-    expect(analyzeCalls[0]?.items[0]).not.toHaveProperty("replyContext");
-
-    await clickWhenPresent(/run judge/i);
-    await settleUntil(() => judgeCalls.length === 1, "normal judge request");
-    expect(judgeCalls[0]).toEqual({ text: "@alice good point" });
-
-    await clickWhenPresent(/apply all suggestions/i);
-    await settleUntil(() => applyCalls.length === 1, "normal apply request");
-    expect(applyCalls[0]).toEqual({ text: "@alice good point" });
-    expect(composerText()).toBe("@alice improved normal post");
-
-    await clickWhenPresent(/hot take/i);
-    await settleUntil(() => generateCalls.length === 1, "normal generate request");
-    expect(generateCalls[0]).toEqual({ format: "hot_take" });
-    expect(composerText()).toBe("@alice generated normal post");
-  });
-
-  it("records generated reply feedback using authored body text", async () => {
-    fixture = insertXReplyComposer("@alice ");
-    const recordCalls: RecordFeedbackPredictionRequest[] = [];
-    const response = makeGenerateResponse([
-      { text: "generated learning hook", overall: 88 },
-      { text: "lower generated option", overall: 72 },
-      { text: "weak generated option", overall: 40 },
-    ]);
-    const fake = new FakeEngineTransport({
-      getGenerateCategories: async () => makeGenerateCategories(),
-      getCaptureSummary: async () => makeCapture(),
-      getOverlayReadiness: async () => {
-        const { makeOverlayReadiness } = await import("../../testing/fixtures");
-        return makeOverlayReadiness();
-      },
-      analyzePosts: async () => {
-        const { readyResult } = await import("../../testing/analyze-state");
-        return { items: [readyResult] };
-      },
-      generateIdeas: async () => response,
-      recordFeedbackPrediction: async (request) => {
-        recordCalls.push(request);
-        return makeFeedbackRecordResponse(request);
-      },
-    });
-
-    mountCockpit(fake);
-    await settle();
-    await clickWhenPresent(/hot take/i);
-    await settleUntil(() => recordCalls.length === 1, "reply generated feedback record");
-
-    expect(composerText()).toBe("@alice generated learning hook");
     expect(recordCalls[0]).toMatchObject({
-      action: "generated_draft_written",
-      text: "generated learning hook",
+      bodyText: "generated body",
+      writtenText: "generated body",
     });
   });
-
-  it("keeps the structural prefix when apply returns the original body through never-worse", async () => {
-    fixture = insertXReplyComposer("@alice original body");
-    const recordCalls: RecordFeedbackPredictionRequest[] = [];
-    const fake = new FakeEngineTransport({
-      getGenerateCategories: async () => makeGenerateCategories(),
-      getCaptureSummary: async () => makeCapture(),
-      getOverlayReadiness: async () => {
-        const { makeOverlayReadiness } = await import("../../testing/fixtures");
-        return makeOverlayReadiness();
-      },
-      analyzePosts: async () => {
-        const { readyResult } = await import("../../testing/analyze-state");
-        return { items: [readyResult] };
-      },
-      judgeDraft: async () => makeJudgeResponse(74),
-      applyJudgeSuggestions: async () =>
-        makeApplyResponse({ text: "original body", improvedOverOriginal: false }),
-      recordFeedbackPrediction: async (request) => {
-        recordCalls.push(request);
-        return makeFeedbackRecordResponse(request);
-      },
-    });
-
-    mountCockpit(fake);
-    await settle();
-    await clickWhenPresent(/run judge/i);
-    await clickWhenPresent(/apply all suggestions/i);
-    await settleUntil(() => recordCalls.length === 1, "reply apply never-worse feedback");
-
-    expect(composerText()).toBe("@alice original body");
-    expect(recordCalls[0]).toMatchObject({
-      action: "apply_all_result_written",
-      text: "original body",
-    });
-  });
-
 });
 // ===========================================================================
 // 6. Generate flow — rail click → generateIdeas({format}) + pending on rail.

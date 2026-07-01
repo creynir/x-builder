@@ -134,7 +134,7 @@ describe("transport assembly — installs window.__xbTransport with the full Eng
     const actual = Object.keys(assembledTransport()).sort();
 
     expect(actual).toEqual(expected);
-    expect(actual).toHaveLength(24);
+    expect(actual).toHaveLength(26);
   });
 
   it("makes every assembled transport method callable", () => {

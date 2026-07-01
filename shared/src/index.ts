@@ -42,6 +42,14 @@ export {
   replyComposerContextSchema,
 } from "./schemas/reply-composer-context.js";
 export {
+  generatedReplyRecordSchema,
+  generateReplyVariantsRequestSchema,
+  generateReplyVariantsResponseSchema,
+  recordGeneratedReplyRequestSchema,
+  recordGeneratedReplyResponseSchema,
+  replyVariantSchema,
+} from "./schemas/reply-variant-assistant.js";
+export {
   statusIdFromStatusUrl,
   statusUrlMatchesStatusId,
   xHandleSchema,
@@ -148,6 +156,8 @@ export {
   __xbuilder_analyzePosts,
   __xbuilder_judgeDraft,
   __xbuilder_generateIdeas,
+  __xbuilder_generateReplyVariants,
+  __xbuilder_recordGeneratedReply,
   __xbuilder_suggestPost,
   __xbuilder_getCooldown,
   __xbuilder_getCaptureSummary,
@@ -198,6 +208,14 @@ export type {
 export type {
   ReplyComposerContext,
 } from "./schemas/reply-composer-context.js";
+export type {
+  GeneratedReplyRecord,
+  GenerateReplyVariantsRequest,
+  GenerateReplyVariantsResponse,
+  RecordGeneratedReplyRequest,
+  RecordGeneratedReplyResponse,
+  ReplyVariant,
+} from "./schemas/reply-variant-assistant.js";
 export type {
   ReplyThreadContext,
   ReplyThreadContextDiagnostics,

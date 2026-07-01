@@ -3,6 +3,7 @@ import type { DetectedPostFormat, ReplyComposerContext } from "@x-builder/shared
 
 import type { CanonicalOwnPost, PostLibraryRepository } from "../server/post-library-repository.js";
 import type { AppSettingsRepository } from "../server/settings-repository.js";
+import type { GeneratedReplyLedgerRepository } from "../generated-replies/generated-reply-ledger-repository.js";
 import type {
   ArchiveVoiceProfile,
   ArchiveVoiceProfileProvider,
@@ -70,6 +71,7 @@ export type VoiceSamplePost = {
 
 export type SelectVoiceSamplesInput = {
   postLibraryRepository: Pick<PostLibraryRepository, "loadStore">;
+  generatedReplyLedgerRepository?: Pick<GeneratedReplyLedgerRepository, "isGeneratedReplyText">;
   useKnownPostIds?: string[];
   voiceProfileId?: string;
 };
@@ -89,6 +91,7 @@ export type RenderedArchiveVoiceProfile = {
 export type CreateGenerationGuidanceResolverInput = {
   settingsRepository: Pick<AppSettingsRepository, "load">;
   postLibraryRepository: Pick<PostLibraryRepository, "loadStore">;
+  generatedReplyLedgerRepository?: Pick<GeneratedReplyLedgerRepository, "isGeneratedReplyText">;
   externalPatternGuidanceProvider?: ExternalPatternGuidanceProvider;
   archiveVoiceProfileProvider?: ArchiveVoiceProfileProvider;
   voiceSampleProvider?: VoiceSampleProvider;
@@ -309,7 +312,19 @@ export const selectVoiceSamples = async (
     return [];
   }
 
-  const candidates = posts.filter(isUsableVoicePost);
+  const usableCandidates = posts.filter(isUsableVoicePost);
+  const candidates =
+    input.generatedReplyLedgerRepository === undefined
+      ? usableCandidates
+      : (
+          await Promise.all(
+            usableCandidates.map(async (post) =>
+              (await input.generatedReplyLedgerRepository!.isGeneratedReplyText(post.text))
+                ? undefined
+                : post,
+            ),
+          )
+        ).filter((post): post is CanonicalOwnPost => post !== undefined);
   if (candidates.length === 0) {
     return [];
   }
@@ -527,6 +542,9 @@ const resolveVoiceSamples = async (
 
   return selectVoiceSamples({
     postLibraryRepository: input.postLibraryRepository,
+    ...(input.generatedReplyLedgerRepository === undefined
+      ? {}
+      : { generatedReplyLedgerRepository: input.generatedReplyLedgerRepository }),
     useKnownPostIds: request.useKnownPostIds,
     voiceProfileId: request.voiceProfileId,
   });
