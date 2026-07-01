@@ -70,6 +70,7 @@ const MIGRATION_1_TABLES = [
 
 const MIGRATION_4_TABLES = ["voice_index_meta", "voice_post_embedding"] as const;
 const MIGRATION_5_TABLES = ["archive_voice_profile", "archive_voice_profile_evidence"] as const;
+const MIGRATION_6_TABLES = ["observed_thread_post"] as const;
 
 const importedAt = "2026-06-16T10:00:00.000Z";
 const sourceHash =
@@ -593,12 +594,12 @@ describe("user flow: round-trip through the repository interface", () => {
 // ARCHITECTURAL INVARIANT — SQLite is the real on-disk artifact.
 //
 // Falsifiable: a JSON-under-the-hood facade (or an in-memory-only impl) would
-// lack a real x-builder.db file whose PRAGMA user_version is 5 and whose
+// lack a real x-builder.db file whose PRAGMA user_version is 6 and whose
 // sqlite_master holds the seven migration-1 tables — so this test would fail it.
 // ===========================================================================
 
 describe("invariant: the migrated artifact is a real SQLite database on disk", () => {
-  it("after a buildServer migration, x-builder.db opens as a real db with user_version 5 and the migration tables", async () => {
+  it("after a buildServer migration, x-builder.db opens as a real db with user_version 6 and the migration tables", async () => {
     const root = await makeTempRoot("artifact");
     const dir = storageDir(root);
     await writeStoreFile(dir, v2Store());
@@ -618,7 +619,7 @@ describe("invariant: the migrated artifact is a real SQLite database on disk", (
     const raw = new Database(join(dir, DB_FILE), { readonly: true });
     try {
       const userVersion = Number(raw.pragma("user_version", { simple: true }));
-      expect(userVersion).toBe(5);
+      expect(userVersion).toBe(6);
 
       const tableRows = raw
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -632,6 +633,9 @@ describe("invariant: the migrated artifact is a real SQLite database on disk", (
         expect(tableNames.has(table)).toBe(true);
       }
       for (const table of MIGRATION_5_TABLES) {
+        expect(tableNames.has(table)).toBe(true);
+      }
+      for (const table of MIGRATION_6_TABLES) {
         expect(tableNames.has(table)).toBe(true);
       }
 
