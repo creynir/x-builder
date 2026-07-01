@@ -31,6 +31,7 @@ type ObservedThreadPostRow = {
 };
 
 type ObservedThreadPostSourceRow = {
+  status_id: string;
   source: ReplyThreadPost["source"];
 };
 
@@ -98,6 +99,9 @@ export class SqliteObservedThreadRepository implements ObservedThreadRepository 
         seen.add(parsed.statusId);
 
         const existing = this.readByStatusId(parsed.statusId);
+        if (existing !== undefined) {
+          this.writeSourceObservation(existing);
+        }
         const next = existing === undefined ? parsed : mergeObservedThreadPost(existing, parsed);
 
         if (existing !== undefined && stableJson(existing) === stableJson(next)) {
@@ -129,7 +133,7 @@ export class SqliteObservedThreadRepository implements ObservedThreadRepository 
         "SELECT * FROM observed_thread_post WHERE in_reply_to_status_id = ? ORDER BY created_at ASC, status_id ASC",
       )
       .all(statusId) as ObservedThreadPostRow[];
-    return rows.map((row) => this.rowToPost(row));
+    return this.rowsToPosts(rows);
   }
 
   async findByConversationId(conversationId: string): Promise<ReplyThreadPost[]> {
@@ -138,7 +142,7 @@ export class SqliteObservedThreadRepository implements ObservedThreadRepository 
         "SELECT * FROM observed_thread_post WHERE conversation_id = ? ORDER BY created_at ASC, status_id ASC",
       )
       .all(conversationId) as ObservedThreadPostRow[];
-    return rows.map((row) => this.rowToPost(row));
+    return this.rowsToPosts(rows);
   }
 
   private readByStatusId(statusId: string): ReplyThreadPost | undefined {
@@ -149,22 +153,47 @@ export class SqliteObservedThreadRepository implements ObservedThreadRepository 
   }
 
   private rowToPost(row: ObservedThreadPostRow): ReplyThreadPost {
-    return rowToPost(row, this.preferredSource(row.status_id, row.source));
+    const sourceMap = this.readSourcesByStatusIds([row.status_id]);
+    return rowToPost(row, this.preferredSource(row.source, sourceMap.get(row.status_id) ?? []));
   }
 
   private preferredSource(
-    statusId: string,
     fallback: ReplyThreadPost["source"],
+    sourceRows: ReplyThreadPost["source"][],
   ): ReplyThreadPost["source"] {
-    const rows = this.db
-      .prepare("SELECT source FROM observed_thread_post_source WHERE status_id = ?")
-      .all(statusId) as ObservedThreadPostSourceRow[];
-    const sources = new Set(rows.map((row) => row.source));
+    const sources = new Set([fallback, ...sourceRows]);
     if (sources.has("x_live_capture")) return "x_live_capture";
     if (sources.has("archive_tweets_js")) return "archive_tweets_js";
     if (sources.has("same_dialog_dom")) return "same_dialog_dom";
     if (sources.has("x_graphql_observed")) return "x_graphql_observed";
     return fallback;
+  }
+
+  private rowsToPosts(rows: ObservedThreadPostRow[]): ReplyThreadPost[] {
+    const sourceMap = this.readSourcesByStatusIds(rows.map((row) => row.status_id));
+    return rows.map((row) =>
+      rowToPost(row, this.preferredSource(row.source, sourceMap.get(row.status_id) ?? [])),
+    );
+  }
+
+  private readSourcesByStatusIds(
+    statusIds: string[],
+  ): Map<string, ReplyThreadPost["source"][]> {
+    const uniqueStatusIds = [...new Set(statusIds)];
+    if (uniqueStatusIds.length === 0) return new Map();
+    const placeholders = uniqueStatusIds.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(
+        `SELECT status_id, source FROM observed_thread_post_source WHERE status_id IN (${placeholders})`,
+      )
+      .all(...uniqueStatusIds) as ObservedThreadPostSourceRow[];
+    const sourceMap = new Map<string, ReplyThreadPost["source"][]>();
+    for (const row of rows) {
+      const sources = sourceMap.get(row.status_id) ?? [];
+      sources.push(row.source);
+      sourceMap.set(row.status_id, sources);
+    }
+    return sourceMap;
   }
 
   private write(post: ReplyThreadPost): void {

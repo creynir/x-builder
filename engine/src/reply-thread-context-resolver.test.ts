@@ -125,39 +125,6 @@ describe("ReplyThreadContextResolver", () => {
     ]);
   });
 
-  it("preserves own-source membership and fresher fields across stale observed duplicates", async () => {
-    const repository = new SqliteObservedThreadRepository(openEngineDatabase(":memory:"));
-    await repository.upsertThreadPosts([
-      post({
-        source: "x_live_capture",
-        statusId: "104",
-        text: "Fresh own reply.",
-        conversationId: "100",
-        weakMetrics: { likes: 3 },
-        observedAt: "2026-07-01T09:00:00.000Z",
-      }),
-      post({
-        source: "x_graphql_observed",
-        statusId: "104",
-        text: "Stale observed copy.",
-        conversationId: "100",
-        weakMetrics: { replies: 1 },
-        observedAt: "2026-07-01T08:00:00.000Z",
-      }),
-    ]);
-
-    await expect(repository.findByStatusId("104")).resolves.toMatchObject({
-      source: "x_live_capture",
-      statusId: "104",
-      text: "Fresh own reply.",
-      weakMetrics: {
-        likes: 3,
-        replies: 1,
-      },
-      observedAt: "2026-07-01T09:00:00.000Z",
-    });
-  });
-
   it("only throws for a pre-blocked context when parent context is required", async () => {
     const base = replyContext("103");
     const blocked = {

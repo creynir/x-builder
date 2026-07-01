@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import {
-  statusIdFromStatusUrl,
+  statusUrlMatchesStatusId,
   xHandleSchema,
   xStatusIdSchema,
   xStatusUrlSchema,
@@ -45,6 +45,21 @@ export const replyThreadWeakMetricsSchema = z.object({
   retweetCount: z.number().int().min(0).optional(),
 });
 
+const addStatusUrlStatusIdIssue = (
+  ctx: z.RefinementCtx,
+  url: string | undefined,
+  statusId: string | undefined,
+): void => {
+  if (url === undefined || statusId === undefined) return;
+  if (!statusUrlMatchesStatusId(url, statusId)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["url"],
+      message: "Status URL id must match statusId.",
+    });
+  }
+};
+
 export const replyThreadPostSchema = z
   .object({
     source: z.enum(["same_dialog_dom", "x_graphql_observed", "archive_tweets_js", "x_live_capture"]),
@@ -69,15 +84,7 @@ export const replyThreadPostSchema = z
     observedAt: z.string().datetime(),
   })
   .superRefine((post, ctx) => {
-    if (post.url === undefined) return;
-    const urlStatusId = statusIdFromStatusUrl(post.url);
-    if (urlStatusId !== post.statusId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["url"],
-        message: "Status URL id must match statusId.",
-      });
-    }
+    addStatusUrlStatusIdIssue(ctx, post.url, post.statusId);
   });
 
 export const replyThreadDomEvidenceSchema = z.object({
@@ -98,15 +105,7 @@ export const replyThreadDomEvidenceSchema = z.object({
       observedAt: z.string().datetime(),
     })
     .superRefine((target, ctx) => {
-      if (target.statusId === undefined || target.url === undefined) return;
-      const urlStatusId = statusIdFromStatusUrl(target.url);
-      if (urlStatusId !== target.statusId) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["url"],
-          message: "Status URL id must match statusId.",
-        });
-      }
+      addStatusUrlStatusIdIssue(ctx, target.url, target.statusId);
     }),
   diagnostics: replyThreadContextDiagnosticsSchema.optional(),
 });

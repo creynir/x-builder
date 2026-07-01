@@ -396,6 +396,7 @@ describe("reply composer context schema", () => {
     for (const targetUrl of [
       "ftp://x.com/context_builder/status/1930000000000000000",
       "https://example.com/context_builder/status/1930000000000000000",
+      "https://x.com/context-builder/status/1930000000000000000",
       "https://x.com/context_builder",
       "not a url",
     ]) {

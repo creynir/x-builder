@@ -43,6 +43,7 @@ export {
 } from "./schemas/reply-composer-context.js";
 export {
   statusIdFromStatusUrl,
+  statusUrlMatchesStatusId,
   xHandleSchema,
   xStatusIdSchema,
   xStatusUrlSchema,

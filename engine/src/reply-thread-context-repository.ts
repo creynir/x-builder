@@ -21,7 +21,7 @@ export const mergeObservedThreadPost = (
   previous: ReplyThreadPost,
   next: ReplyThreadPost,
 ): ReplyThreadPost => {
-  const fresher = next.observedAt > previous.observedAt ? next : previous;
+  const fresher = next.observedAt >= previous.observedAt ? next : previous;
   const older = fresher === next ? previous : next;
 
   return replyThreadPostSchema.parse({

@@ -70,10 +70,8 @@ const MIGRATION_1_TABLES = [
 
 const MIGRATION_4_TABLES = ["voice_index_meta", "voice_post_embedding"] as const;
 const MIGRATION_5_TABLES = ["archive_voice_profile", "archive_voice_profile_evidence"] as const;
-const MIGRATION_6_TABLES = [
-  "observed_thread_post",
-  "observed_thread_post_source",
-] as const;
+const MIGRATION_6_TABLES = ["observed_thread_post"] as const;
+const MIGRATION_7_TABLES = ["observed_thread_post_source"] as const;
 
 const importedAt = "2026-06-16T10:00:00.000Z";
 const sourceHash =
@@ -250,11 +248,17 @@ const stripWriteTimestamps = (store: PostLibraryStore): PostLibraryStore => ({
   posts: store.posts.map((post) => ({ ...post, updatedAt: "<normalized>" })),
 });
 
-// Read the row count of every migration-1 table as a record. Used to assert
+// Read the row count of every migration table as a record. Used to assert
 // STRUCTURAL idempotency: a re-open/re-import must not change any count.
 const tableCounts = (db: Database.Database): Record<string, number> => {
   const counts: Record<string, number> = {};
-  for (const table of MIGRATION_1_TABLES) {
+  for (const table of [
+    ...MIGRATION_1_TABLES,
+    ...MIGRATION_4_TABLES,
+    ...MIGRATION_5_TABLES,
+    ...MIGRATION_6_TABLES,
+    ...MIGRATION_7_TABLES,
+  ]) {
     counts[table] = (
       db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }
     ).n;
@@ -266,6 +270,77 @@ const canonicalize = (input: CanonicalOwnPostInput): CanonicalOwnPost => ({
   ...input,
   updatedAt: input.updatedAt ?? importedAt,
 }) as CanonicalOwnPost;
+
+describe("migration 7 source evidence backfill", () => {
+  it("migrates v6 observed thread post sources into the v7 source evidence table", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "x-builder-v6-observed-source-"));
+    const dbPath = join(dir, DB_FILE);
+    const legacy = new Database(dbPath);
+    try {
+      legacy.exec(`
+        CREATE TABLE observed_thread_post (
+          status_id TEXT PRIMARY KEY,
+          source TEXT NOT NULL CHECK (source IN ('same_dialog_dom', 'x_graphql_observed', 'archive_tweets_js', 'x_live_capture')),
+          role TEXT CHECK (role IN ('root', 'ancestor', 'immediate_parent', 'current_target', 'previous_own_reply')),
+          url TEXT,
+          author_handle TEXT,
+          author_display_name TEXT,
+          author_user_id TEXT,
+          text TEXT NOT NULL,
+          created_at TEXT,
+          in_reply_to_status_id TEXT,
+          in_reply_to_user_id TEXT,
+          conversation_id TEXT,
+          weak_metrics_json TEXT NOT NULL,
+          observed_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        INSERT INTO observed_thread_post (
+          status_id, source, text, weak_metrics_json, observed_at, updated_at
+        ) VALUES (
+          '104',
+          'x_live_capture',
+          'Prior own reply.',
+          '{}',
+          '2026-07-01T08:00:00.000Z',
+          '2026-07-01T08:01:00.000Z'
+        );
+        PRAGMA user_version = 6;
+      `);
+    } finally {
+      legacy.close();
+    }
+
+    const migrated = openEngineDatabase(dbPath);
+    try {
+      expect(migrated.pragma("user_version", { simple: true })).toBe(7);
+      const source = migrated
+        .prepare(
+          `SELECT status_id, source, first_observed_at, last_observed_at
+           FROM observed_thread_post_source
+           WHERE status_id = ?`,
+        )
+        .get("104") as
+        | {
+            status_id: string;
+            source: string;
+            first_observed_at: string;
+            last_observed_at: string;
+          }
+        | undefined;
+
+      expect(source).toEqual({
+        status_id: "104",
+        source: "x_live_capture",
+        first_observed_at: "2026-07-01T08:00:00.000Z",
+        last_observed_at: "2026-07-01T08:00:00.000Z",
+      });
+    } finally {
+      migrated.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 // ===========================================================================
 // USER FLOW 1 — Fresh install -> first write.
@@ -597,12 +672,12 @@ describe("user flow: round-trip through the repository interface", () => {
 // ARCHITECTURAL INVARIANT — SQLite is the real on-disk artifact.
 //
 // Falsifiable: a JSON-under-the-hood facade (or an in-memory-only impl) would
-// lack a real x-builder.db file whose PRAGMA user_version is 6 and whose
+// lack a real x-builder.db file whose PRAGMA user_version is 7 and whose
 // sqlite_master holds the seven migration-1 tables — so this test would fail it.
 // ===========================================================================
 
 describe("invariant: the migrated artifact is a real SQLite database on disk", () => {
-  it("after a buildServer migration, x-builder.db opens as a real db with user_version 6 and the migration tables", async () => {
+  it("after a buildServer migration, x-builder.db opens as a real db with user_version 7 and the migration tables", async () => {
     const root = await makeTempRoot("artifact");
     const dir = storageDir(root);
     await writeStoreFile(dir, v2Store());
@@ -622,7 +697,7 @@ describe("invariant: the migrated artifact is a real SQLite database on disk", (
     const raw = new Database(join(dir, DB_FILE), { readonly: true });
     try {
       const userVersion = Number(raw.pragma("user_version", { simple: true }));
-      expect(userVersion).toBe(6);
+      expect(userVersion).toBe(7);
 
       const tableRows = raw
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -639,6 +714,9 @@ describe("invariant: the migrated artifact is a real SQLite database on disk", (
         expect(tableNames.has(table)).toBe(true);
       }
       for (const table of MIGRATION_6_TABLES) {
+        expect(tableNames.has(table)).toBe(true);
+      }
+      for (const table of MIGRATION_7_TABLES) {
         expect(tableNames.has(table)).toBe(true);
       }
 

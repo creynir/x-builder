@@ -1,10 +1,11 @@
 import { z } from "zod";
 
-const statusUrlPattern = /^\/[^/]+\/status\/([0-9]+)\/?$/;
+const xHandlePattern = /^[A-Za-z0-9_]{1,15}$/;
+const statusUrlPattern = /^\/([A-Za-z0-9_]{1,15})\/status\/([0-9]+)\/?$/;
 
 export const xHandleSchema = z
   .string()
-  .regex(/^[A-Za-z0-9_]{1,15}$/, "X handle must be 1-15 letters, numbers, or underscores.");
+  .regex(xHandlePattern, "X handle must be 1-15 letters, numbers, or underscores.");
 
 export const xStatusIdSchema = z
   .string()
@@ -38,8 +39,11 @@ export const xStatusUrlSchema = z
 export const statusIdFromStatusUrl = (value: string): string | undefined => {
   try {
     const pathname = new URL(value).pathname;
-    return statusUrlPattern.exec(pathname)?.[1];
+    return statusUrlPattern.exec(pathname)?.[2];
   } catch {
     return undefined;
   }
 };
+
+export const statusUrlMatchesStatusId = (url: string, statusId: string): boolean =>
+  statusIdFromStatusUrl(url) === statusId;

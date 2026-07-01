@@ -294,7 +294,9 @@ CREATE TABLE observed_thread_post (
 CREATE INDEX idx_observed_thread_parent ON observed_thread_post(in_reply_to_status_id, created_at);
 CREATE INDEX idx_observed_thread_conversation ON observed_thread_post(conversation_id, created_at);
 CREATE INDEX idx_observed_thread_observed ON observed_thread_post(observed_at);
+`;
 
+const migration7Ddl = `
 CREATE TABLE observed_thread_post_source (
   status_id TEXT NOT NULL REFERENCES observed_thread_post(status_id) ON DELETE CASCADE,
   source TEXT NOT NULL CHECK (source IN ('same_dialog_dom', 'x_graphql_observed', 'archive_tweets_js', 'x_live_capture')),
@@ -304,6 +306,12 @@ CREATE TABLE observed_thread_post_source (
   PRIMARY KEY (status_id, source)
 );
 CREATE INDEX idx_observed_thread_post_source_source ON observed_thread_post_source(source, status_id);
+
+INSERT INTO observed_thread_post_source (
+  status_id, source, first_observed_at, last_observed_at, updated_at
+)
+SELECT status_id, source, observed_at, observed_at, updated_at
+FROM observed_thread_post;
 `;
 
 export type Migration = {
@@ -349,6 +357,12 @@ export const migrations: Migration[] = [
     version: 6,
     up(db) {
       db.exec(migration6Ddl);
+    },
+  },
+  {
+    version: 7,
+    up(db) {
+      db.exec(migration7Ddl);
     },
   },
 ];
