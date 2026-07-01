@@ -11,7 +11,7 @@ status: done
 **Props:**
 ```ts
 {
-  categories: GenerateCategory[];   // from getGenerateCategories(); 3–4 items
+  categories: GenerateCategory[];   // from getGenerateCategories(); 15 items
   pending?: string;                 // category.id currently generating (L4, from parent)
   onGenerate: (category: GenerateCategory) => void;
 }
@@ -26,17 +26,19 @@ status: done
   basis: "top_performer" | "frequent" | "default";
   cooldownStatus: "clear" | "warming" | "cooldown";
   sampleCount: number;   // ≥0
+  recentCount: number;   // ≥0, count inside cooldown window
+  windowDays: number;    // cooldown window length
 }
 ```
 
 **Per-button rendering rules:**
 - Button label = `category.label` exactly (no hardcoded label→format map; that map is DELETED).
-- `cooldownStatus !== "clear"` → render an amber `Badge` (variant `"warning"`) appended inline. **Label built ONLY from fields present on `GenerateCategory`** — `cooldownStatus` + `sampleCount` (e.g. `"cooldown · 4×"` for `cooldownStatus:"cooldown", sampleCount:4`, or `"warming · 2×"`). **There is NO `windowDays` or server message field on `GenerateCategory`** (the schema is `id,label,format,basis,cooldownStatus,sampleCount`), so do not attempt to read one. Button remains enabled (user can override).
+- `cooldownStatus !== "clear"` → render an amber `Badge` (variant `"warning"`) appended inline. **Label built ONLY from fields present on `GenerateCategory`** — `cooldownStatus`, `recentCount`, and `windowDays` (e.g. `"cooldown · 4 in 7d"`). `sampleCount` remains all-time corpus support and must not be shown as the recent cooldown count. Button remains enabled (user can override).
 - `pending === category.id` → render the button in its `loading` state (`<Button loading disabled>`), which shows the built-in spinner + sets `aria-busy` while keeping the label visible; button disabled during that generation.
 - Cold-start (basis `"default"`, `sampleCount: 0`) → renders identically to corpus-backed buttons; no visual distinction.
 - Click → `onGenerate(category)` → caller invokes `generateIdeas({ format: category.format })` (no `idea` field).
 
-**Primitives used:** `Button` (variant `"ghost"`, accent-edge via `--xb-border-edge`; its built-in `loading` state IS the pending spinner — no separate `Spinner` primitive), `Badge` (variant `"warning"` for cooldown). **No `Tooltip` primitive is built here** — see the long-label edge case.
+**Primitives used:** `Button` (variant `"ghost"`, accent-edge via `--xb-border-edge`; its built-in `loading` state IS the pending spinner — no separate `Spinner` primitive), `Badge` (variant `"warning"` for cooldown), and the existing `Tooltip` wrapper for the cooldown explanation.
 
 **State levels:**
 - `categories` = L1 (fetched via `getGenerateCategories()` on `ComposeContext` open, owned by `ComposeCockpit`).
@@ -81,18 +83,29 @@ No local data models; component is purely presentational over the `categories` p
 ```ts
 // overlay/src/testing/generate-categories.ts
 export const defaultCategories: GenerateCategory[] = [
-  { id: "hot_take", label: "Hot take", format: "hot_take", basis: "default", cooldownStatus: "clear", sampleCount: 0 },
-  { id: "founder_story", label: "Build-in-public", format: "founder_story", basis: "default", cooldownStatus: "clear", sampleCount: 0 },
-  { id: "audience_question", label: "Question", format: "audience_question", basis: "default", cooldownStatus: "clear", sampleCount: 0 },
-  { id: "story", label: "Story", format: "story", basis: "default", cooldownStatus: "clear", sampleCount: 0 },
+  { id: "default_fill_blank_tribal", label: "Fill Blank Tribal", format: "fill_blank_tribal", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_cta_farm", label: "Cta Farm", format: "cta_farm", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_fantasy_question", label: "Fantasy Question", format: "fantasy_question", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_binary_choice", label: "Binary Choice", format: "binary_choice", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_recognition_roast", label: "Recognition Roast", format: "recognition_roast", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_audience_question", label: "Audience Question", format: "audience_question", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_genuine_question", label: "Genuine Question", format: "genuine_question", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_ab_choice", label: "Ab Choice", format: "ab_choice", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_milestone", label: "Milestone", format: "milestone", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_founder_story", label: "Build-in-public", format: "founder_story", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_story", label: "Story", format: "story", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_insight_share", label: "Insight Share", format: "insight_share", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_hot_take", label: "Hot take", format: "hot_take", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_nuanced_question", label: "Nuanced Question", format: "nuanced_question", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
+  { id: "default_wisdom_one_liner", label: "Wisdom One Liner", format: "wisdom_one_liner", basis: "default", cooldownStatus: "clear", sampleCount: 0, recentCount: 0, windowDays: 7 },
 ];
 export const cooldownCategory: GenerateCategory = {
-  id: "hot_take", label: "Hot take", format: "hot_take", basis: "top_performer", cooldownStatus: "cooldown", sampleCount: 4,
+  id: "corpus_cta_farm", label: "Cta Farm", format: "cta_farm", basis: "top_performer", cooldownStatus: "cooldown", sampleCount: 12, recentCount: 4, windowDays: 7,
 };
 ```
 
 **Test cases:**
-1. **Render** — 4 default categories → 4 buttons with correct labels; no cooldown badges.
+1. **Render** — 15 default categories → 15 buttons with correct labels in the same order as the returned array; no cooldown badges.
 2. **Cooldown annotation** — `cooldownStatus: "cooldown"` → `Badge` with `variant="warning"` rendered adjacent to button label.
 3. **Pending spinner** — `pending === category.id` → spinner shown, button disabled; other buttons unaffected.
 4. **Click payload** — clicking a button calls `onGenerate` with the full `GenerateCategory` object; `format` field matches.
@@ -113,7 +126,7 @@ export const cooldownCategory: GenerateCategory = {
 
 ## Acceptance Criteria
 
-**Given** `ComposeContext` is active and `getGenerateCategories()` returns 3–4 categories  
+**Given** `ComposeContext` is active and `getGenerateCategories()` returns 15 categories  
 **When** `ComposeGenerateRail` renders  
 **Then** exactly one button appears per category, labelled with `category.label`.
 
@@ -127,7 +140,7 @@ export const cooldownCategory: GenerateCategory = {
 
 **Given** the corpus is empty (cold-start, `basis: "default"`)  
 **When** the rail renders  
-**Then** the default 4 categories appear with no visual difference from corpus-backed categories.
+**Then** the default 15 categories appear with no visual difference from corpus-backed categories.
 
 **Given** the user clicks a button  
 **When** `onGenerate` fires  

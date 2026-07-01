@@ -38,6 +38,79 @@ const candidateRenderingFormats = [
 ] as const;
 const generatedCandidateCount = candidateRenderingFormats.length;
 
+const defaultGeneratedDraftMaxLength = 280;
+
+const generatedDraftMaxLengthByFormat: Partial<Record<DetectedPostFormat, number>> = {
+  hot_take: 220,
+  wisdom_one_liner: 160,
+  genuine_question: 180,
+  audience_question: 200,
+  binary_choice: 180,
+  fantasy_question: 220,
+  fill_blank_tribal: 220,
+  cta_farm: 220,
+  nuanced_question: 220,
+  founder_story: 560,
+  story: 420,
+  insight_share: 280,
+};
+
+const generatedDraftMaxLengthForFormat = (format: DetectedPostFormat): number =>
+  generatedDraftMaxLengthByFormat[format] ?? defaultGeneratedDraftMaxLength;
+
+const formatShapeConstraints: Partial<Record<DetectedPostFormat, readonly string[]>> = {
+  hot_take: [
+    "Hot take shape: one sharp claim stated up front; max two short visible lines; no explanatory paragraph.",
+    "Do not write a mini-essay, thread starter, or abstract analysis block for a hot take.",
+  ],
+  wisdom_one_liner: [
+    "Wisdom one-liner shape: exactly one visible line; no setup, no paragraph, no explanation.",
+  ],
+  insight_share: [
+    "Insight share shape: one concrete observation plus one concrete implication; avoid abstract analysis blocks.",
+  ],
+  fill_blank_tribal: [
+    "Fill-blank shape: short parallel setup lines ending with an easy blank a stranger can complete fast.",
+  ],
+  cta_farm: [
+    "CTA shape: one simple ask a stranger can answer or drop in under five seconds.",
+  ],
+  fantasy_question: [
+    "Fantasy question shape: one concrete hypothetical with a clear stake and an easy answer.",
+  ],
+  binary_choice: [
+    "Binary choice shape: exactly two clear options; make the answer obvious to type quickly.",
+  ],
+  recognition_roast: [
+    "Recognition roast shape: one recognizable behavior or character type, lightly roasted without cruelty.",
+  ],
+  ab_choice: [
+    "A/B choice shape: exactly two bullet lines with clear contrast; no inline X-or-Y sentence, third option, or explanatory paragraph.",
+  ],
+  milestone: [
+    "Milestone shape: first person plus one concrete number and a milestone noun or goal phrase; do not use a vague progress marker or turn it into a victory lap.",
+  ],
+  audience_question: [
+    "Audience question shape: name the audience, ask one quick low-context question.",
+  ],
+  genuine_question: [
+    "Genuine question shape: one plain single-clause question; no multi-part setup.",
+  ],
+  nuanced_question: [
+    "Nuanced questions are weak for small accounts; keep them compact and easy to answer if used.",
+  ],
+  founder_story: [
+    "Founder story shape: first-person narrative with stakes, reversal, and hard proof; never invent emotional stakes.",
+  ],
+};
+
+const formatShapeGuidance = (format: DetectedPostFormat): string[] => [
+  "Optimize for low answer-effort: a cold stranger should be able to reply in under five seconds.",
+  "Prefer concrete recognition, specific stakes, and easy reply hooks over polished abstract analysis.",
+  ...(formatShapeConstraints[format] ?? []),
+  `Hard length cap for this format: ${generatedDraftMaxLengthForFormat(format)} characters per candidate.`,
+];
+
 // The shape the model is asked to return: exactly three { id, text } drafts.
 type GeneratedDrafts = {
   candidates: Array<{ id: string; text: string }>;
@@ -94,7 +167,7 @@ const fatalJudgeError = (
   return undefined;
 };
 
-const generatedDraftsSchema: Record<string, unknown> = {
+const generatedDraftsSchema = (format: DetectedPostFormat): Record<string, unknown> => ({
   type: "object",
   additionalProperties: false,
   required: ["candidates"],
@@ -109,12 +182,16 @@ const generatedDraftsSchema: Record<string, unknown> = {
         required: ["id", "text"],
         properties: {
           id: { type: "string", minLength: 1, maxLength: 120 },
-          text: { type: "string", minLength: 1, maxLength: 8_000 },
+          text: {
+            type: "string",
+            minLength: 1,
+            maxLength: generatedDraftMaxLengthForFormat(format),
+          },
         },
       },
     },
   },
-};
+});
 
 // Shape and validate the model output. The real StructuredLlmService runs this
 // parser against raw provider output; an off-contract payload throws here and
@@ -162,8 +239,9 @@ const generationInstructions = (
     "You are an expert X (Twitter) writer.",
     `Produce exactly ${generatedCandidateCount} distinct draft posts in the "${format}" format.`,
     "Each draft must take a genuinely different angle on the topic — no near-duplicates.",
-    "Keep every draft Twitter-length and in an authentic human voice; avoid generic AI",
+    "Keep every draft short, replyable, and in an authentic human voice; avoid generic AI",
     "hype, hashtag/emoji spam, em dashes, and engagement bait.",
+    ...formatShapeGuidance(format),
     idea !== undefined
       ? `Seed topic to build the drafts around: ${idea}`
       : "Choose a fresh, specific topic that suits the requested format.",
@@ -285,7 +363,7 @@ export class GenerateIdeasService {
       ],
       structuredOutput: {
         name: "generated_idea_candidates",
-        schema: generatedDraftsSchema,
+        schema: generatedDraftsSchema(format),
         parser: toGeneratedDrafts,
       },
       options: { timeoutMs: remainingLlmTimeoutMs(deadline) },

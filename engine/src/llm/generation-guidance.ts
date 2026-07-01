@@ -92,6 +92,7 @@ export type CreateGenerationGuidanceResolverInput = {
   externalPatternGuidanceProvider?: ExternalPatternGuidanceProvider;
   archiveVoiceProfileProvider?: ArchiveVoiceProfileProvider;
   voiceSampleProvider?: VoiceSampleProvider;
+  defaultKnowledgeBasePath?: string;
 };
 
 export type VoiceRetrievalRequest = GenerationGuidanceRequest & {
@@ -425,6 +426,7 @@ export const renderArchiveVoiceProfileGuidance = (
 
 const resolveKnowledgeBasePath = async (
   settingsRepository: Pick<AppSettingsRepository, "load">,
+  defaultKnowledgeBasePath?: string,
 ): Promise<string | undefined> => {
   try {
     const { settings } = await settingsRepository.load();
@@ -433,10 +435,10 @@ const resolveKnowledgeBasePath = async (
       typeof rawKnowledgeBasePath === "string" ? rawKnowledgeBasePath.trim() : undefined;
 
     return knowledgeBasePath === undefined || knowledgeBasePath.length === 0
-      ? undefined
+      ? defaultKnowledgeBasePath
       : knowledgeBasePath;
   } catch {
-    return undefined;
+    return defaultKnowledgeBasePath;
   }
 };
 
@@ -535,7 +537,10 @@ export const createGenerationGuidanceResolver = (
 ): GenerationGuidanceResolver => {
   return async (request) => {
     try {
-      const knowledgeBasePath = await resolveKnowledgeBasePath(input.settingsRepository);
+      const knowledgeBasePath = await resolveKnowledgeBasePath(
+        input.settingsRepository,
+        input.defaultKnowledgeBasePath,
+      );
       const [playbook, archiveVoiceProfile, voiceSamples, externalPatternGuidance] = await Promise.all([
         resolvePlaybookSlice({
           format: request.format,

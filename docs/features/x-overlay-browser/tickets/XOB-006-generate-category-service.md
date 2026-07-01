@@ -12,16 +12,13 @@ Add `engine/src/suggest/generate-category-service.ts`. Class constructor: `Gener
 
 **Cold-start path (corpus < 10 originals):**
 
-- Count `original`-kind posts in the store. If fewer than 10, return the fixed default set immediately — no corpus ranking:
+- Count `original`-kind posts in the store. If fewer than 10, return the fixed 15-format generator default set immediately — no corpus ranking:
 
-  ```
-  [
-    { id: "default_hot_take",      label: "Hot take",        format: "hot_take",         basis: "default", cooldownStatus: "clear", sampleCount: 0 },
-    { id: "default_founder_story", label: "Build-in-public", format: "founder_story",    basis: "default", cooldownStatus: "clear", sampleCount: 0 },
-    { id: "default_audience_q",    label: "Question",        format: "audience_question", basis: "default", cooldownStatus: "clear", sampleCount: 0 },
-    { id: "default_story",         label: "Story",           format: "story",            basis: "default", cooldownStatus: "clear", sampleCount: 0 },
-  ]
-  ```
+  The default set is the 15 opportunity-weighted generation lanes:
+  `fill_blank_tribal`, `cta_farm`, `fantasy_question`, `binary_choice`,
+  `recognition_roast`, `audience_question`, `genuine_question`, `ab_choice`,
+  `milestone`, `founder_story`, `story`, `insight_share`, `hot_take`,
+  `nuanced_question`, and `wisdom_one_liner`.
 
 **Corpus path (≥ 10 originals):**
 
@@ -30,17 +27,18 @@ Add `engine/src/suggest/generate-category-service.ts`. Class constructor: `Gener
    - `sampleCount`: number of originals classified as that format.
    - `avgReplies`: arithmetic mean of reply metrics. For each post in this format, the reply value is: `metricSnapshots.find(s => s.source === "x_live_capture")?.replies ?? post.weakMetrics.favoriteCount ?? 0`. (Live replies preferred; fall back to archive favorites as a weak proxy.)
    - `performanceScore`: `sampleCount * avgReplies` (frequency × replies-weighted performance).
-3. Sort formats descending by `performanceScore`.
+3. Assign each generation lane a bounded opportunity weight from the playbook.
 4. Call `windowService.compute(7)` to get the `CooldownReport`.
 5. Annotate each format's `cooldownStatus` from the report: look up by `signal.format`; if no signal, `"clear"`.
 6. Assign `basis`:
-   - Top format (highest `performanceScore`) → `"top_performer"`.
-   - Remaining formats → `"frequent"`.
-7. Return top 3–4 formats (minimum 3; include a 4th if `performanceScore` is non-zero and the format is not in `cooldown` status). If fewer than 3 non-`"other"` formats exist, backfill with default entries (`basis: "default"`, `sampleCount: 0`, `cooldownStatus: "clear"`) from the cold-start set until 3 are present.
+   - First corpus-backed lane after opportunity-first sorting → `"top_performer"`.
+   - Remaining corpus-backed generation lanes → `"frequent"`.
+   - Lanes with no corpus match → `"default"`.
+7. Return exactly 15 generation lanes sorted by opportunity weight first, corpus `performanceScore` second, and fixed generator order third. Corpus metadata is overlaid onto matching lanes; weak archived formats do not suppress stronger default generator options. Formats `"other"` and `"connect"` are not generation lanes.
 8. Each returned `GenerateCategory` has:
    - `id`: `"corpus_${format}"` for corpus-derived entries.
    - `label`: human-readable display label. Use the same label map as the overlay button map: `hot_take → "Hot take"`, `founder_story → "Build-in-public"`, `audience_question → "Question"`, `story → "Story"`; for all other formats, derive from the format key (replace `_` with space, title-case).
-   - `format`, `basis`, `cooldownStatus`, `sampleCount`.
+   - `format`, `basis`, `cooldownStatus`, `sampleCount`, `recentCount`, `windowDays`.
 
 **Transport bindings:**
 
@@ -53,7 +51,7 @@ Add `engine/src/suggest/generate-category-service.ts`. Class constructor: `Gener
 
 From `@x-builder/shared` (XOB-002):
 
-- `generateCategorySchema` — `{ id: ≤120, label: ≤40, format: detectedPostFormat, basis: enum(top_performer|frequent|default), cooldownStatus: cooldownStatusSchema, sampleCount: int≥0 }`
+- `generateCategorySchema` — `{ id: ≤120, label: ≤40, format: detectedPostFormat, basis: enum(top_performer|frequent|default), cooldownStatus: cooldownStatusSchema, sampleCount: int≥0, recentCount: int≥0, windowDays: int>0 }`
 - `cooldownStatusSchema` — `enum("clear" | "warming" | "cooldown")`
 
 Existing types reused:
@@ -99,9 +97,9 @@ Existing types reused:
 
 Coverage:
 
-1. Corpus < 10 originals → returns 4 defaults, all `basis: "default"`, `sampleCount: 0`, `cooldownStatus: "clear"`.
-2. Corpus ≥ 10 originals with skewed `hot_take` frequency and live replies → `hot_take` appears first with `basis: "top_performer"`.
-3. Cooldown condition on `hot_take` (4+ in last 7 days via `RepetitionWindowService`) → returned `hot_take` category has `cooldownStatus: "cooldown"`.
+1. Corpus < 10 originals → returns 15 defaults, all `basis: "default"`, `sampleCount: 0`, `cooldownStatus: "clear"`.
+2. Corpus ≥ 10 originals with skewed `hot_take` frequency and live replies → `hot_take` carries corpus metadata and `basis: "top_performer"` only when it is the first corpus-backed lane after opportunity-first ordering.
+3. Cooldown condition on `hot_take` (4+ in last 7 days via `RepetitionWindowService`) → returned `hot_take` category has `cooldownStatus: "cooldown"`, `recentCount` from the cooldown window, and `windowDays: 7`.
 4. Format `"other"` posts are excluded from ranking; do not appear in result.
 5. HTTP route: `buildServer().inject({ method: 'GET', url: '/generate/categories' })` → status 200, response parses as `z.array(generateCategorySchema)`.
 6. HTTP route: injected service throws `PostLibraryStorageError` → status 500, `code: "library_storage_failed"`.
@@ -120,7 +118,7 @@ Coverage:
 
 **When** `getCategories()` is called
 
-**Then** the first returned category has `format: "hot_take"`, `basis: "top_performer"`, `cooldownStatus: "cooldown"`, `sampleCount > 0`.
+**Then** the result contains the fixed 15-lane generator set in opportunity-first order, and the `hot_take` lane has corpus metadata plus `cooldownStatus: "cooldown"`, `recentCount >= 4`, `windowDays: 7`, and `sampleCount > 0`.
 
 ---
 
@@ -128,7 +126,7 @@ Coverage:
 
 **When** `getCategories()` is called
 
-**Then** the result contains exactly 4 items, all with `basis: "default"`, `sampleCount: 0`, `cooldownStatus: "clear"`, and formats `hot_take`, `founder_story`, `audience_question`, `story`.
+**Then** the result contains exactly 15 items, all with `basis: "default"`, `sampleCount: 0`, `cooldownStatus: "clear"`, and the fixed generator-lane formats.
 
 ---
 
@@ -136,7 +134,7 @@ Coverage:
 
 **When** `GET /generate/categories` is called
 
-**Then** status 200 and response body parses as `z.array(generateCategorySchema)` with 3–4 items.
+**Then** status 200 and response body parses as `z.array(generateCategorySchema)` with 15 items.
 
 ---
 
@@ -148,11 +146,12 @@ Coverage:
 
 ## Edge Cases
 
-- All originals classify as `"other"` → no corpus-derived categories; return 4 defaults (backfill).
-- Exactly 3 distinct non-`"other"` formats with non-zero `performanceScore` → return exactly 3.
+- All originals classify as `"other"` → no corpus-derived categories; return 15 defaults.
+- Exactly 3 distinct generation formats with non-zero `performanceScore` → return the 15 opportunity-weighted generator lanes, with those 3 lanes carrying corpus metadata.
+- More than 15 distinct classified formats → return the 15 supported generation lanes; non-generation formats are ignored.
 - `weakMetrics.favoriteCount` absent and no live replies → `avgReplies: 0`; ranking is by frequency only.
-- Multiple formats have identical `performanceScore` → stable tie-break by format name alphabetically.
-- Corpus has posts but 0 originals (all replies/reposts) → corpus count < 10 → cold-start path returns 4 defaults.
+- Multiple formats have identical opportunity and `performanceScore` → stable tie-break by fixed generator order.
+- Corpus has posts but 0 originals (all replies/reposts) → corpus count < 10 → cold-start path returns 15 defaults.
 
 ## Pipeline Log
 
@@ -163,5 +162,6 @@ Lean Red-first lane.
 - **Green** (`2133c49`): `GenerateCategoryService.getCategories` (cold-start + corpus ranking by `sampleCount × avgReplies`, alpha tie-break, cooldown annotation via `windowService.compute(7)`, backfill nuance) + `GET /generate/categories` route + `BuildServerOptions.generateCategoryService?` + a dedicated `libraryStorageFailedError()` helper (archive helper emits a different code; `library_storage_failed`/`library` both valid in `apiErrorSchema`) + barrel export. 12/632 tests, typecheck 9/9.
 - **Gates** (post-Green, base `6556d83`): all CLEAN; no test files touched.
 - **Blue (Validate Green)**: APPROVE — typecheck honest (cache-bypassed), ranking/cooldown/backfill logic faithful, route 200 + 500 paths correct, new error helper schema-valid, no `@ts-ignore`/`any`, guarded non-null assertions.
-- **Yellow (intent)**: APPROVE — real deterministic ranking of the user's own formats (no LLM, no fake), wired to transport method 16 (`getGenerateCategories`), zero-trace (no theme/topic, no cache), backfill coherent (4 only when no corpus signal; 3–4 when usable formats exist), `libraryStorageFailedError` justified + used.
+- **Yellow (intent)**: APPROVE — real deterministic ranking of the user's own formats (no LLM, no fake), wired to transport method 16 (`getGenerateCategories`), zero-trace (no theme/topic, no cache), backfill coherent (15 generator lanes even when no corpus signal), `libraryStorageFailedError` justified + used.
+- 2026-06-30: Product correction changed the category source from 3–4 ranked formats to 15 opportunity-weighted generator lanes so the completed bounded rail has enough options to scroll.
 - Concerns ledger: none. Status → **done**.

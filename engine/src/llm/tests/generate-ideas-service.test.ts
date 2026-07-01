@@ -276,6 +276,36 @@ describe("GenerateIdeasService format path", () => {
     expect(instructions).toContain("Mirror the author's terse voice.");
   });
 
+  it("adds hard hot-take shape and length constraints to the writer request", async () => {
+    const { generateStructured, llm } = makeLlmFake(generateSuccess());
+    const { judge } = makeAllJudgedFake();
+    const service = new GenerateIdeasService(llm, { judge }, resolveProvider, resolveProfile);
+
+    await service.generate(formatRequest({ format: "hot_take" }));
+
+    const request = generateStructured.mock.calls[0]?.[0];
+    expect(request?.instructions).toContain("Hot take shape: one sharp claim stated up front");
+    expect(request?.instructions).toContain("max two short visible lines");
+    expect(request?.instructions).toContain("Hard length cap for this format: 220 characters");
+    expect(JSON.stringify(request?.structuredOutput.schema)).toContain('"maxLength":220');
+  });
+
+  it.each([
+    ["recognition_roast", "Recognition roast shape: one recognizable behavior"],
+    ["ab_choice", "A/B choice shape: exactly two bullet lines"],
+    ["milestone", "Milestone shape: first person plus one concrete number"],
+  ] as const)("adds first-class %s shape constraints to the writer request", async (format, expected) => {
+    const { generateStructured, llm } = makeLlmFake(generateSuccess());
+    const { judge } = makeAllJudgedFake();
+    const service = new GenerateIdeasService(llm, { judge }, resolveProvider, resolveProfile);
+
+    await service.generate(formatRequest({ format }));
+
+    const request = generateStructured.mock.calls[0]?.[0];
+    expect(request?.instructions).toContain(expected);
+    expect(request?.instructions).toContain("Hard length cap for this format");
+  });
+
   it("renders external guidance without creating own posts or voice samples when the own corpus is empty", async () => {
     const externalStatement =
       "EXTERNAL_NO_CONTAMINATION_STATEMENT_NO_VOICE_SENTINEL: lead with a concrete operator receipt.";

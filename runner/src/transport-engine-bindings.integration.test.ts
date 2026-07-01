@@ -722,21 +722,30 @@ describe("real engine bundle — generateIdeas refine attaches verdict + approve
     expect(Object.prototype.hasOwnProperty.call(request, "generationContext")).toBe(false);
   });
 
-  it("reaches the base writer prompt when there is no playbook and no voice corpus", async () => {
-    const { services, calls } = buildBundle();
-    const mockPage = createMockPage();
-    await ExposeFunctionTransport.bindAll(mockPage.page as never, services);
+  it("grounds the writer prompt in the default playbook when launched outside the repo cwd", async () => {
+    const previousCwd = process.cwd();
 
-    const handler = mockPage.handlers.get(ENGINE_TRANSPORT_BINDINGS.generateIdeas)!;
-    const raw = await handler({ format: "hot_take" });
+    try {
+      process.chdir(tempDir);
+      const { services, calls } = buildBundle();
+      const mockPage = createMockPage();
+      await ExposeFunctionTransport.bindAll(mockPage.page as never, services);
 
-    const parsed = generateIdeaResponseSchema.parse(raw);
-    expect(parsed.candidates).toHaveLength(3);
+      const handler = mockPage.handlers.get(ENGINE_TRANSPORT_BINDINGS.generateIdeas)!;
+      const raw = await handler({ format: "hot_take" });
 
-    const instructions = writerInstructions(calls);
-    expect(instructions).toContain('Produce exactly 3 distinct draft posts in the "hot_take" format.');
-    expect(instructions).not.toContain("# Requested format playbook");
-    expect(instructions).not.toContain("# Voice samples (match tone, do not copy)");
+      const parsed = generateIdeaResponseSchema.parse(raw);
+      expect(parsed.candidates).toHaveLength(3);
+
+      const instructions = writerInstructions(calls);
+      expect(instructions).toContain('Produce exactly 3 distinct draft posts in the "hot_take" format.');
+      expect(instructions).toContain("# Requested format playbook");
+      expect(instructions).toContain("hot_take");
+      expect(instructions).toContain("max two short visible lines");
+      expect(instructions).not.toContain("# Voice samples (match tone, do not copy)");
+    } finally {
+      process.chdir(previousCwd);
+    }
   });
 
   it("continues without external guidance when the paired snapshot reader fails", async () => {

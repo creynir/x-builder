@@ -82,6 +82,45 @@ const STORY_TEXTS = [
 // length 3, but trims to empty so the classifier returns "other".
 const OTHER_TEXT = "   ";
 
+const RANKING_FORMAT_TEXTS = {
+  genuine_question: "Genuine question: why do teams keep hiding pricing?",
+  hot_take: HOT_TAKE_TEXTS[0],
+  founder_story: FOUNDER_STORY_TEXTS[0],
+  audience_question: AUDIENCE_QUESTION_TEXTS[0],
+  story: STORY_TEXTS[0],
+  insight_share:
+    "Reliable onboarding is mostly constraint design.\nThe best flows remove decisions before users notice them.",
+  ab_choice: "- Ship the narrow version\n- Wait for perfect scope",
+  fill_blank_tribal:
+    "Startup has traction\nProduct is sticky\nCustomer has",
+  cta_farm: "Drop your landing page below and I'll review it.",
+  fantasy_question: "If you had $10k to fix onboarding, what would you do?",
+  binary_choice: "Ship now or wait?",
+  nuanced_question: "Be honest, do you actually prefer shipping fast or waiting?",
+  recognition_roast: "We all know that one founder who calls every bug a learning.",
+  wisdom_one_liner: "Specific proof beats clever positioning every launch week.",
+  milestone: "We hit 100 users this week.",
+  connect: "Let's connect.",
+} as const;
+
+const EXPECTED_GENERATION_FORMATS = [
+  "fill_blank_tribal",
+  "cta_farm",
+  "fantasy_question",
+  "binary_choice",
+  "recognition_roast",
+  "audience_question",
+  "genuine_question",
+  "ab_choice",
+  "milestone",
+  "founder_story",
+  "story",
+  "insight_share",
+  "hot_take",
+  "nuanced_question",
+  "wisdom_one_liner",
+] as const;
+
 const externalPattern = (
   overrides: Partial<ExternalXSignalPattern> = {},
 ): ExternalXSignalPattern => ({
@@ -263,13 +302,16 @@ describe("GenerateCategoryService fixture classification guard", () => {
     for (const text of STORY_TEXTS) {
       expect(classifyPostFormat(text)).toBe("story");
     }
+    for (const [format, text] of Object.entries(RANKING_FORMAT_TEXTS)) {
+      expect(classifyPostFormat(text)).toBe(format);
+    }
     expect(classifyPostFormat(OTHER_TEXT)).toBe("other");
   });
 });
 
 describe("GenerateCategoryService.getCategories cold-start path", () => {
-  // Coverage 1 + AC: corpus with fewer than 10 originals -> the fixed 4 defaults.
-  it("returns the four fixed defaults for a corpus with fewer than ten originals", async () => {
+  // Coverage 1 + AC: corpus with fewer than 10 originals -> the fixed generator defaults.
+  it("returns the fifteen fixed defaults for a corpus with fewer than ten originals", async () => {
     await repository.upsertPosts([
       archivePost(HOT_TAKE_TEXTS[0], isoDaysAgo(1)),
       archivePost(FOUNDER_STORY_TEXTS[0], isoDaysAgo(2)),
@@ -278,52 +320,33 @@ describe("GenerateCategoryService.getCategories cold-start path", () => {
 
     const categories: GenerateCategory[] = await service.getCategories();
 
-    expect(categories).toHaveLength(4);
+    expect(categories).toHaveLength(15);
     for (const category of categories) {
       expect(generateCategorySchema.safeParse(category).success).toBe(true);
       expect(category.basis).toBe("default");
       expect(category.sampleCount).toBe(0);
       expect(category.cooldownStatus).toBe("clear");
     }
-    expect(categories.map((category) => category.format)).toEqual([
-      "hot_take",
-      "founder_story",
-      "audience_question",
-      "story",
-    ]);
-    expect(categories.map((category) => category.id)).toEqual([
-      "default_hot_take",
-      "default_founder_story",
-      "default_audience_q",
-      "default_story",
-    ]);
-    expect(categories.map((category) => category.label)).toEqual([
-      "Hot take",
-      "Build-in-public",
-      "Question",
-      "Story",
-    ]);
+    expect(categories.map((category) => category.format)).toEqual(EXPECTED_GENERATION_FORMATS);
+    expect(categories.map((category) => category.id)).toEqual(
+      EXPECTED_GENERATION_FORMATS.map((format) => `default_${format}`),
+    );
   });
 
-  // AC: an empty corpus (0 posts) -> exactly 4 defaults.
-  it("returns the four fixed defaults for an empty corpus", async () => {
+  // AC: an empty corpus (0 posts) -> exactly 15 defaults.
+  it("returns the fifteen fixed defaults for an empty corpus", async () => {
     const categories: GenerateCategory[] = await service.getCategories();
 
-    expect(categories).toHaveLength(4);
+    expect(categories).toHaveLength(15);
     expect(categories.every((category) => category.basis === "default")).toBe(true);
     expect(categories.every((category) => category.sampleCount === 0)).toBe(true);
     expect(categories.every((category) => category.cooldownStatus === "clear")).toBe(true);
-    expect(categories.map((category) => category.format)).toEqual([
-      "hot_take",
-      "founder_story",
-      "audience_question",
-      "story",
-    ]);
+    expect(categories.map((category) => category.format)).toEqual(EXPECTED_GENERATION_FORMATS);
   });
 
   // Edge: posts exist but none are originals (all replies / reposts) -> the
   // original count is 0, below the threshold, so the cold-start defaults return.
-  it("returns the four fixed defaults when posts exist but none are originals", async () => {
+  it("returns the fifteen fixed defaults when posts exist but none are originals", async () => {
     await repository.upsertPosts([
       archivePost(HOT_TAKE_TEXTS[0], isoDaysAgo(1), { kind: "reply" }),
       archivePost(HOT_TAKE_TEXTS[1], isoDaysAgo(2), { kind: "repost_reference" }),
@@ -332,23 +355,18 @@ describe("GenerateCategoryService.getCategories cold-start path", () => {
 
     const categories: GenerateCategory[] = await service.getCategories();
 
-    expect(categories).toHaveLength(4);
+    expect(categories).toHaveLength(15);
     expect(categories.every((category) => category.basis === "default")).toBe(true);
-    expect(categories.map((category) => category.format)).toEqual([
-      "hot_take",
-      "founder_story",
-      "audience_question",
-      "story",
-    ]);
+    expect(categories.map((category) => category.format)).toEqual(EXPECTED_GENERATION_FORMATS);
   });
 });
 
 describe("GenerateCategoryService.getCategories corpus path", () => {
   // Coverage 2: >= 10 originals skewed to hot_take with live replies. hot_take
-  // has the highest sampleCount * avgReplies, so it ranks first as the top
-  // performer. Most hot_take posts sit OUTSIDE the 7-day window so cooldown stays
-  // clear here (cooldown is exercised separately in the test below).
-  it("ranks the highest performing format first as the top performer", async () => {
+  // has the highest sampleCount * avgReplies among corpus-backed lanes, so it
+  // is marked as the top performer. Higher-opportunity generator lanes still
+  // render above it as defaults.
+  it("marks the highest performing corpus format without hiding stronger default lanes", async () => {
     const posts: CanonicalOwnPostInput[] = [
       // 7 hot_take originals, each with 10 live replies (sampleCount 7, avg 10,
       // score 70). Only one is in-window so the cooldown stays clear.
@@ -370,9 +388,10 @@ describe("GenerateCategoryService.getCategories corpus path", () => {
 
     const categories: GenerateCategory[] = await service.getCategories();
 
-    expect(categories.length).toBeGreaterThanOrEqual(3);
-    const top = categories[0];
-    expect(top?.format).toBe("hot_take");
+    expect(categories).toHaveLength(15);
+    expect(categories[0]?.format).toBe("fill_blank_tribal");
+    expect(categories[0]?.basis).toBe("default");
+    const top = findByFormat(categories, "hot_take");
     expect(top?.basis).toBe("top_performer");
     expect(top?.sampleCount).toBe(7);
     expect(top?.sampleCount).toBeGreaterThan(0);
@@ -384,10 +403,10 @@ describe("GenerateCategoryService.getCategories corpus path", () => {
     expect(story?.basis).toBe("frequent");
   });
 
-  // Coverage 3 + AC: hot_take is both the top performer AND in cooldown because 4+
-  // hot_take originals fall inside the 7-day window. The returned hot_take entry
-  // carries cooldownStatus "cooldown" but is NOT excluded from the list.
-  it("annotates the top format as in cooldown when four or more fall inside the window", async () => {
+  // Coverage 3 + AC: hot_take is in cooldown because 4+ hot_take originals fall
+  // inside the 7-day window. The returned hot_take entry carries
+  // cooldownStatus "cooldown" but is NOT excluded from the list.
+  it("annotates a corpus-backed format as in cooldown when four or more fall inside the window", async () => {
     const posts: CanonicalOwnPostInput[] = [
       // 5 hot_take originals all inside the 7-day window -> cooldown. Each carries
       // 10 live replies so hot_take is also the highest performing format.
@@ -408,11 +427,12 @@ describe("GenerateCategoryService.getCategories corpus path", () => {
 
     const categories: GenerateCategory[] = await service.getCategories();
 
-    const top = categories[0];
-    expect(top?.format).toBe("hot_take");
-    expect(top?.basis).toBe("top_performer");
-    expect(top?.cooldownStatus).toBe("cooldown");
-    expect(top?.sampleCount).toBeGreaterThan(0);
+    const audienceQuestion = findByFormat(categories, "audience_question");
+    expect(audienceQuestion?.basis).toBe("top_performer");
+    const hotTake = findByFormat(categories, "hot_take");
+    expect(hotTake?.basis).toBe("frequent");
+    expect(hotTake?.cooldownStatus).toBe("cooldown");
+    expect(hotTake?.sampleCount).toBeGreaterThan(0);
     // Cooldown formats are annotated, not hidden.
     expect(findByFormat(categories, "hot_take")).toBeDefined();
   });
@@ -444,11 +464,12 @@ describe("GenerateCategoryService.getCategories corpus path", () => {
     expect(findByFormat(categories, "hot_take")).toBeDefined();
   });
 
-  // Edge: exactly 3 distinct non-"other" formats, each with a non-zero
-  // performanceScore -> exactly 3 categories returned (no backfill, no phantom 4th).
-  it("returns exactly three categories for three non-zero non-other formats", async () => {
+  // Edge: exactly 3 distinct non-"other" formats. Playbook opportunity orders
+  // the full 15-lane menu, with corpus metadata overlaid on matching lanes.
+  it("returns the full opportunity-weighted generator menu with corpus metadata overlaid", async () => {
     const posts: CanonicalOwnPostInput[] = [
-      // hot_take x4 @ 5 replies -> score 20 (top).
+      // hot_take x4 @ 5 replies -> score 20, but lower playbook opportunity
+      // than founder_story.
       livePost(HOT_TAKE_TEXTS[0], isoDaysAgo(10), 5),
       livePost(HOT_TAKE_TEXTS[1], isoDaysAgo(11), 5),
       livePost(HOT_TAKE_TEXTS[2], isoDaysAgo(12), 5),
@@ -466,23 +487,34 @@ describe("GenerateCategoryService.getCategories corpus path", () => {
 
     const categories: GenerateCategory[] = await service.getCategories();
 
-    expect(categories).toHaveLength(3);
+    expect(categories).toHaveLength(15);
     expect(categories.map((category) => category.format)).toEqual([
-      "hot_take",
+      "fill_blank_tribal",
+      "cta_farm",
+      "fantasy_question",
+      "binary_choice",
+      "recognition_roast",
+      "audience_question",
+      "genuine_question",
+      "ab_choice",
       "founder_story",
+      "milestone",
+      "hot_take",
       "story",
+      "nuanced_question",
+      "insight_share",
+      "wisdom_one_liner",
     ]);
-    expect(categories[0]?.basis).toBe("top_performer");
-    expect(categories[1]?.basis).toBe("frequent");
-    expect(categories[2]?.basis).toBe("frequent");
-    expect(categories.every((category) => category.basis !== "default")).toBe(true);
+    expect(findByFormat(categories, "founder_story")?.basis).toBe("top_performer");
+    expect(findByFormat(categories, "hot_take")?.basis).toBe("frequent");
+    expect(findByFormat(categories, "story")?.basis).toBe("frequent");
+    expect(categories.filter((category) => category.basis !== "default")).toHaveLength(3);
   });
 
   // Edge: no live replies and no weak favorites anywhere -> avgReplies is 0 for
-  // every format, so all performanceScores are 0. Ranking falls back to the
-  // alphabetical tie-break and the zero-score 4th format is NOT appended, so the
-  // service returns exactly the minimum of 3, ordered by format name.
-  it("ranks zero-score formats alphabetically and caps at three when scores are zero", async () => {
+  // every format, so all performanceScores are 0. Ranking falls back to playbook
+  // opportunity and then the fixed generator order.
+  it("ranks zero-score formats by opportunity and keeps all ranked formats under the top-fifteen cap", async () => {
     const posts: CanonicalOwnPostInput[] = [
       // No replies, no favoriteCount -> avgReplies 0 for each format.
       archivePost(HOT_TAKE_TEXTS[0], isoDaysAgo(10)),
@@ -500,16 +532,83 @@ describe("GenerateCategoryService.getCategories corpus path", () => {
 
     const categories: GenerateCategory[] = await service.getCategories();
 
-    // Four non-other formats exist, but every score is 0, so the 4th is dropped
-    // (a 4th is appended only when its performanceScore is non-zero).
-    expect(categories).toHaveLength(3);
-    // Alphabetical tie-break: audience_question < founder_story < hot_take < story.
+    expect(categories).toHaveLength(15);
     expect(categories.map((category) => category.format)).toEqual([
+      "fill_blank_tribal",
+      "cta_farm",
+      "fantasy_question",
+      "binary_choice",
+      "recognition_roast",
       "audience_question",
+      "genuine_question",
+      "ab_choice",
+      "milestone",
       "founder_story",
+      "story",
       "hot_take",
+      "nuanced_question",
+      "insight_share",
+      "wisdom_one_liner",
     ]);
-    // The alphabetical first becomes the top performer; the rest are frequent.
+    // The first corpus-backed opportunity lane becomes the top performer; the
+    // remaining corpus lanes are frequent, and untouched lanes stay defaults.
+    expect(findByFormat(categories, "audience_question")?.basis).toBe("top_performer");
+    expect(findByFormat(categories, "founder_story")?.basis).toBe("frequent");
+    expect(findByFormat(categories, "story")?.basis).toBe("frequent");
+    expect(findByFormat(categories, "hot_take")?.basis).toBe("frequent");
+    expect(categories.filter((category) => category.basis !== "default")).toHaveLength(4);
+  });
+
+  it("returns the fifteen highest opportunity ranked formats when more are available", async () => {
+    const rankedFormats = [
+      "hot_take",
+      "founder_story",
+      "audience_question",
+      "story",
+      "fill_blank_tribal",
+      "cta_farm",
+      "fantasy_question",
+      "binary_choice",
+      "genuine_question",
+      "insight_share",
+      "ab_choice",
+      "nuanced_question",
+      "recognition_roast",
+      "wisdom_one_liner",
+      "milestone",
+      "connect",
+    ] as const;
+
+    await repository.upsertPosts([
+      ...rankedFormats.map((format, index) =>
+        livePost(RANKING_FORMAT_TEXTS[format], isoDaysAgo(10 + index), 160 - index * 5),
+      ),
+      // Counts toward the 10-original corpus gate but must not rank.
+      livePost(OTHER_TEXT, isoDaysAgo(30), 1_000),
+    ]);
+
+    const categories: GenerateCategory[] = await service.getCategories();
+
+    expect(categories).toHaveLength(15);
+    expect(categories.map((category) => category.format)).toEqual([
+      "fill_blank_tribal",
+      "cta_farm",
+      "fantasy_question",
+      "binary_choice",
+      "recognition_roast",
+      "audience_question",
+      "genuine_question",
+      "ab_choice",
+      "founder_story",
+      "milestone",
+      "hot_take",
+      "story",
+      "nuanced_question",
+      "insight_share",
+      "wisdom_one_liner",
+    ]);
+    expect(categories.some((category) => category.format === "connect")).toBe(false);
+    expect(categories.some((category) => category.format === "other")).toBe(false);
     expect(categories[0]?.basis).toBe("top_performer");
     expect(categories.slice(1).every((category) => category.basis === "frequent")).toBe(true);
   });
@@ -545,8 +644,8 @@ describe("GenerateCategoryService.getCategories corpus path", () => {
 
   // Edge: every original classifies as "other" while still clearing the 10-original
   // gate -> there are zero corpus-derived formats, so the service backfills the
-  // four defaults.
-  it("falls back to the four defaults when all originals classify as other", async () => {
+  // generator defaults.
+  it("falls back to the fifteen defaults when all originals classify as other", async () => {
     const posts: CanonicalOwnPostInput[] = Array.from({ length: 11 }, (_unused, index) =>
       archivePost(OTHER_TEXT, isoDaysAgo(index + 1)),
     );
@@ -554,21 +653,16 @@ describe("GenerateCategoryService.getCategories corpus path", () => {
 
     const categories: GenerateCategory[] = await service.getCategories();
 
-    expect(categories).toHaveLength(4);
+    expect(categories).toHaveLength(15);
     expect(categories.every((category) => category.basis === "default")).toBe(true);
     expect(categories.every((category) => category.sampleCount === 0)).toBe(true);
-    expect(categories.map((category) => category.format)).toEqual([
-      "hot_take",
-      "founder_story",
-      "audience_question",
-      "story",
-    ]);
+    expect(categories.map((category) => category.format)).toEqual(EXPECTED_GENERATION_FORMATS);
   });
 });
 
 describe("GET /generate/categories route", () => {
   // Coverage 5 + AC: a seeded corpus served over HTTP -> 200, body parses as an
-  // array of GenerateCategory, 3-4 items.
+  // array of GenerateCategory, exactly 15 items.
   it("responds 200 with an array of generate categories for a seeded corpus", async () => {
     const posts: CanonicalOwnPostInput[] = [
       livePost(HOT_TAKE_TEXTS[0], isoDaysAgo(10), 5),
@@ -599,8 +693,7 @@ describe("GET /generate/categories route", () => {
       const body = generateCategorySchema
         .array()
         .parse(parseJsonPayload(response.body));
-      expect(body.length).toBeGreaterThanOrEqual(3);
-      expect(body.length).toBeLessThanOrEqual(4);
+      expect(body).toHaveLength(15);
     } finally {
       await app.close();
     }

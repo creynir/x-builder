@@ -21,6 +21,7 @@ import type { FeedbackLoopRepository } from "../feedback/feedback-loop-repositor
 import { FeedbackLoopService } from "../feedback/feedback-loop-service.js";
 import { SqliteFeedbackLoopRepository } from "../feedback/sqlite-feedback-loop-repository.js";
 import { ApplyJudgeSuggestionsService } from "../llm/apply-judge-suggestions-service.js";
+import { resolveDefaultKnowledgeBasePath } from "../llm/default-knowledge-base.js";
 import { createExternalPatternGuidanceProvider } from "../llm/external-pattern-guidance.js";
 import {
   createGenerationGuidanceResolver,
@@ -355,6 +356,9 @@ export const createServerServiceBundle = (
         ...(engineStorage.voiceSampleProvider === undefined
           ? {}
           : { voiceSampleProvider: engineStorage.voiceSampleProvider }),
+        ...(workspaceRoot === null
+          ? {}
+          : { defaultKnowledgeBasePath: resolveDefaultKnowledgeBasePath(workspaceRoot) }),
         ...(usesDefaultExternalXSignalsService
           ? {
               externalPatternGuidanceProvider: createExternalPatternGuidanceProvider(

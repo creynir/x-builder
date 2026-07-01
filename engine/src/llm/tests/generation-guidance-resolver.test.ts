@@ -437,6 +437,7 @@ describe("generation guidance resolver", () => {
       externalPatternGuidanceProvider?: ExternalPatternGuidanceProvider;
       archiveVoiceProfileProvider?: ArchiveVoiceProfileProvider;
       voiceSampleProvider?: VoiceSampleProvider;
+      defaultKnowledgeBasePath?: string;
     }>();
 
     expectTypeOf<GenerationGuidanceResolver>().toEqualTypeOf<
@@ -506,6 +507,59 @@ UNRELATED_GROWTH_LOOP_SENTINEL
     expect(guidance).toContain("- known voice sample");
     expect(guidance).not.toContain("UNRELATED_CORE_FINDING_SENTINEL");
     expect(guidance).not.toContain("UNRELATED_GROWTH_LOOP_SENTINEL");
+  });
+
+  it("uses the default knowledge base path when settings has no configured path", async () => {
+    const defaultKnowledgeBasePath = await writeKnowledgeBase(`
+# Engine knowledge
+
+## Format taxonomy
+
+DEFAULT_FORMAT_TAXONOMY_SENTINEL
+
+## Status gate
+
+DEFAULT_STATUS_GATE_SENTINEL
+`);
+
+    const guidance = expectDefinedGuidance(
+      await resolveGuidance({
+        settingsRepository: settingsRepositoryOf(),
+        postLibraryRepository: postLibraryRepositoryOf([]),
+        defaultKnowledgeBasePath,
+      }),
+    );
+
+    expect(guidance).toContain("DEFAULT_FORMAT_TAXONOMY_SENTINEL");
+    expect(guidance).toContain("DEFAULT_STATUS_GATE_SENTINEL");
+  });
+
+  it("lets an explicit settings knowledge base override the default path", async () => {
+    const defaultKnowledgeBasePath = await writeKnowledgeBase(`
+# Engine knowledge
+
+## Format taxonomy
+
+DEFAULT_FORMAT_TAXONOMY_SENTINEL
+`);
+    const explicitKnowledgeBasePath = await writeKnowledgeBase(`
+# Engine knowledge
+
+## Format taxonomy
+
+EXPLICIT_FORMAT_TAXONOMY_SENTINEL
+`);
+
+    const guidance = expectDefinedGuidance(
+      await resolveGuidance({
+        settingsRepository: settingsRepositoryOf(explicitKnowledgeBasePath),
+        postLibraryRepository: postLibraryRepositoryOf([]),
+        defaultKnowledgeBasePath,
+      }),
+    );
+
+    expect(guidance).toContain("EXPLICIT_FORMAT_TAXONOMY_SENTINEL");
+    expect(guidance).not.toContain("DEFAULT_FORMAT_TAXONOMY_SENTINEL");
   });
 
   it("uses an injected voice sample provider before repository fallback", async () => {
