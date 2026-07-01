@@ -98,7 +98,7 @@ export class SqliteObservedThreadRepository implements ObservedThreadRepository 
         }
         seen.add(parsed.statusId);
 
-        const existing = this.readByStatusId(parsed.statusId);
+        const existing = this.readStoredByStatusId(parsed.statusId);
         if (existing !== undefined) {
           this.writeSourceObservation(existing);
         }
@@ -150,6 +150,13 @@ export class SqliteObservedThreadRepository implements ObservedThreadRepository 
       .prepare("SELECT * FROM observed_thread_post WHERE status_id = ?")
       .get(statusId) as ObservedThreadPostRow | undefined;
     return row === undefined ? undefined : this.rowToPost(row);
+  }
+
+  private readStoredByStatusId(statusId: string): ReplyThreadPost | undefined {
+    const row = this.db
+      .prepare("SELECT * FROM observed_thread_post WHERE status_id = ?")
+      .get(statusId) as ObservedThreadPostRow | undefined;
+    return row === undefined ? undefined : rowToPost(row);
   }
 
   private rowToPost(row: ObservedThreadPostRow): ReplyThreadPost {

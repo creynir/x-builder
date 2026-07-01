@@ -79,6 +79,49 @@ describe("SqliteObservedThreadRepository", () => {
     });
   });
 
+  it("does not write preferred source evidence with the stored row timestamp", async () => {
+    const db = openEngineDatabase(":memory:");
+    const repository = new SqliteObservedThreadRepository(db);
+    await repository.upsertThreadPosts([
+      post({
+        source: "x_live_capture",
+        statusId: "104",
+        text: "Own reply.",
+        conversationId: "100",
+        observedAt: "2026-07-01T08:00:00.000Z",
+      }),
+      post({
+        source: "x_graphql_observed",
+        statusId: "104",
+        text: "Observed copy.",
+        conversationId: "100",
+        observedAt: "2026-07-01T09:00:00.000Z",
+      }),
+      post({
+        source: "x_graphql_observed",
+        statusId: "104",
+        text: "Newer observed copy.",
+        conversationId: "100",
+        observedAt: "2026-07-01T10:00:00.000Z",
+      }),
+    ]);
+
+    const liveSource = db
+      .prepare(
+        `SELECT first_observed_at, last_observed_at
+         FROM observed_thread_post_source
+         WHERE status_id = ? AND source = ?`,
+      )
+      .get("104", "x_live_capture") as
+      | { first_observed_at: string; last_observed_at: string }
+      | undefined;
+
+    expect(liveSource).toEqual({
+      first_observed_at: "2026-07-01T08:00:00.000Z",
+      last_observed_at: "2026-07-01T08:00:00.000Z",
+    });
+  });
+
   it("lets incoming equal-timestamp duplicates enrich stored fields", async () => {
     const repository = new SqliteObservedThreadRepository(openEngineDatabase(":memory:"));
     await repository.upsertThreadPosts([
