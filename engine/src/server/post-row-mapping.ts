@@ -5,6 +5,7 @@ import type {
   MetricSnapshot,
   SourceRef,
 } from "./post-library-repository.js";
+import { generatedReplyContentHash } from "../generated-replies/normalize-generated-reply.js";
 
 // The single module that knows the SQLite column layout. It shreds a
 // CanonicalOwnPost into post / metric_obs / source_ref rows (computing the
@@ -30,6 +31,7 @@ export type PostRow = {
   weak_favorite_count: number | null;
   weak_retweet_count: number | null;
   content_hash: string;
+  normalized_text_hash: string;
   updated_at: string;
 };
 
@@ -112,6 +114,7 @@ export const toPostRow = (post: CanonicalOwnPost): PostRow => ({
   weak_favorite_count: optionalNumber(post.weakMetrics.favoriteCount),
   weak_retweet_count: optionalNumber(post.weakMetrics.retweetCount),
   content_hash: postContentHash(post),
+  normalized_text_hash: generatedReplyContentHash(post.text),
   updated_at: post.updatedAt,
 });
 

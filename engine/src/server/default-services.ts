@@ -5,6 +5,10 @@ import type {
   AnalyzePostsRequest,
   AnalyzePostsResponse,
   GenerateIdeaRequest,
+  GenerateReplyVariantsRequest,
+  GenerateReplyVariantsResponse,
+  RecordGeneratedReplyRequest,
+  RecordGeneratedReplyResponse,
 } from "@x-builder/shared";
 
 import { ArchiveDerivedContextService } from "../archive/archive-derived-context-service.js";
@@ -21,6 +25,8 @@ import { SqliteExternalXSignalsRepository } from "../external/sqlite-external-x-
 import type { FeedbackLoopRepository } from "../feedback/feedback-loop-repository.js";
 import { FeedbackLoopService } from "../feedback/feedback-loop-service.js";
 import { SqliteFeedbackLoopRepository } from "../feedback/sqlite-feedback-loop-repository.js";
+import type { GeneratedReplyLedgerRepository } from "../generated-replies/generated-reply-ledger-repository.js";
+import { SqliteGeneratedReplyLedgerRepository } from "../generated-replies/sqlite-generated-reply-ledger-repository.js";
 import { ApplyJudgeSuggestionsService } from "../llm/apply-judge-suggestions-service.js";
 import { resolveDefaultKnowledgeBasePath } from "../llm/default-knowledge-base.js";
 import { createExternalPatternGuidanceProvider } from "../llm/external-pattern-guidance.js";
@@ -29,6 +35,7 @@ import {
   type CreateGenerationGuidanceResolverInput,
 } from "../llm/generation-guidance.js";
 import { GenerateIdeasService } from "../llm/generate-ideas-service.js";
+import { GenerateReplyVariantsService } from "../llm/generate-reply-variants-service.js";
 import {
   JudgeDraftService,
   type JudgeDraft,
@@ -69,11 +76,19 @@ import { resolveWorkspaceRoot } from "./workspace-root.js";
 export type AnalyzePosts = (request: AnalyzePostsRequest) => Promise<AnalyzePostsResponse> | AnalyzePostsResponse;
 
 export type GenerateCandidates = (input: GenerateIdeaRequest) => Promise<unknown> | unknown;
+export type GenerateReplyVariants = (
+  input: GenerateReplyVariantsRequest,
+) => Promise<GenerateReplyVariantsResponse> | GenerateReplyVariantsResponse;
+export type RecordGeneratedReply = (
+  input: RecordGeneratedReplyRequest,
+) => Promise<RecordGeneratedReplyResponse> | RecordGeneratedReplyResponse;
 
 export interface BuildServerOptions {
   allowedCorsOrigins?: readonly string[];
   analyzePosts?: AnalyzePosts;
   generateCandidates?: GenerateCandidates;
+  generateReplyVariants?: GenerateReplyVariants;
+  recordGeneratedReply?: RecordGeneratedReply;
   readinessDependencies?: ReadinessDependencies;
   readinessService?: ReadinessService;
   readinessTimeoutMs?: number;
@@ -110,6 +125,7 @@ type EngineStorageRepositories = {
   observedThreadRepository: ObservedThreadRepository;
   feedbackLoopRepository: FeedbackLoopRepository;
   externalXSignalsRepository: ExternalXSignalsRepository;
+  generatedReplyLedgerRepository: GeneratedReplyLedgerRepository;
   voiceSampleProvider?: CreateGenerationGuidanceResolverInput["voiceSampleProvider"];
 };
 
@@ -132,6 +148,8 @@ export type ServerServiceBundle = {
   judgeDraftService: JudgeDraft;
   applyJudgeSuggestionsService: ApplyJudgeSuggestionsService;
   generateCandidates: GenerateCandidates;
+  generateReplyVariants: GenerateReplyVariants;
+  recordGeneratedReply: RecordGeneratedReply;
   resolveJudgeAccountProfile: (explicitProfile: string | undefined) => Promise<string | undefined>;
 };
 
@@ -184,6 +202,7 @@ const resolveEngineStorageRepositories = (
         options.observedThreadRepository ?? new SqliteObservedThreadRepository(db),
       feedbackLoopRepository: new SqliteFeedbackLoopRepository(db),
       externalXSignalsRepository: new SqliteExternalXSignalsRepository(db),
+      generatedReplyLedgerRepository: new SqliteGeneratedReplyLedgerRepository(db),
     };
   }
 
@@ -200,6 +219,7 @@ const resolveEngineStorageRepositories = (
         options.observedThreadRepository ?? new SqliteObservedThreadRepository(db),
       feedbackLoopRepository: new SqliteFeedbackLoopRepository(db),
       externalXSignalsRepository: new SqliteExternalXSignalsRepository(db),
+      generatedReplyLedgerRepository: new SqliteGeneratedReplyLedgerRepository(db),
       voiceSampleProvider: createSqliteVoiceSampleProvider({ db }),
     };
   }
@@ -213,6 +233,7 @@ const resolveEngineStorageRepositories = (
       options.observedThreadRepository ?? new SqliteObservedThreadRepository(db),
     feedbackLoopRepository: new SqliteFeedbackLoopRepository(db),
     externalXSignalsRepository: new SqliteExternalXSignalsRepository(db),
+    generatedReplyLedgerRepository: new SqliteGeneratedReplyLedgerRepository(db),
     voiceSampleProvider: createSqliteVoiceSampleProvider({ db }),
   };
 };
@@ -367,6 +388,7 @@ export const createServerServiceBundle = (
       createGenerationGuidanceResolver({
         settingsRepository,
         postLibraryRepository,
+        generatedReplyLedgerRepository: engineStorage.generatedReplyLedgerRepository,
         ...(archiveVoiceProfileProvider === undefined
           ? {}
           : { archiveVoiceProfileProvider }),
@@ -390,6 +412,26 @@ export const createServerServiceBundle = (
   };
   const generateCandidates: GenerateCandidates =
     options.generateCandidates ?? buildDefaultGenerateCandidates();
+  const buildDefaultGenerateReplyVariants = (): GenerateReplyVariants => {
+    const workspaceRoot = resolveWorkspaceRoot(process.cwd());
+    const providers = workspaceRoot
+      ? judgeProviderRegistry.map((entry) =>
+          entry.createProvider({ runner: new NodeProcessRunner(), workspaceRoot }),
+        )
+      : [];
+
+    const service = new GenerateReplyVariantsService(
+      new StructuredLlmService({ providers }),
+      createSettingsJudgeProviderResolver(settingsRepository),
+    );
+
+    return service.generate.bind(service);
+  };
+  const generateReplyVariants: GenerateReplyVariants =
+    options.generateReplyVariants ?? buildDefaultGenerateReplyVariants();
+  const recordGeneratedReply: RecordGeneratedReply =
+    options.recordGeneratedReply ??
+    ((request) => engineStorage.generatedReplyLedgerRepository.recordGeneratedReply(request));
 
   return {
     analyzePosts,
@@ -410,6 +452,8 @@ export const createServerServiceBundle = (
     judgeDraftService,
     applyJudgeSuggestionsService,
     generateCandidates,
+    generateReplyVariants,
+    recordGeneratedReply,
     resolveJudgeAccountProfile,
   };
 };

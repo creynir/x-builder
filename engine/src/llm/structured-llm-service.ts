@@ -4,6 +4,7 @@ export const llmProviderIdSchema = z.string().min(1);
 export const llmPurposeSchema = z.enum([
   "writer_first_pass",
   "writer_variants",
+  "reply_variants",
   "candidate_judge",
   "archive_voice_profile",
 ]);

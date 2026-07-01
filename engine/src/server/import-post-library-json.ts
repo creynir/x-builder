@@ -76,11 +76,11 @@ export const importPostLibraryJsonToSqlite = (
     `INSERT OR IGNORE INTO post (
       id, platform, platform_post_id, logical_post_id, text, created_at, kind, language,
       in_reply_to_post_id, in_reply_to_user_id, has_urls, has_media, has_hashtags, has_mentions,
-      weak_favorite_count, weak_retweet_count, content_hash, updated_at
+      weak_favorite_count, weak_retweet_count, content_hash, normalized_text_hash, updated_at
     ) VALUES (
       @id, @platform, @platform_post_id, @logical_post_id, @text, @created_at, @kind, @language,
       @in_reply_to_post_id, @in_reply_to_user_id, @has_urls, @has_media, @has_hashtags, @has_mentions,
-      @weak_favorite_count, @weak_retweet_count, @content_hash, @updated_at
+      @weak_favorite_count, @weak_retweet_count, @content_hash, @normalized_text_hash, @updated_at
     )`,
   );
 

@@ -313,7 +313,7 @@ describe("migration 7 source evidence backfill", () => {
 
     const migrated = openEngineDatabase(dbPath);
     try {
-      expect(migrated.pragma("user_version", { simple: true })).toBe(7);
+      expect(migrated.pragma("user_version", { simple: true })).toBe(8);
       const source = migrated
         .prepare(
           `SELECT status_id, source, first_observed_at, last_observed_at
@@ -672,12 +672,12 @@ describe("user flow: round-trip through the repository interface", () => {
 // ARCHITECTURAL INVARIANT — SQLite is the real on-disk artifact.
 //
 // Falsifiable: a JSON-under-the-hood facade (or an in-memory-only impl) would
-// lack a real x-builder.db file whose PRAGMA user_version is 7 and whose
+// lack a real x-builder.db file whose PRAGMA user_version is 8 and whose
 // sqlite_master holds the seven migration-1 tables — so this test would fail it.
 // ===========================================================================
 
 describe("invariant: the migrated artifact is a real SQLite database on disk", () => {
-  it("after a buildServer migration, x-builder.db opens as a real db with user_version 7 and the migration tables", async () => {
+  it("after a buildServer migration, x-builder.db opens as a real db with user_version 8 and the migration tables", async () => {
     const root = await makeTempRoot("artifact");
     const dir = storageDir(root);
     await writeStoreFile(dir, v2Store());
@@ -697,7 +697,7 @@ describe("invariant: the migrated artifact is a real SQLite database on disk", (
     const raw = new Database(join(dir, DB_FILE), { readonly: true });
     try {
       const userVersion = Number(raw.pragma("user_version", { simple: true }));
-      expect(userVersion).toBe(7);
+      expect(userVersion).toBe(8);
 
       const tableRows = raw
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -861,11 +861,11 @@ describe("invariant: the migrated artifact is a real SQLite database on disk", (
 // ===========================================================================
 
 describe("invariant: the transport and repository surfaces are unchanged by LPF", () => {
-  it("ENGINE_TRANSPORT_BINDINGS exposes exactly 24 methods", () => {
+  it("ENGINE_TRANSPORT_BINDINGS exposes exactly 26 methods", () => {
     const keys = Object.keys(ENGINE_TRANSPORT_BINDINGS).filter(
       (key) => typeof ENGINE_TRANSPORT_BINDINGS[key] === "string",
     );
-    expect(keys).toHaveLength(24);
+    expect(keys).toHaveLength(26);
   });
 
   it("the SqlitePostLibraryRepository implements exactly the 6 PostLibraryRepository methods", async () => {

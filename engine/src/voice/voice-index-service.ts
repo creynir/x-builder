@@ -151,6 +151,11 @@ export class VoiceIndexService {
         LEFT JOIN voice_post_embedding v ON v.post_id = p.id
         WHERE p.kind = 'original'
           AND length(trim(p.text)) > 0
+          AND NOT EXISTS (
+            SELECT 1
+            FROM generated_reply gr
+            WHERE p.normalized_text_hash IN (gr.body_text_hash, gr.written_text_hash)
+          )
           AND (
             v.post_id IS NULL
             OR v.content_hash != p.content_hash
@@ -176,6 +181,11 @@ export class VoiceIndexService {
         LEFT JOIN voice_post_embedding v ON v.post_id = p.id
         WHERE p.kind = 'original'
           AND length(trim(p.text)) > 0
+          AND NOT EXISTS (
+            SELECT 1
+            FROM generated_reply gr
+            WHERE p.normalized_text_hash IN (gr.body_text_hash, gr.written_text_hash)
+          )
           AND (
             v.post_id IS NULL
             OR v.content_hash != p.content_hash
@@ -199,6 +209,12 @@ export class VoiceIndexService {
         `
         DELETE FROM voice_post_embedding
         WHERE post_id NOT IN (SELECT id FROM post)
+           OR post_id IN (
+             SELECT p.id
+             FROM post p
+             JOIN generated_reply gr
+               ON p.normalized_text_hash IN (gr.body_text_hash, gr.written_text_hash)
+           )
       `,
       )
       .run().changes;

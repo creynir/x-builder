@@ -1,5 +1,5 @@
 /**
- * ExposeFunctionTransport (XOB-016) — registers all 24 `__xbuilder_<method>`
+ * ExposeFunctionTransport (XOB-016) — registers all 26 `__xbuilder_<method>`
  * bindings on a Playwright page and routes each call, in-process, to the matching
  * engine service.
  *
@@ -42,6 +42,8 @@ import {
   generateCategorySchema,
   generateIdeaRequestSchema,
   generateIdeaResponseSchema,
+  generateReplyVariantsRequestSchema,
+  generateReplyVariantsResponseSchema,
   getExternalXSignalsOverviewRequestSchema,
   getExternalXSignalsOverviewResponseSchema,
   getFeedbackLoopSummaryRequestSchema,
@@ -51,6 +53,8 @@ import {
   linkFeedbackPredictionRequestSchema,
   linkFeedbackPredictionResponseSchema,
   overlayReadinessSchema,
+  recordGeneratedReplyRequestSchema,
+  recordGeneratedReplyResponseSchema,
   recordFeedbackPredictionRequestSchema,
   recordFeedbackPredictionResponseSchema,
   refreshExternalXSignalSourceRequestSchema,
@@ -81,6 +85,8 @@ import type {
   GenerateCategory,
   GenerateIdeaRequest,
   GenerateIdeaResponse,
+  GenerateReplyVariantsRequest,
+  GenerateReplyVariantsResponse,
   GetExternalXSignalsOverviewRequest,
   GetExternalXSignalsOverviewResponse,
   GetFeedbackLoopSummaryRequest,
@@ -90,6 +96,8 @@ import type {
   LinkFeedbackPredictionRequest,
   LinkFeedbackPredictionResponse,
   OverlayReadiness,
+  RecordGeneratedReplyRequest,
+  RecordGeneratedReplyResponse,
   RecordFeedbackPredictionRequest,
   RecordFeedbackPredictionResponse,
   RefreshExternalXSignalSourceRequest,
@@ -148,6 +156,12 @@ export interface BoundEngineServices {
   generateIdeasService: {
     generate(request: GenerateIdeaRequest): Promise<GenerateIdeaResponse>;
   };
+  replyVariantGenerationService: {
+    generate(request: GenerateReplyVariantsRequest): Promise<GenerateReplyVariantsResponse>;
+  };
+  generatedReplyLedgerService: {
+    recordGeneratedReply(request: RecordGeneratedReplyRequest): Promise<RecordGeneratedReplyResponse>;
+  };
   suggestPostService: {
     suggest(request: SuggestPostRequest): Promise<SuggestPostResponse>;
   };
@@ -182,6 +196,7 @@ type ExposedHandler = (rawArg: unknown) => Promise<unknown>;
 export type LlmBindingMethod =
   | "judgeDraft"
   | "generateIdeas"
+  | "generateReplyVariants"
   | "suggestPost"
   | "applyJudgeSuggestions";
 
@@ -378,6 +393,22 @@ function buildHandlers(
       return generateIdeaResponseSchema.parse(await services.generateIdeasService.generate(request));
     },
 
+    generateReplyVariants: async (rawArg) => {
+      const request = generateReplyVariantsRequestSchema.parse(rawArg);
+      return withLlmBindingGuard(llmGuard, "generateReplyVariants", async () =>
+        generateReplyVariantsResponseSchema.parse(
+          await services.replyVariantGenerationService.generate(request),
+        ),
+      );
+    },
+
+    recordGeneratedReply: async (rawArg) => {
+      const request = recordGeneratedReplyRequestSchema.parse(rawArg);
+      return recordGeneratedReplyResponseSchema.parse(
+        await services.generatedReplyLedgerService.recordGeneratedReply(request),
+      );
+    },
+
     suggestPost: async (rawArg) => {
       const request = suggestPostRequestSchema.parse(rawArg);
       return withLlmBindingGuard(llmGuard, "suggestPost", async () =>
@@ -457,7 +488,7 @@ function buildHandlers(
 }
 
 /**
- * Registers all 24 `__xbuilder_<method>` engine bindings on a page, each routing
+ * Registers all 26 `__xbuilder_<method>` engine bindings on a page, each routing
  * to the matching engine service with request/response Zod validation.
  */
 export class ExposeFunctionTransport {

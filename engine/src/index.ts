@@ -30,6 +30,16 @@ export type {
 } from "./reply-thread-context-repository.js";
 export { makeTempEngineDb, seedPosts } from "./server/sqlite-test-helpers.js";
 export { normalizeFeedbackContent, normalizeFeedbackContentHash } from "./feedback/normalize-feedback-content-hash.js";
+export {
+  generatedReplyContentHash,
+  generatedReplyHashNamespace,
+  normalizeGeneratedReplyText,
+} from "./generated-replies/normalize-generated-reply.js";
+export type {
+  GeneratedReplyLedgerRepository,
+  GeneratedReplyWriteResult,
+} from "./generated-replies/generated-reply-ledger-repository.js";
+export { SqliteGeneratedReplyLedgerRepository } from "./generated-replies/sqlite-generated-reply-ledger-repository.js";
 export type { FeedbackLoopRepository } from "./feedback/feedback-loop-repository.js";
 export { SqliteFeedbackLoopRepository } from "./feedback/sqlite-feedback-loop-repository.js";
 export type {
@@ -54,6 +64,10 @@ export {
   type JudgeLlmGateway,
 } from "./llm/judge-draft-service.js";
 export { GenerateIdeasService } from "./llm/generate-ideas-service.js";
+export {
+  GenerateReplyVariantsService,
+  ReplyVariantGenerationError,
+} from "./llm/generate-reply-variants-service.js";
 export {
   createExternalPatternGuidanceProvider,
   type ExternalPatternGuidanceProvider,

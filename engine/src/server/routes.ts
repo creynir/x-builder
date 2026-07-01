@@ -23,6 +23,8 @@ import {
   generateCategorySchema,
   generateIdeaRequestSchema,
   generateIdeaResponseSchema,
+  generateReplyVariantsRequestSchema,
+  generateReplyVariantsResponseSchema,
   getExternalXSignalsOverviewRequestSchema,
   getExternalXSignalsOverviewResponseSchema,
   getFeedbackLoopSummaryRequestSchema,
@@ -33,6 +35,8 @@ import {
   linkFeedbackPredictionResponseSchema,
   recordFeedbackPredictionRequestSchema,
   recordFeedbackPredictionResponseSchema,
+  recordGeneratedReplyRequestSchema,
+  recordGeneratedReplyResponseSchema,
   refreshExternalXSignalSourceRequestSchema,
   refreshExternalXSignalSourceResponseSchema,
   removeExternalXSignalSourceRequestSchema,
@@ -69,6 +73,7 @@ export type RouteRegistrationHelpers = {
   archiveStorageFailedError: ErrorFactory;
   libraryStorageFailedError: ErrorFactory;
   feedbackRecordFailedError: ErrorFactory;
+  generatedReplyRecordFailedError: ErrorFactory;
   feedbackLinkFailedError: ErrorFactory;
   feedbackSummaryFailedError: ErrorFactory;
   externalXSignalsAddFailedError: ErrorFactory;
@@ -135,6 +140,8 @@ export function registerEngineRoutes(
     judgeDraftService,
     applyJudgeSuggestionsService,
     generateCandidates,
+    generateReplyVariants,
+    recordGeneratedReply,
     resolveJudgeAccountProfile,
   } = services;
   const {
@@ -155,6 +162,7 @@ export function registerEngineRoutes(
     externalXSignalsRefreshFailedError,
     externalXSignalsOverviewFailedError,
     deterministicAnalysisError,
+    generatedReplyRecordFailedError,
     judgeFailedError,
     parseResponseContract,
   } = helpers;
@@ -225,6 +233,41 @@ export function registerEngineRoutes(
     }
 
     return reply.send(parseResponseContract(generateIdeaResponseSchema, result));
+  });
+
+  app.post("/replies/variants/generate", async (request, reply) => {
+    const rawInput = generateReplyVariantsRequestSchema.parse(request.body);
+
+    try {
+      const input = {
+        ...rawInput,
+        replyContext: await replyThreadContextResolver.enrichReplyContext(rawInput.replyContext),
+      };
+      const result = await generateReplyVariants(input);
+
+      return reply.send(parseResponseContract(generateReplyVariantsResponseSchema, result));
+    } catch (error) {
+      if (error instanceof ReplyContextIncompleteError) {
+        throw normalizeError(replyContextIncompleteApiError(error.diagnostics));
+      }
+      throw normalizeError(generationError());
+    }
+  });
+
+  app.post("/generated-replies/record", async (request, reply) => {
+    const input = recordGeneratedReplyRequestSchema.parse(request.body);
+
+    try {
+      const result = await recordGeneratedReply(input);
+
+      return reply.send(parseResponseContract(recordGeneratedReplyResponseSchema, result));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw error;
+      }
+
+      throw normalizeError(generatedReplyRecordFailedError());
+    }
   });
 
   app.post("/archive/tweets/validate", async (request, reply) => {

@@ -694,7 +694,7 @@ describe("analyzePostsResponseSchema legacy item without cooldown", () => {
 // ENGINE_TRANSPORT_BINDINGS
 // ---------------------------------------------------------------------------
 
-// Locked 24 method names (from the ticket spec — spellings must not drift)
+// Locked 26 method names (from the ticket spec — spellings must not drift)
 const LOCKED_METHOD_NAMES = [
   "getOverlayReadiness",
   "getStatus",
@@ -708,6 +708,8 @@ const LOCKED_METHOD_NAMES = [
   "analyzePosts",
   "judgeDraft",
   "generateIdeas",
+  "generateReplyVariants",
+  "recordGeneratedReply",
   "suggestPost",
   "getCooldown",
   "getCaptureSummary",
@@ -723,10 +725,10 @@ const LOCKED_METHOD_NAMES = [
 ] as const;
 
 describe("ENGINE_TRANSPORT_BINDINGS shape and completeness", () => {
-  it("contains exactly 24 entries", () => {
+  it("contains exactly 26 entries", () => {
     const keys = Object.keys(ENGINE_TRANSPORT_BINDINGS);
 
-    expect(keys).toHaveLength(24);
+    expect(keys).toHaveLength(26);
   });
 
   it("does not add a transport binding for reply context", () => {
@@ -741,7 +743,7 @@ describe("ENGINE_TRANSPORT_BINDINGS shape and completeness", () => {
     }
   });
 
-  it("contains exactly the locked set of 24 method names and no others", () => {
+  it("contains exactly the locked set of 26 method names and no others", () => {
     const keys = new Set(Object.keys(ENGINE_TRANSPORT_BINDINGS));
     const locked = new Set<string>(LOCKED_METHOD_NAMES);
 
@@ -782,6 +784,17 @@ describe("ENGINE_TRANSPORT_BINDINGS shape and completeness", () => {
 
   it("has the binding __xbuilder_generateIdeas (not generate or generateCandidates — locked spelling)", () => {
     expect(ENGINE_TRANSPORT_BINDINGS.generateIdeas).toBe("__xbuilder_generateIdeas");
+  });
+
+  it("has the reply assistant bindings with locked spellings", () => {
+    expect(ENGINE_TRANSPORT_BINDINGS.generateReplyVariants).toBe(
+      "__xbuilder_generateReplyVariants",
+    );
+    expect(ENGINE_TRANSPORT_BINDINGS.recordGeneratedReply).toBe(
+      "__xbuilder_recordGeneratedReply",
+    );
+    expect(ENGINE_TRANSPORT_BINDINGS.generateReplies).toBeUndefined();
+    expect(ENGINE_TRANSPORT_BINDINGS.recordReply).toBeUndefined();
   });
 
   it("has the feedback bindings with locked spellings", () => {

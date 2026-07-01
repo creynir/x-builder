@@ -1,7 +1,7 @@
 // @x-builder/overlay — FakeEngineTransport (test-only)
 //
 // A configurable, type-safe stand-in for the REAL shared `EngineTransport`.
-// It implements all 24 methods; each resolves to a minimal valid
+// It implements all 26 methods; each resolves to a minimal valid
 // default (`{}` cast to the method's return type) unless an override is
 // supplied via the constructor. Used as the injected transport in overlay
 // tests via `OverlayTransportProvider`.
@@ -49,7 +49,7 @@ function bind<K extends keyof EngineTransport>(
 
 /**
  * Test-only `EngineTransport`. `const t: EngineTransport = new
- * FakeEngineTransport()` type-checks, and the instance exposes exactly the 24
+ * FakeEngineTransport()` type-checks, and the instance exposes exactly the 26
  * method names in `ENGINE_TRANSPORT_BINDINGS`.
  */
 export class FakeEngineTransport implements EngineTransport {
@@ -65,6 +65,8 @@ export class FakeEngineTransport implements EngineTransport {
   analyzePosts: EngineTransport["analyzePosts"];
   judgeDraft: EngineTransport["judgeDraft"];
   generateIdeas: EngineTransport["generateIdeas"];
+  generateReplyVariants: EngineTransport["generateReplyVariants"];
+  recordGeneratedReply: EngineTransport["recordGeneratedReply"];
   suggestPost: EngineTransport["suggestPost"];
   getCooldown: EngineTransport["getCooldown"];
   getCaptureSummary: EngineTransport["getCaptureSummary"];
@@ -91,6 +93,8 @@ export class FakeEngineTransport implements EngineTransport {
     this.analyzePosts = bind(overrides, "analyzePosts");
     this.judgeDraft = bind(overrides, "judgeDraft");
     this.generateIdeas = bind(overrides, "generateIdeas");
+    this.generateReplyVariants = bind(overrides, "generateReplyVariants");
+    this.recordGeneratedReply = bind(overrides, "recordGeneratedReply");
     this.suggestPost = bind(overrides, "suggestPost");
     this.getCooldown = bind(overrides, "getCooldown");
     this.getCaptureSummary = bind(overrides, "getCaptureSummary");

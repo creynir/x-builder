@@ -90,7 +90,7 @@ describe("external X signals runner integration", () => {
     const methods = Object.keys(ENGINE_TRANSPORT_BINDINGS);
     const externalMethods = methods.filter((method) => method.includes("ExternalXSignal"));
 
-    expect(methods).toHaveLength(24);
+    expect(methods).toHaveLength(26);
     expect(externalMethods.sort()).toEqual([
       "addExternalXSignalSource",
       "getExternalXSignalsOverview",

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { makeTempEngineDb, seedPosts } from "../../server/sqlite-test-helpers.js";
+import { SqliteGeneratedReplyLedgerRepository } from "../../generated-replies/sqlite-generated-reply-ledger-repository.js";
 import type { CanonicalOwnPost } from "../../server/post-library-repository.js";
 import {
   ARCHIVE_VOICE_PROFILE_RULE_VERSION,
@@ -124,6 +125,48 @@ describe("ArchiveVoiceProfileService", () => {
       { post_id: "post-original", kind: "original" },
       { post_id: "post-reply", kind: "reply" },
     ]);
+  });
+
+  it("excludes exact generated reply hashes from archive voice evidence", async () => {
+    const db = makeTempEngineDb();
+    await seedPosts(db, [
+      canonicalPost({
+        id: "post-original",
+        platformPostId: "platform-original",
+        text: "Originals make a concrete claim before explaining the tradeoff.",
+      }),
+      canonicalPost({
+        id: "generated-reply",
+        platformPostId: "generated-reply-platform",
+        kind: "reply",
+        text: "Generated reply text.",
+      }),
+    ]);
+    await new SqliteGeneratedReplyLedgerRepository(db).recordGeneratedReply({
+      clientEventId: "event-1",
+      bodyText: "Generated reply text.",
+      writtenText: "@alice Generated reply text.",
+    });
+    const { llm, calls } = createLlm({
+      ...profileOutput,
+      evidencePostIds: ["post-original"],
+    });
+
+    const service = new ArchiveVoiceProfileService({
+      db,
+      llm: llm as never,
+      resolveProvider: "codex-cli",
+      now: () => ISO,
+    });
+
+    const profile = await service.getCurrentProfile();
+
+    expect(profile?.sourceCounts).toEqual({ posts: 1, replies: 0 });
+    expect(calls[0]?.content).toContain("post-original");
+    expect(calls[0]?.content).not.toContain("generated-reply");
+    expect(
+      db.prepare("SELECT post_id FROM archive_voice_profile_evidence").all(),
+    ).toEqual([{ post_id: "post-original" }]);
   });
 
   it("JSON-encodes sampled text in the profile prompt", async () => {
