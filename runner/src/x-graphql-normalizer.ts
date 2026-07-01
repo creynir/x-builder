@@ -177,12 +177,14 @@ function classifyKind(legacy: unknown): LiveCapturedPost["kind"] {
   return "original";
 }
 
-/**
- * Builds and schema-validates a single post. Throws on any unrecoverable
- * condition (missing fields, type errors, invalid date, oversized text, schema
- * failure) so the caller's try/catch can tolerate-and-skip the entry.
- */
-function buildPost(tweetResult: unknown, capturedAt: string): LiveCapturedPost {
+type TweetCore = {
+  tweet: unknown;
+  legacy: Record<string, unknown>;
+  restId: string;
+  text: string;
+};
+
+function readTweetCore(tweetResult: unknown): TweetCore {
   // Unwrap the promoted-tweet `tweet` sub-field wrapper if present.
   const tweet =
     prop(tweetResult, "tweet") !== undefined ? prop(tweetResult, "tweet") : tweetResult;
@@ -206,6 +208,17 @@ function buildPost(tweetResult: unknown, capturedAt: string): LiveCapturedPost {
     // Skip oversized (or empty) text rather than truncating silently.
     throw new Error("tweet.legacy.full_text out of 1..8000 bounds");
   }
+
+  return { tweet, legacy, restId, text };
+}
+
+/**
+ * Builds and schema-validates a single post. Throws on any unrecoverable
+ * condition (missing fields, type errors, invalid date, oversized text, schema
+ * failure) so the caller's try/catch can tolerate-and-skip the entry.
+ */
+function buildPost(tweetResult: unknown, capturedAt: string): LiveCapturedPost {
+  const { tweet, legacy, restId, text } = readTweetCore(tweetResult);
 
   const createdAtRaw = prop(legacy, "created_at");
   if (typeof createdAtRaw !== "string") {
@@ -255,27 +268,7 @@ function readAuthor(tweet: unknown): {
 }
 
 function buildObservedThreadPost(tweetResult: unknown, observedAt: string): ReplyThreadPost {
-  const tweet =
-    prop(tweetResult, "tweet") !== undefined ? prop(tweetResult, "tweet") : tweetResult;
-
-  const legacy = prop(tweet, "legacy");
-  if (!isRecord(legacy)) {
-    throw new Error("tweet.legacy missing or not an object");
-  }
-
-  const restId = prop(tweet, "rest_id");
-  if (typeof restId !== "string" || restId.length === 0 || restId.length > MAX_POST_ID_LENGTH) {
-    throw new Error("tweet.rest_id missing or out of bounds");
-  }
-
-  const fullText = prop(legacy, "full_text");
-  if (typeof fullText !== "string") {
-    throw new Error("tweet.legacy.full_text missing or not a string");
-  }
-  const text = fullText.trim();
-  if (text.length < 1 || text.length > MAX_TEXT_LENGTH) {
-    throw new Error("tweet.legacy.full_text out of 1..8000 bounds");
-  }
+  const { tweet, legacy, restId, text } = readTweetCore(tweetResult);
 
   const createdAtRaw = prop(legacy, "created_at");
   const createdDate =

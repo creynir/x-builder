@@ -25,6 +25,8 @@ observed_thread_post(
   in_reply_to_post_id text,
   in_reply_to_user_id text,
   conversation_id text,
+  weak_metrics_json text not null,
+  observed_at text not null,
   updated_at text not null
 )
 ```
@@ -33,11 +35,12 @@ observed_thread_post(
 observed_thread_post_source(
   platform_post_id text not null,
   source text not null,
-  observed_at text not null,
+  first_observed_at text not null,
+  last_observed_at text not null,
   raw_id text,
   capture_session_id text,
   import_run_id text,
-  primary key (platform_post_id, source, observed_at)
+  primary key (platform_post_id, source)
 )
 ```
 

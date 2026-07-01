@@ -264,8 +264,8 @@ function ReplyThreadDiagnostics({ result }: { result: ScoredPostItem }): ReactEl
     <Alert variant={diagnostics.status === "blocked_missing_required_parent" ? "danger" : "warning"}>
       <span>Reply context incomplete</span>
       <ul style={{ ...LIST_STYLE, marginTop: "var(--space-1)" }}>
-        {messages.map((message) => (
-          <li key={message}>{message}</li>
+        {messages.map((message, index) => (
+          <li key={`${index}:${message}`}>{message}</li>
         ))}
       </ul>
     </Alert>

@@ -53,7 +53,10 @@ const MIGRATION_5_TABLES = [
   "archive_voice_profile",
   "archive_voice_profile_evidence",
 ] as const;
-const MIGRATION_6_TABLES = ["observed_thread_post"] as const;
+const MIGRATION_6_TABLES = [
+  "observed_thread_post",
+  "observed_thread_post_source",
+] as const;
 
 const importedAt = "2026-06-16T10:00:00.000Z";
 const sourceHash = "sha256:7a2f4e9c1b3d5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcd";

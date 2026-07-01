@@ -30,12 +30,19 @@ type ObservedThreadPostRow = {
   updated_at: string;
 };
 
+type ObservedThreadPostSourceRow = {
+  source: ReplyThreadPost["source"];
+};
+
 const stableJson = (value: unknown): string => JSON.stringify(value);
 const nowIso = (): string => new Date().toISOString();
 
-const rowToPost = (row: ObservedThreadPostRow): ReplyThreadPost =>
+const rowToPost = (
+  row: ObservedThreadPostRow,
+  source: ReplyThreadPost["source"] = row.source,
+): ReplyThreadPost =>
   replyThreadPostSchema.parse({
-    source: row.source,
+    source,
     ...(row.role === null ? {} : { role: row.role }),
     statusId: row.status_id,
     ...(row.url === null ? {} : { url: row.url }),
@@ -94,11 +101,13 @@ export class SqliteObservedThreadRepository implements ObservedThreadRepository 
         const next = existing === undefined ? parsed : mergeObservedThreadPost(existing, parsed);
 
         if (existing !== undefined && stableJson(existing) === stableJson(next)) {
+          this.writeSourceObservation(parsed);
           result.unchangedCount += 1;
           continue;
         }
 
         this.write(next);
+        this.writeSourceObservation(parsed);
         if (existing === undefined) {
           result.insertedCount += 1;
         } else {
@@ -120,7 +129,7 @@ export class SqliteObservedThreadRepository implements ObservedThreadRepository 
         "SELECT * FROM observed_thread_post WHERE in_reply_to_status_id = ? ORDER BY created_at ASC, status_id ASC",
       )
       .all(statusId) as ObservedThreadPostRow[];
-    return rows.map(rowToPost);
+    return rows.map((row) => this.rowToPost(row));
   }
 
   async findByConversationId(conversationId: string): Promise<ReplyThreadPost[]> {
@@ -129,14 +138,33 @@ export class SqliteObservedThreadRepository implements ObservedThreadRepository 
         "SELECT * FROM observed_thread_post WHERE conversation_id = ? ORDER BY created_at ASC, status_id ASC",
       )
       .all(conversationId) as ObservedThreadPostRow[];
-    return rows.map(rowToPost);
+    return rows.map((row) => this.rowToPost(row));
   }
 
   private readByStatusId(statusId: string): ReplyThreadPost | undefined {
     const row = this.db
       .prepare("SELECT * FROM observed_thread_post WHERE status_id = ?")
       .get(statusId) as ObservedThreadPostRow | undefined;
-    return row === undefined ? undefined : rowToPost(row);
+    return row === undefined ? undefined : this.rowToPost(row);
+  }
+
+  private rowToPost(row: ObservedThreadPostRow): ReplyThreadPost {
+    return rowToPost(row, this.preferredSource(row.status_id, row.source));
+  }
+
+  private preferredSource(
+    statusId: string,
+    fallback: ReplyThreadPost["source"],
+  ): ReplyThreadPost["source"] {
+    const rows = this.db
+      .prepare("SELECT source FROM observed_thread_post_source WHERE status_id = ?")
+      .all(statusId) as ObservedThreadPostSourceRow[];
+    const sources = new Set(rows.map((row) => row.source));
+    if (sources.has("x_live_capture")) return "x_live_capture";
+    if (sources.has("archive_tweets_js")) return "archive_tweets_js";
+    if (sources.has("same_dialog_dom")) return "same_dialog_dom";
+    if (sources.has("x_graphql_observed")) return "x_graphql_observed";
+    return fallback;
   }
 
   private write(post: ReplyThreadPost): void {
@@ -168,5 +196,35 @@ export class SqliteObservedThreadRepository implements ObservedThreadRepository 
           updated_at = excluded.updated_at`,
       )
       .run(postToRow(post));
+  }
+
+  private writeSourceObservation(post: ReplyThreadPost): void {
+    this.db
+      .prepare(
+        `INSERT INTO observed_thread_post_source (
+          status_id, source, first_observed_at, last_observed_at, updated_at
+        ) VALUES (
+          @status_id, @source, @first_observed_at, @last_observed_at, @updated_at
+        )
+        ON CONFLICT(status_id, source) DO UPDATE SET
+          first_observed_at = CASE
+            WHEN excluded.first_observed_at < observed_thread_post_source.first_observed_at
+              THEN excluded.first_observed_at
+            ELSE observed_thread_post_source.first_observed_at
+          END,
+          last_observed_at = CASE
+            WHEN excluded.last_observed_at > observed_thread_post_source.last_observed_at
+              THEN excluded.last_observed_at
+            ELSE observed_thread_post_source.last_observed_at
+          END,
+          updated_at = excluded.updated_at`,
+      )
+      .run({
+        status_id: post.statusId,
+        source: post.source,
+        first_observed_at: post.observedAt,
+        last_observed_at: post.observedAt,
+        updated_at: nowIso(),
+      });
   }
 }

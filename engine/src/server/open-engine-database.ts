@@ -294,6 +294,16 @@ CREATE TABLE observed_thread_post (
 CREATE INDEX idx_observed_thread_parent ON observed_thread_post(in_reply_to_status_id, created_at);
 CREATE INDEX idx_observed_thread_conversation ON observed_thread_post(conversation_id, created_at);
 CREATE INDEX idx_observed_thread_observed ON observed_thread_post(observed_at);
+
+CREATE TABLE observed_thread_post_source (
+  status_id TEXT NOT NULL REFERENCES observed_thread_post(status_id) ON DELETE CASCADE,
+  source TEXT NOT NULL CHECK (source IN ('same_dialog_dom', 'x_graphql_observed', 'archive_tweets_js', 'x_live_capture')),
+  first_observed_at TEXT NOT NULL,
+  last_observed_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (status_id, source)
+);
+CREATE INDEX idx_observed_thread_post_source_source ON observed_thread_post_source(source, status_id);
 `;
 
 export type Migration = {

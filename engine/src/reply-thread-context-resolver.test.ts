@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 
 import { openEngineDatabase } from "./server/open-engine-database.js";
 import { SqliteObservedThreadRepository } from "./server/sqlite-observed-thread-repository.js";
-import { ReplyThreadContextResolver } from "./reply-thread-context-resolver.js";
+import {
+  ReplyContextIncompleteError,
+  ReplyThreadContextResolver,
+} from "./reply-thread-context-resolver.js";
 
 const observedAt = "2026-07-01T08:00:00.000Z";
 
@@ -120,5 +123,84 @@ describe("ReplyThreadContextResolver", () => {
         reason: "not_observed",
       },
     ]);
+  });
+
+  it("preserves own-source membership and fresher fields across stale observed duplicates", async () => {
+    const repository = new SqliteObservedThreadRepository(openEngineDatabase(":memory:"));
+    await repository.upsertThreadPosts([
+      post({
+        source: "x_live_capture",
+        statusId: "104",
+        text: "Fresh own reply.",
+        conversationId: "100",
+        weakMetrics: { likes: 3 },
+        observedAt: "2026-07-01T09:00:00.000Z",
+      }),
+      post({
+        source: "x_graphql_observed",
+        statusId: "104",
+        text: "Stale observed copy.",
+        conversationId: "100",
+        weakMetrics: { replies: 1 },
+        observedAt: "2026-07-01T08:00:00.000Z",
+      }),
+    ]);
+
+    await expect(repository.findByStatusId("104")).resolves.toMatchObject({
+      source: "x_live_capture",
+      statusId: "104",
+      text: "Fresh own reply.",
+      weakMetrics: {
+        likes: 3,
+        replies: 1,
+      },
+      observedAt: "2026-07-01T09:00:00.000Z",
+    });
+  });
+
+  it("only throws for a pre-blocked context when parent context is required", async () => {
+    const base = replyContext("103");
+    const blocked = {
+      ...base,
+      replyThreadContext: {
+        source: "resolved_observed_thread",
+        resolvedAt: "2026-07-01T08:00:00.000Z",
+        currentTarget: post({
+          source: "same_dialog_dom",
+          role: "current_target",
+          statusId: "103",
+          text: base.targetText,
+        }),
+        orderedAncestors: [],
+        previousOwnReplies: [],
+        orderedStatusIds: ["103"],
+        replyThreadContextDiagnostics: {
+          status: "blocked_missing_required_parent",
+          missing: [
+            {
+              field: "immediate_parent",
+              statusId: "102",
+              reason: "not_observed",
+            },
+          ],
+          uiMessages: ["Required parent thread context is missing."],
+          promptMessages: ["Do not generate: required parent thread context is missing."],
+        },
+      },
+    } satisfies ReplyComposerContext;
+
+    const resolver = new ReplyThreadContextResolver();
+    await expect(
+      resolver.enrichReplyContext(blocked, { requireParent: false }),
+    ).resolves.toMatchObject({
+      replyThreadContext: {
+        replyThreadContextDiagnostics: {
+          status: "blocked_missing_required_parent",
+        },
+      },
+    });
+    await expect(
+      resolver.enrichReplyContext(blocked, { requireParent: true }),
+    ).rejects.toBeInstanceOf(ReplyContextIncompleteError);
   });
 });

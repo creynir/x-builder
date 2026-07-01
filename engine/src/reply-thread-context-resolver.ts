@@ -175,9 +175,12 @@ export class ReplyThreadContextResolver {
       replyContext.replyThreadContext?.replyThreadContextDiagnostics.status ===
       "blocked_missing_required_parent"
     ) {
-      throw new ReplyContextIncompleteError(
-        replyContext.replyThreadContext.replyThreadContextDiagnostics,
-      );
+      if (options.requireParent === true) {
+        throw new ReplyContextIncompleteError(
+          replyContext.replyThreadContext.replyThreadContextDiagnostics,
+        );
+      }
+      return replyContext.replyThreadContext;
     }
 
     const targetStatusId = replyContext.targetStatusId;

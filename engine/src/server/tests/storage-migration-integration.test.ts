@@ -70,7 +70,10 @@ const MIGRATION_1_TABLES = [
 
 const MIGRATION_4_TABLES = ["voice_index_meta", "voice_post_embedding"] as const;
 const MIGRATION_5_TABLES = ["archive_voice_profile", "archive_voice_profile_evidence"] as const;
-const MIGRATION_6_TABLES = ["observed_thread_post"] as const;
+const MIGRATION_6_TABLES = [
+  "observed_thread_post",
+  "observed_thread_post_source",
+] as const;
 
 const importedAt = "2026-06-16T10:00:00.000Z";
 const sourceHash =

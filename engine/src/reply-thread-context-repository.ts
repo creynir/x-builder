@@ -20,14 +20,17 @@ export interface ObservedThreadRepository {
 export const mergeObservedThreadPost = (
   previous: ReplyThreadPost,
   next: ReplyThreadPost,
-): ReplyThreadPost =>
-  replyThreadPostSchema.parse({
-    ...previous,
-    ...next,
+): ReplyThreadPost => {
+  const fresher = next.observedAt > previous.observedAt ? next : previous;
+  const older = fresher === next ? previous : next;
+
+  return replyThreadPostSchema.parse({
+    ...older,
+    ...fresher,
     weakMetrics: {
-      ...(previous.weakMetrics ?? {}),
-      ...(next.weakMetrics ?? {}),
+      ...(older.weakMetrics ?? {}),
+      ...(fresher.weakMetrics ?? {}),
     },
-    source: next.source,
-    observedAt: next.observedAt > previous.observedAt ? next.observedAt : previous.observedAt,
+    observedAt: fresher.observedAt,
   });
+};

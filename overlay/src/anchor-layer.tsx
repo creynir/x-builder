@@ -100,7 +100,12 @@ export function useComposeContext(): ComposeContextValue {
 /** The debounce window for the `ComposeContext` composer-text read. */
 const COMPOSE_TEXT_DEBOUNCE_MS = 350;
 
-type ReplyTargetMetadata = Omit<ReplyComposerContext, "leadingTargetHandle">;
+type ReplyTargetMetadata = Omit<
+  ReplyComposerContext,
+  "leadingTargetHandle" | "replyThreadDomEvidence" | "replyThreadContext"
+> & {
+  observedAt: string;
+};
 
 function normalizeDomText(value: string | null | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
@@ -196,6 +201,7 @@ function detectReplyTarget(composerEl: HTMLElement | null): ReplyTargetMetadata 
       targetText,
       targetStatusId: status.statusId,
       targetUrl: status.targetUrl,
+      observedAt: new Date().toISOString(),
     };
   }
 
@@ -263,7 +269,7 @@ function makeReplyContext(
   draftSplit: ReplyDraftSplit,
 ): ReplyComposerContext | undefined {
   if (replyTarget === null) return undefined;
-  const observedAt = new Date().toISOString();
+  const { observedAt, ...targetContext } = replyTarget;
   const replyThreadDomEvidence: ReplyThreadDomEvidence = {
     source: "same_dialog_dom",
     observedAt,
@@ -292,7 +298,7 @@ function makeReplyContext(
   };
 
   return {
-    ...replyTarget,
+    ...targetContext,
     replyThreadDomEvidence,
     leadingTargetHandle: {
       handle: replyTarget.targetAuthorHandle,
@@ -302,7 +308,12 @@ function makeReplyContext(
 }
 
 function sameReplyTarget(a: ReplyTargetMetadata | null, b: ReplyTargetMetadata | null): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  const withoutObservedAt = (value: ReplyTargetMetadata | null): Omit<ReplyTargetMetadata, "observedAt"> | null => {
+    if (value === null) return null;
+    const { observedAt: _observedAt, ...rest } = value;
+    return rest;
+  };
+  return JSON.stringify(withoutObservedAt(a)) === JSON.stringify(withoutObservedAt(b));
 }
 
 /**

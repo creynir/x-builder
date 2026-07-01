@@ -71,7 +71,16 @@ export class LiveCaptureService {
       }
 
       const post = result.data;
-      observedThreadPosts.push({
+      // In-batch duplicates resolve to the first occurrence (the live merge logic in
+      // the repository is last-write-wins for cross-call updates; an intra-batch repeat
+      // must not let a later item clobber the earlier one). Drop the repeat and count it.
+      if (seenPlatformPostIds.has(post.platformPostId)) {
+        inBatchDuplicateCount += 1;
+        continue;
+      }
+      seenPlatformPostIds.add(post.platformPostId);
+
+      const observedResult = replyThreadPostSchema.safeParse({
         source: "x_live_capture",
         statusId: post.platformPostId,
         text: post.text,
@@ -86,14 +95,14 @@ export class LiveCaptureService {
         observedAt: post.capturedAt,
       });
 
-      // In-batch duplicates resolve to the first occurrence (the live merge logic in
-      // the repository is last-write-wins for cross-call updates; an intra-batch repeat
-      // must not let a later item clobber the earlier one). Drop the repeat and count it.
-      if (seenPlatformPostIds.has(post.platformPostId)) {
-        inBatchDuplicateCount += 1;
-        continue;
+      if (observedResult.success) {
+        observedThreadPosts.push(observedResult.data);
+      } else {
+        console.warn(
+          "[live-capture] skipping malformed own observed thread projection",
+          observedResult.error.flatten(),
+        );
       }
-      seenPlatformPostIds.add(post.platformPostId);
 
       inputs.push({
         id: crypto.randomUUID(),

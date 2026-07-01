@@ -14,7 +14,7 @@ Extend `CaptureIngestRequest` additively:
 
 ```ts
 {
-  posts?: LiveCapturedPost[];
+  posts: LiveCapturedPost[];
   profile?: LiveCapturedProfile;
   observedThreadPosts?: ReplyThreadPost[];
 }

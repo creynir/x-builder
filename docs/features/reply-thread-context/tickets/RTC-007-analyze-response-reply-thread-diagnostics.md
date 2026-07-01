@@ -36,7 +36,7 @@ In scope:
 - Analyze path resolver invocation.
 - Analyze response schema additions.
 - Compose cockpit diagnostics rendering from analyze result.
-- Local incomplete-target diagnostics in post/reply mode where applicable.
+- Local incomplete-target diagnostics in reply mode where applicable.
 
 Out of scope:
 
