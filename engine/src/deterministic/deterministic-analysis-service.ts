@@ -73,6 +73,13 @@ export class DeterministicAnalysisService {
           reason: "analysis_failed",
           message: "Reply body is empty after removing the structural target handle.",
           retryable: false,
+          ...(item.replyContext?.replyThreadContext === undefined
+            ? {}
+            : {
+                replyThreadContext: item.replyContext.replyThreadContext,
+                replyThreadContextDiagnostics:
+                  item.replyContext.replyThreadContext.replyThreadContextDiagnostics,
+              }),
         };
       }
 
@@ -105,6 +112,13 @@ export class DeterministicAnalysisService {
           reason: "analysis_failed",
           message: "This candidate could not be scored. Try again.",
           retryable: true,
+          ...(item.replyContext?.replyThreadContext === undefined
+            ? {}
+            : {
+                replyThreadContext: item.replyContext.replyThreadContext,
+                replyThreadContextDiagnostics:
+                  item.replyContext.replyThreadContext.replyThreadContextDiagnostics,
+              }),
         };
       }
 
@@ -136,6 +150,13 @@ export class DeterministicAnalysisService {
         heuristicLabel,
         analyzedAt,
         analyzerVersion,
+        ...(item.replyContext?.replyThreadContext === undefined
+          ? {}
+          : {
+              replyThreadContext: item.replyContext.replyThreadContext,
+              replyThreadContextDiagnostics:
+                item.replyContext.replyThreadContext.replyThreadContextDiagnostics,
+            }),
       };
     });
 

@@ -185,7 +185,24 @@ describe("AnchorLayer reply compose context", () => {
         handle: "alice",
         state: "present",
       },
+      replyThreadDomEvidence: {
+        source: "same_dialog_dom",
+        role: "current_target",
+        currentTarget: {
+          authorHandle: "alice",
+          displayName: "Alice Example",
+          statusId: "1930000000000000001",
+          url: "https://x.com/alice/status/1930000000000000001",
+          text: "The boring version is usually the one people can ship.",
+        },
+        diagnostics: {
+          status: "same_dialog_only",
+        },
+      },
     });
+    expect(latest?.replyContext?.replyThreadDomEvidence?.observedAt).toMatch(
+      /^\d{4}-\d{2}-\d{2}T/,
+    );
     expect(latest?.draftSplit).toMatchObject({
       mode: "reply",
       authoredBody: "good point",

@@ -182,6 +182,37 @@ describe("StaticEngineColumn — ready", () => {
     expect(text).not.toContain("Escape probability");
     expect(text).not.toContain(String(prediction.escapeRange.high));
   });
+
+  it("surfaces reply thread context diagnostics when parent/root context is missing", () => {
+    const diagnosticState = {
+      status: "ready" as const,
+      result: {
+        ...readyResult,
+        replyThreadContextDiagnostics: {
+          status: "same_dialog_only" as const,
+          missing: [
+            { field: "immediate_parent" as const, reason: "not_observed" as const },
+            { field: "root" as const, reason: "not_observed" as const },
+          ],
+          uiMessages: ["Only the same-dialog target post is available."],
+          promptMessages: ["No observed parent/root thread context was available."],
+        },
+      },
+    };
+
+    const root = mount(
+      <StaticEngineColumn
+        analyzeState={diagnosticState}
+        followers={FOLLOWERS}
+        onRetryStatic={vi.fn()}
+        explainer={overlayExplainerCopy}
+      />,
+    );
+
+    expect(byVariant(root, "warning").length).toBeGreaterThan(0);
+    expect(root.textContent).toContain("Reply context incomplete");
+    expect(root.textContent).toContain("Only the same-dialog target post is available.");
+  });
 });
 
 // --------------------------------------------------------------------------

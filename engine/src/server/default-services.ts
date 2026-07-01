@@ -14,6 +14,7 @@ import { LiveCaptureService } from "../capture/live-capture-service.js";
 import { LiveContextResolver } from "../capture/live-context-resolver.js";
 import { RepetitionWindowService } from "../capture/repetition-window-service.js";
 import { DeterministicAnalysisService } from "../deterministic/deterministic-analysis-service.js";
+import { ReplyThreadContextResolver } from "../reply-thread-context-resolver.js";
 import { ExternalXSignalsService } from "../external/external-x-signals-service.js";
 import type { ExternalXSignalsRepository } from "../external/external-x-signals-repository.js";
 import { SqliteExternalXSignalsRepository } from "../external/sqlite-external-x-signals-repository.js";
@@ -53,6 +54,7 @@ import {
 import {
   type PostLibraryRepository,
 } from "./post-library-repository.js";
+import type { ObservedThreadRepository } from "../reply-thread-context-repository.js";
 import {
   createDefaultReadinessDependencies,
   createReadinessService,
@@ -61,6 +63,7 @@ import {
   type ReadinessService,
 } from "./readiness.js";
 import { SqlitePostLibraryRepository } from "./sqlite-post-library-repository.js";
+import { SqliteObservedThreadRepository } from "./sqlite-observed-thread-repository.js";
 import { resolveWorkspaceRoot } from "./workspace-root.js";
 
 export type AnalyzePosts = (request: AnalyzePostsRequest) => Promise<AnalyzePostsResponse> | AnalyzePostsResponse;
@@ -76,6 +79,7 @@ export interface BuildServerOptions {
   readinessTimeoutMs?: number;
   settingsRepository?: AppSettingsRepository;
   postLibraryRepository?: PostLibraryRepository;
+  observedThreadRepository?: ObservedThreadRepository;
   feedbackLoopService?: FeedbackLoopService;
   externalXSignalsService?: ExternalXSignalsService;
   // Storage root whose `storage/x-builder.db` backs the SQLite corpus and against
@@ -90,6 +94,7 @@ export interface BuildServerOptions {
   judgeDraftService?: JudgeDraft;
   applyJudgeSuggestionsService?: ApplyJudgeSuggestionsService;
   liveContextResolver?: LiveContextResolver;
+  replyThreadContextResolver?: ReplyThreadContextResolver;
   liveCaptureService?: LiveCaptureService;
 }
 
@@ -102,6 +107,7 @@ export type CreateDefaultJudgeDraftServiceOptions = {
 type EngineStorageRepositories = {
   db?: ReturnType<typeof openEngineDatabase>;
   postLibraryRepository: PostLibraryRepository;
+  observedThreadRepository: ObservedThreadRepository;
   feedbackLoopRepository: FeedbackLoopRepository;
   externalXSignalsRepository: ExternalXSignalsRepository;
   voiceSampleProvider?: CreateGenerationGuidanceResolverInput["voiceSampleProvider"];
@@ -118,6 +124,7 @@ export type ServerServiceBundle = {
   archiveStudioContextResolver: ArchiveStudioContextResolver;
   repetitionWindowService: RepetitionWindowService;
   liveContextResolver: LiveContextResolver;
+  replyThreadContextResolver: ReplyThreadContextResolver;
   generateCategoryService: GenerateCategoryService;
   suggestPostService: SuggestPostService;
   liveCaptureService: LiveCaptureService;
@@ -173,6 +180,8 @@ const resolveEngineStorageRepositories = (
 
     return {
       postLibraryRepository: options.postLibraryRepository,
+      observedThreadRepository:
+        options.observedThreadRepository ?? new SqliteObservedThreadRepository(db),
       feedbackLoopRepository: new SqliteFeedbackLoopRepository(db),
       externalXSignalsRepository: new SqliteExternalXSignalsRepository(db),
     };
@@ -187,6 +196,8 @@ const resolveEngineStorageRepositories = (
     return {
       db,
       postLibraryRepository: new SqlitePostLibraryRepository(db),
+      observedThreadRepository:
+        options.observedThreadRepository ?? new SqliteObservedThreadRepository(db),
       feedbackLoopRepository: new SqliteFeedbackLoopRepository(db),
       externalXSignalsRepository: new SqliteExternalXSignalsRepository(db),
       voiceSampleProvider: createSqliteVoiceSampleProvider({ db }),
@@ -198,6 +209,8 @@ const resolveEngineStorageRepositories = (
   return {
     db,
     postLibraryRepository: new SqlitePostLibraryRepository(db),
+    observedThreadRepository:
+      options.observedThreadRepository ?? new SqliteObservedThreadRepository(db),
     feedbackLoopRepository: new SqliteFeedbackLoopRepository(db),
     externalXSignalsRepository: new SqliteExternalXSignalsRepository(db),
     voiceSampleProvider: createSqliteVoiceSampleProvider({ db }),
@@ -234,6 +247,9 @@ export const createServerServiceBundle = (
   const liveContextResolver =
     options.liveContextResolver ??
     new LiveContextResolver(postLibraryRepository, repetitionWindowService);
+  const replyThreadContextResolver =
+    options.replyThreadContextResolver ??
+    new ReplyThreadContextResolver(engineStorage.observedThreadRepository);
   const generateCategoryService =
     options.generateCategoryService ??
     new GenerateCategoryService(
@@ -258,7 +274,8 @@ export const createServerServiceBundle = (
       );
     })();
   const liveCaptureService =
-    options.liveCaptureService ?? new LiveCaptureService(postLibraryRepository);
+    options.liveCaptureService ??
+    new LiveCaptureService(postLibraryRepository, engineStorage.observedThreadRepository);
   const readinessService =
     options.readinessService ??
     createReadinessService(
@@ -385,6 +402,7 @@ export const createServerServiceBundle = (
     archiveStudioContextResolver,
     repetitionWindowService,
     liveContextResolver,
+    replyThreadContextResolver,
     generateCategoryService,
     suggestPostService,
     liveCaptureService,

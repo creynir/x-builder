@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  replyThreadContextSchema,
+  replyThreadDomEvidenceSchema,
+} from "./reply-thread-context.js";
 
 const xHandleSchema = z
   .string()
@@ -47,6 +51,8 @@ export const replyComposerContextSchema = z.object({
     handle: xHandleSchema,
     state: z.enum(["present", "user_deleted"]),
   }),
+  replyThreadDomEvidence: replyThreadDomEvidenceSchema.optional(),
+  replyThreadContext: replyThreadContextSchema.optional(),
 });
 
 export type ReplyComposerContext = z.infer<typeof replyComposerContextSchema>;

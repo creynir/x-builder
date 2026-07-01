@@ -273,6 +273,29 @@ CREATE INDEX idx_archive_voice_profile_evidence_post
   ON archive_voice_profile_evidence(post_id);
 `;
 
+const migration6Ddl = `
+CREATE TABLE observed_thread_post (
+  status_id TEXT PRIMARY KEY,
+  source TEXT NOT NULL CHECK (source IN ('same_dialog_dom', 'x_graphql_observed', 'archive_tweets_js', 'x_live_capture')),
+  role TEXT CHECK (role IN ('root', 'ancestor', 'immediate_parent', 'current_target', 'previous_own_reply')),
+  url TEXT,
+  author_handle TEXT,
+  author_display_name TEXT,
+  author_user_id TEXT,
+  text TEXT NOT NULL,
+  created_at TEXT,
+  in_reply_to_status_id TEXT,
+  in_reply_to_user_id TEXT,
+  conversation_id TEXT,
+  weak_metrics_json TEXT NOT NULL,
+  observed_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_observed_thread_parent ON observed_thread_post(in_reply_to_status_id, created_at);
+CREATE INDEX idx_observed_thread_conversation ON observed_thread_post(conversation_id, created_at);
+CREATE INDEX idx_observed_thread_observed ON observed_thread_post(observed_at);
+`;
+
 export type Migration = {
   version: number;
   up(db: DatabaseHandle): void;
@@ -310,6 +333,12 @@ export const migrations: Migration[] = [
     version: 5,
     up(db) {
       db.exec(migration5Ddl);
+    },
+  },
+  {
+    version: 6,
+    up(db) {
+      db.exec(migration6Ddl);
     },
   },
 ];

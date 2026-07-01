@@ -142,6 +142,12 @@ describe("GraphQlCaptureObserver — matching UserTweets response", () => {
     const batch = onBatch.mock.calls[0]![0];
     expect(Array.isArray(batch.posts)).toBe(true);
     expect(batch.posts.length).toBeGreaterThanOrEqual(1);
+    expect(Array.isArray(batch.observedThreadPosts)).toBe(true);
+    expect(batch.observedThreadPosts?.length).toBe(batch.posts.length);
+    expect(batch.observedThreadPosts?.[0]).toMatchObject({
+      source: "x_graphql_observed",
+      statusId: "1700000000000000001",
+    });
 
     expect(observer.state).toBe("ok");
     expect(observer.lastCaptureAt).toBeDefined();

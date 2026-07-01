@@ -14,7 +14,7 @@
 //     on unmount; both disconnects are wrapped in try/catch to survive a
 //     document teardown during fast navigation.
 
-import type { ReplyComposerContext } from "@x-builder/shared";
+import type { ReplyComposerContext, ReplyThreadDomEvidence } from "@x-builder/shared";
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 
@@ -263,8 +263,37 @@ function makeReplyContext(
   draftSplit: ReplyDraftSplit,
 ): ReplyComposerContext | undefined {
   if (replyTarget === null) return undefined;
+  const observedAt = new Date().toISOString();
+  const replyThreadDomEvidence: ReplyThreadDomEvidence = {
+    source: "same_dialog_dom",
+    observedAt,
+    role: "current_target",
+    currentTarget: {
+      authorHandle: replyTarget.targetAuthorHandle,
+      ...(replyTarget.targetDisplayName === undefined
+        ? {}
+        : { displayName: replyTarget.targetDisplayName }),
+      ...(replyTarget.targetStatusId === undefined
+        ? {}
+        : { statusId: replyTarget.targetStatusId }),
+      ...(replyTarget.targetUrl === undefined ? {} : { url: replyTarget.targetUrl }),
+      text: replyTarget.targetText,
+      observedAt,
+    },
+    diagnostics: {
+      status: "same_dialog_only",
+      missing: [
+        { field: "immediate_parent", reason: "not_observed" },
+        { field: "root", reason: "not_observed" },
+      ],
+      uiMessages: ["Only the same-dialog target post is available."],
+      promptMessages: ["No observed parent/root thread context was available."],
+    },
+  };
+
   return {
     ...replyTarget,
+    replyThreadDomEvidence,
     leadingTargetHandle: {
       handle: replyTarget.targetAuthorHandle,
       state: draftSplit.leadingHandleState,

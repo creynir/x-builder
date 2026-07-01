@@ -15,8 +15,10 @@
 import {
   liveCapturedPostSchema,
   liveCapturedProfileSchema,
+  replyThreadPostSchema,
   type LiveCapturedPost,
   type LiveCapturedProfile,
+  type ReplyThreadPost,
 } from "@x-builder/shared";
 
 const MAX_POST_ID_LENGTH = 160;
@@ -152,6 +154,18 @@ function buildLiveMetrics(tweet: unknown, legacy: unknown): {
   return metrics;
 }
 
+function buildWeakMetrics(tweet: unknown, legacy: unknown): ReplyThreadPost["weakMetrics"] {
+  const metrics = buildLiveMetrics(tweet, legacy);
+  const favoriteCount = parseCounter(prop(legacy, "favorite_count"));
+  const retweetCount = parseCounter(prop(legacy, "retweet_count"));
+
+  return {
+    ...metrics,
+    ...(favoriteCount !== undefined ? { favoriteCount } : {}),
+    ...(retweetCount !== undefined ? { retweetCount } : {}),
+  };
+}
+
 /** Retweet precedence: a present retweet structure wins over a reply id. */
 function classifyKind(legacy: unknown): LiveCapturedPost["kind"] {
   if (prop(legacy, "retweeted_status_result") !== undefined) {
@@ -217,6 +231,84 @@ function buildPost(tweetResult: unknown, capturedAt: string): LiveCapturedPost {
   const parsed = liveCapturedPostSchema.safeParse(candidate);
   if (!parsed.success) {
     throw new Error("built post failed liveCapturedPostSchema");
+  }
+  return parsed.data;
+}
+
+function readAuthor(tweet: unknown): {
+  authorHandle?: string;
+  authorDisplayName?: string;
+  authorUserId?: string;
+} {
+  const userResult = prop(prop(prop(tweet, "core"), "user_results"), "result");
+  const legacy = prop(userResult, "legacy");
+  const core = prop(userResult, "core");
+  const screenName = prop(core, "screen_name") ?? prop(legacy, "screen_name");
+  const displayName = prop(core, "name") ?? prop(legacy, "name");
+  const userId = prop(userResult, "rest_id");
+
+  return {
+    ...(isNonEmptyString(screenName) ? { authorHandle: screenName } : {}),
+    ...(isNonEmptyString(displayName) ? { authorDisplayName: displayName.slice(0, 160) } : {}),
+    ...(isNonEmptyString(userId) ? { authorUserId: userId } : {}),
+  };
+}
+
+function buildObservedThreadPost(tweetResult: unknown, observedAt: string): ReplyThreadPost {
+  const tweet =
+    prop(tweetResult, "tweet") !== undefined ? prop(tweetResult, "tweet") : tweetResult;
+
+  const legacy = prop(tweet, "legacy");
+  if (!isRecord(legacy)) {
+    throw new Error("tweet.legacy missing or not an object");
+  }
+
+  const restId = prop(tweet, "rest_id");
+  if (typeof restId !== "string" || restId.length === 0 || restId.length > MAX_POST_ID_LENGTH) {
+    throw new Error("tweet.rest_id missing or out of bounds");
+  }
+
+  const fullText = prop(legacy, "full_text");
+  if (typeof fullText !== "string") {
+    throw new Error("tweet.legacy.full_text missing or not a string");
+  }
+  const text = fullText.trim();
+  if (text.length < 1 || text.length > MAX_TEXT_LENGTH) {
+    throw new Error("tweet.legacy.full_text out of 1..8000 bounds");
+  }
+
+  const createdAtRaw = prop(legacy, "created_at");
+  const createdDate =
+    typeof createdAtRaw === "string" ? new Date(createdAtRaw) : undefined;
+  const createdAt =
+    createdDate !== undefined && !Number.isNaN(createdDate.getTime())
+      ? createdDate.toISOString()
+      : undefined;
+
+  const author = readAuthor(tweet);
+  const conversationId = prop(legacy, "conversation_id_str");
+  const inReplyToStatusId = prop(legacy, "in_reply_to_status_id_str");
+  const inReplyToUserId = prop(legacy, "in_reply_to_user_id_str");
+  const url =
+    author.authorHandle !== undefined ? `https://x.com/${author.authorHandle}/status/${restId}` : undefined;
+
+  const candidate = {
+    source: "x_graphql_observed",
+    statusId: restId,
+    ...(url !== undefined ? { url } : {}),
+    ...author,
+    text,
+    ...(createdAt !== undefined ? { createdAt } : {}),
+    ...(isNonEmptyString(inReplyToStatusId) ? { inReplyToStatusId } : {}),
+    ...(isNonEmptyString(inReplyToUserId) ? { inReplyToUserId } : {}),
+    ...(isNonEmptyString(conversationId) ? { conversationId } : {}),
+    weakMetrics: buildWeakMetrics(tweet, legacy),
+    observedAt,
+  };
+
+  const parsed = replyThreadPostSchema.safeParse(candidate);
+  if (!parsed.success) {
+    throw new Error("built observed post failed replyThreadPostSchema");
   }
   return parsed.data;
 }
@@ -290,6 +382,33 @@ export const XGraphQlNormalizer = {
         // Tolerate-and-skip: a single debug line, never console.error, never
         // rethrow. (Intentionally low-volume; the observer aggregates context.)
         console.debug("[XGraphQlNormalizer] skipped a malformed tweet entry");
+      }
+    }
+
+    return Array.from(byId.values());
+  },
+
+  /**
+   * Normalises observed tweet entries into the reply-thread evidence contract.
+   * This is separate from normalizeUserTweets so non-own observed posts never
+   * enter the canonical own-post library.
+   */
+  normalizeObservedThreadPosts(json: unknown, observedAt: string): ReplyThreadPost[] {
+    const byId = new Map<string, ReplyThreadPost>();
+
+    let candidates: unknown[];
+    try {
+      candidates = collectTweetResults(json);
+    } catch {
+      return [];
+    }
+
+    for (const candidate of candidates) {
+      try {
+        const post = buildObservedThreadPost(candidate, observedAt);
+        byId.set(post.statusId, post);
+      } catch {
+        console.debug("[XGraphQlNormalizer] skipped a malformed observed thread entry");
       }
     }
 

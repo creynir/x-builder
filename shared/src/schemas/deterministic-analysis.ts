@@ -2,6 +2,10 @@ import { z } from "zod";
 import { cooldownSignalSchema } from "./cooldown.js";
 import { deterministicSourceFormatSchema, detectedPostFormatSchema } from "./post-formats.js";
 import { replyComposerContextSchema } from "./reply-composer-context.js";
+import {
+  replyThreadContextDiagnosticsSchema,
+  replyThreadContextSchema,
+} from "./reply-thread-context.js";
 export { deterministicSourceFormatSchema, detectedPostFormatSchema };
 
 const voiceCheckSchema = z.object({
@@ -172,6 +176,8 @@ const scoredPostItemSchema = z.object({
   analyzedAt: z.string().datetime(),
   analyzerVersion: z.string().min(1).max(120),
   cooldown: cooldownSignalSchema.optional(),
+  replyThreadContext: replyThreadContextSchema.optional(),
+  replyThreadContextDiagnostics: replyThreadContextDiagnosticsSchema.optional(),
 });
 
 const scoreFailedPostItemSchema = z.object({
@@ -182,6 +188,8 @@ const scoreFailedPostItemSchema = z.object({
   reason: z.enum(["analysis_failed"]),
   message: z.string().min(1).max(240),
   retryable: z.boolean(),
+  replyThreadContext: replyThreadContextSchema.optional(),
+  replyThreadContextDiagnostics: replyThreadContextDiagnosticsSchema.optional(),
 });
 
 export const analyzedPostItemSchema = z.discriminatedUnion("status", [

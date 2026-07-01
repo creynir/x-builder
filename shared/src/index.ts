@@ -42,6 +42,14 @@ export {
   replyComposerContextSchema,
 } from "./schemas/reply-composer-context.js";
 export {
+  replyThreadContextDiagnosticsSchema,
+  replyThreadContextMissingFieldSchema,
+  replyThreadContextSchema,
+  replyThreadDomEvidenceSchema,
+  replyThreadPostSchema,
+  replyThreadWeakMetricsSchema,
+} from "./schemas/reply-thread-context.js";
+export {
   apiErrorSchema,
   appSettingsResponseSchema,
   appSettingsSchema,
@@ -183,6 +191,14 @@ export type {
 export type {
   ReplyComposerContext,
 } from "./schemas/reply-composer-context.js";
+export type {
+  ReplyThreadContext,
+  ReplyThreadContextDiagnostics,
+  ReplyThreadContextMissingField,
+  ReplyThreadDomEvidence,
+  ReplyThreadPost,
+  ReplyThreadWeakMetrics,
+} from "./schemas/reply-thread-context.js";
 export type {
   ApiError,
   AppSettings,

@@ -48,6 +48,10 @@ import {
   ArchiveValidationError,
 } from "../archive/archive-import-service.js";
 import type { JudgeDraftOutcome } from "../llm/judge-draft-service.js";
+import {
+  ReplyContextIncompleteError,
+  replyContextIncompleteApiError,
+} from "../reply-thread-context-resolver.js";
 import { PostLibraryStorageError } from "./post-library-repository.js";
 import { ANALYZE_COOLDOWN_WINDOW_DAYS, attachCooldownSignals } from "./cooldown.js";
 import type { ServerServiceBundle } from "./default-services.js";
@@ -123,6 +127,7 @@ export function registerEngineRoutes(
     archiveStudioContextResolver,
     repetitionWindowService,
     liveContextResolver,
+    replyThreadContextResolver,
     generateCategoryService,
     suggestPostService,
     liveCaptureService,
@@ -198,12 +203,24 @@ export function registerEngineRoutes(
   });
 
   app.post("/ideas/generate", async (request, reply) => {
-    const input = generateIdeaRequestSchema.parse(request.body);
+    const rawInput = generateIdeaRequestSchema.parse(request.body);
     let result: Awaited<ReturnType<typeof generateCandidates>>;
 
     try {
+      const input =
+        rawInput.replyContext === undefined
+          ? rawInput
+          : {
+              ...rawInput,
+              replyContext: await replyThreadContextResolver.enrichReplyContext(
+                rawInput.replyContext,
+              ),
+            };
       result = await generateCandidates(input);
-    } catch {
+    } catch (error) {
+      if (error instanceof ReplyContextIncompleteError) {
+        throw normalizeError(replyContextIncompleteApiError(error.diagnostics));
+      }
       throw normalizeError(generationError());
     }
 
@@ -507,6 +524,7 @@ export function registerEngineRoutes(
     try {
       let merged = await liveContextResolver.mergeAnalysisRequest(input);
       merged = await archiveStudioContextResolver.mergeAnalysisRequest(merged);
+      merged = await replyThreadContextResolver.mergeAnalysisRequest(merged);
       const analyzed = await analyzePosts(merged);
       const report = await repetitionWindowService.compute(ANALYZE_COOLDOWN_WINDOW_DAYS);
       result = attachCooldownSignals(analyzed, report);
@@ -539,15 +557,28 @@ export function registerEngineRoutes(
 
   app.post("/drafts/judge", async (request, reply) => {
     const input = judgeDraftRequestSchema.parse(request.body);
-    const accountProfile = await resolveJudgeAccountProfile(input.accountProfile);
-    const outcome =
-      input.replyContext !== undefined
-        ? await judgeDraftService.judge(input.text, accountProfile, {
-            replyContext: input.replyContext,
-          })
-        : accountProfile !== undefined
-        ? await judgeDraftService.judge(input.text, accountProfile)
-        : await judgeDraftService.judge(input.text);
+    let outcome: Awaited<ReturnType<typeof judgeDraftService.judge>>;
+
+    try {
+      const replyContext =
+        input.replyContext === undefined
+          ? undefined
+          : await replyThreadContextResolver.enrichReplyContext(input.replyContext);
+      const accountProfile = await resolveJudgeAccountProfile(input.accountProfile);
+      outcome =
+        replyContext !== undefined
+          ? await judgeDraftService.judge(input.text, accountProfile, {
+              replyContext,
+            })
+          : accountProfile !== undefined
+          ? await judgeDraftService.judge(input.text, accountProfile)
+          : await judgeDraftService.judge(input.text);
+    } catch (error) {
+      if (error instanceof ReplyContextIncompleteError) {
+        throw normalizeError(replyContextIncompleteApiError(error.diagnostics));
+      }
+      throw error;
+    }
 
     if (outcome.status === "failed") {
       throw normalizeError(judgeFailedError(outcome));
@@ -557,15 +588,27 @@ export function registerEngineRoutes(
   });
 
   app.post("/drafts/apply-suggestions", async (request, reply) => {
-    const input = applyJudgeSuggestionsRequestSchema.parse(request.body);
+    const rawInput = applyJudgeSuggestionsRequestSchema.parse(request.body);
 
     try {
+      const input =
+        rawInput.replyContext === undefined
+          ? rawInput
+          : {
+              ...rawInput,
+              replyContext: await replyThreadContextResolver.enrichReplyContext(
+                rawInput.replyContext,
+              ),
+            };
       const result = await applyJudgeSuggestionsService.apply(input);
 
       return reply.send(
         parseResponseContract(applyJudgeSuggestionsResponseSchema, result),
       );
-    } catch {
+    } catch (error) {
+      if (error instanceof ReplyContextIncompleteError) {
+        throw normalizeError(replyContextIncompleteApiError(error.diagnostics));
+      }
       throw normalizeError(generationError());
     }
   });
